@@ -1,543 +1,509 @@
-
-// Function to determine savior functions (simplified for now)
-function getSaviorFunctions(humanNeeds) {
-  // This is a gross oversimplification. OPS has complex rules for this.
-  // For a simulator, we might pre-define these for specific "types"
-  // or create a more elaborate rule set.
-  // Example:
-  if (humanNeeds.selfTribe === 'Di' && humanNeeds.organizeGather === 'Oi') return [['Fi', 'Si'], ['Ti', 'Ni']][floor(random(2))]; // e.g., Fi/Si or Ti/Ni
-  if (humanNeeds.selfTribe === 'Di' && humanNeeds.organizeGather === 'Oe') return [['Fi', 'Se'], ['Ti', 'Ne']][floor(random(2))]; // e.g., Fi/Se or Ti/Ne
-  if (humanNeeds.selfTribe === 'De' && humanNeeds.organizeGather === 'Oi') return [['Fe', 'Si'], ['Te', 'Ni']][floor(random(2))]; // e.g., Fe/Si or Te/Ni
-  if (humanNeeds.selfTribe === 'De' && humanNeeds.organizeGather === 'Oe') return [['Fe', 'Se'], ['Te', 'Ne']][floor(random(2))]; // e.g., Fe/Se or Te/Ne
-  return [['Fi', 'Si']]; // Default
-}
-
-// Function to determine savior animals based on savior functions
-function getSaviorAnimals(saviorFunctions, humanNeeds) {
-  let animals = [];
-  // 1st Savior Animal (from the two savior functions)
-  let deciderSavior = saviorFunctions[0][0].endsWith('i') || saviorFunctions[0][0].endsWith('e') ? saviorFunctions[0] : saviorFunctions[1];
-  let observerSavior = saviorFunctions[0][0].endsWith('S') || saviorFunctions[0][0].endsWith('N') ? saviorFunctions[0] : saviorFunctions[1];
-
-  if (observerSavior[0].endsWith('i')) observerSavior = observerSavior.substring(0, 1) + "i"; //Oi
-  else observerSavior = observerSavior.substring(0, 1) + "e"; //Oe
-
-  if (deciderSavior[0].endsWith('i')) deciderSavior = deciderSavior.substring(0, 1) + "i"; //Di
-  else deciderSavior = deciderSavior.substring(0, 1) + "e"; //De
-
-
-  if (humanNeeds.selfTribe === 'Di' && humanNeeds.organizeGather === 'Oi') animals.push('Sleep');
-  else if (humanNeeds.selfTribe === 'Di' && humanNeeds.organizeGather === 'Oe') animals.push('Consume');
-  else if (humanNeeds.selfTribe === 'De' && humanNeeds.organizeGather === 'Oi') animals.push('Blast');
-  else if (humanNeeds.selfTribe === 'De' && humanNeeds.organizeGather === 'Oe') animals.push('Play');
-
-  // 2nd Savior Animal (Info/Energy Balance)
-  // This logic is also complex in OPS. We'll simplify.
-  // If first is Energy (Sleep/Play), second is Info (Consume/Blast)
-  // If first is Info (Consume/Blast), second is Energy (Sleep/Play)
-  // And it has to be the "other" humanNeed coin
-  if (animals[0] === 'Sleep' || animals[0] === 'Play') { // Energy first
-    if (humanNeeds.selfTribe === 'Di') animals.push('Blast'); // Oe+De or Oi+De -> Blast
-    else animals.push('Consume'); // Oi+Di or Oe+Di -> Consume
-  } else { // Info first
-    if (humanNeeds.selfTribe === 'Di') animals.push('Play');    // Oe+De -> Play
-    else animals.push('Sleep');   // Oi+Di -> Sleep
-  }
-  // This simplified logic might lead to some OPS-invalid animal pairings
-  // or miss jumpers. For a true OPS sim, this needs meticulous mapping.
-  // For now, let's ensure they are distinct
-  if (animals[0] === animals[1]) {
-    const allAnimals = ['Sleep', 'Consume', 'Blast', 'Play'];
-    let availableAnimals = allAnimals.filter(a => a !== animals[0]);
-    animals[1] = random(availableAnimals);
-  }
-
-  return animals;
-}
-
-class OpsAgent {
-  constructor(x, y, opsTemperament, initialSaviorAnimals) {
-    this.position = createVector(x, y);
-    this.velocity = p5.Vector.random2D();
-    this.size = 15;
-
-    // Core OPS Type
-    this.opsTemperament = opsTemperament; // 'IP', 'EP', 'EJ', 'IJ'
-    this.saviorAnimals = initialSaviorAnimals; // ['Sleep', 'Blast']
-    this.allAnimals = ['Sleep', 'Consume', 'Blast', 'Play'];
-    this.demonAnimals = this.allAnimals.filter(a => !this.saviorAnimals.includes(a));
-    this.currentAnimalState = random(this.saviorAnimals);
-
-    // Primitive States
-    this.subjectiveEntropy = random(50, 100); // Higher = more internal chaos/need to process
-    this.objectiveEntropyKnowledge = random(50, 100); // Higher = environment/tribe less understood
-    this.actionEnergy = 100;
-
-    // Information Store for Blasting
-    this.organizedInfoStore = []; // Array of "info packets"
-    this.maxInfoStoreSize = 5;    // How much distinct info they can hold and blast
-    this.infoFreshness = [];      // Parallel array for freshness of each packet
-    this.initializeInfoStore();
-
-    // State Timers & Mechanics
-    this.timeInCurrentAnimalState = 0;
-    this.maxTimeInSaviorState = round(random(200, 400)); // Frames
-    this.demonStateTriggerPressure = 0;
-    this.demonStatePressureThreshold = 500; // After this much imbalance, trigger demon
-    this.isInDemonState = false;
-    this.demonStateDuration = round(random(100, 200));
-
-    // Visualization
-    this.color = color(200);
-    this.updateColor();
-
-    // DMOs (can be added on top later, for now focus on OPS primitives)
-    this.hasActiveDMO = false; // Start without for now to focus on OPS coins
-
-    // For specific behaviors
-    this.targetPip = null;
-    this.targetAgent = null;
-  }
-
-  initializeInfoStore() {
-    // Start with some initial "knowledge"
-    for (let i = 0; i < floor(random(1, this.maxInfoStoreSize / 2)); i++) {
-      this.organizedInfoStore.push({
-        id: random(10000), // Unique ID for the info packet
-        contentQuality: random(0.5, 1.0), // How "good" or relevant this info is
-        uses: 0 // How many times this specific packet has been "blasted"
-      });
-      this.infoFreshness.push(100); // Initial freshness
-    }
-  }
-
-  // --- Core Logic for Animal States affecting primitives ---
-  performSleep() {
-    this.velocity.mult(0.9); // Slow down
-    this.subjectiveEntropy = max(0, this.subjectiveEntropy - 0.5); // Process internal
-    this.actionEnergy = min(100, this.actionEnergy + 0.2); // Rest
-    if (this.isInDemonState) {
-      this.actionEnergy = max(0, this.actionEnergy - 0.3); // Demon sleep is tiring
-      this.subjectiveEntropy = max(0, this.subjectiveEntropy - 0.1); // Less effective
-    }
-  }
-
-  performConsume(informationPips) {
-    // Find nearest Novel Information Pip
-    if (!this.targetPip || this.targetPip.type === 'Known') {
-      let closestNovelPip = null;
-      let minDist = Infinity;
-      for (let pip of informationPips) {
-        if (pip.type === 'Novel') {
-          let d = p5.Vector.dist(this.position, pip.position);
-          if (d < minDist) {
-            minDist = d;
-            closestNovelPip = pip;
-          }
-        }
-      }
-      this.targetPip = closestNovelPip;
-    }
-
-    if (this.targetPip) {
-      let desired = p5.Vector.sub(this.targetPip.position, this.position);
-      this.velocity.add(desired.normalize().mult(0.1));
-      this.velocity.limit(this.isInDemonState ? 2.0 : 1.5); // Demon consume might be more frantic
-
-      if (p5.Vector.dist(this.position, this.targetPip.position) < this.size / 2 + this.targetPip.size / 2) {
-        // General consume effect
-        this.subjectiveEntropy += this.targetPip.value / (this.isInDemonState ? 1 : 2); // Demon consume is less efficient at reducing immediate SE
-        this.objectiveEntropyKnowledge = max(0, this.objectiveEntropyKnowledge - this.targetPip.value * 0.8);
-
-        // If this agent is a Blaster type (IJ or EJ), update its info store
-        if (this.opsTemperament === 'IJ' || this.opsTemperament === 'EJ') {
-          if (this.targetPip.type === 'Novel') { // Only novel pips add to organized store
-            if (this.organizedInfoStore.length < this.maxInfoStoreSize) {
-              this.organizedInfoStore.push({
-                id: this.targetPip.position.x * 1000 + this.targetPip.position.y, // simple unique id from position
-                contentQuality: this.targetPip.value / 40, // Quality based on pip's novelty value
-                uses: 0
-              });
-              this.infoFreshness.push(100); // New info is fresh
-            } else {
-              // Store is full, replace stalest or least useful info
-              let stalestIndex = 0;
-              let minFreshness = 101;
-              for (let i = 0; i < this.infoFreshness.length; i++) {
-                if (this.infoFreshness[i] < minFreshness) {
-                  minFreshness = this.infoFreshness[i];
-                  stalestIndex = i;
-                }
-              }
-              this.organizedInfoStore[stalestIndex] = {
-                id: this.targetPip.position.x * 1000 + this.targetPip.position.y,
-                contentQuality: this.targetPip.value / 40,
-                uses: 0
-              };
-              this.infoFreshness[stalestIndex] = 100;
-            }
-          }
-        }
-        this.targetPip.consumed = true;
-        this.targetPip = null;
-      }
-    } else {
-      this.wanderSlightly();
-    }
-    this.actionEnergy = max(0, this.actionEnergy - 0.1);
-    if (this.isInDemonState) { // Demon Consume for a Blaster type (IJ/EJ) should be chaotic
-      this.subjectiveEntropy += 0.8; // More confusing than helpful
-      this.actionEnergy = max(0, this.actionEnergy - 0.25);
-      // They might even "damage" their existing organizedInfoStore
-      if ((this.opsTemperament === 'IJ' || this.opsTemperament === 'EJ') && random(1) < 0.1 && this.infoFreshness.length > 0) {
-        let randIdx = floor(random(this.infoFreshness.length));
-        this.infoFreshness[randIdx] *= 0.5; // Degrade quality of some known info
-        console.log("Demon Consume degraded Blaster's info");
-      }
-    }
-  }
-
-  performBlast() {
-    this.velocity.mult(0.95);
-    this.actionEnergy = max(0, this.actionEnergy - 0.15);
-    if (this.isInDemonState) { // Demon Blast is just confusing noise
-      this.actionEnergy = max(0, this.actionEnergy - 0.1);
-      for (let other of agents) {
-        if (other !== this && p5.Vector.dist(this.position, other.position) < 60) { // Wider confusion radius
-          other.objectiveEntropyKnowledge = min(100, other.objectiveEntropyKnowledge + 0.4);
-        }
-      }
-      return;
-    }
-
-    if (this.organizedInfoStore.length === 0) {
-      // No info to blast, might lead to pressure buildup for Consume
-      this.demonStateTriggerPressure += 0.5; // Pressure to go get info
-      return;
-    }
-
-    // Select an info packet to blast (e.g., freshest or least used, or random for now)
-    let packetToBlast = random(this.organizedInfoStore);
-    packetToBlast.uses++;
-    let packetIndex = this.organizedInfoStore.indexOf(packetToBlast);
-    if (packetIndex > -1) {
-      this.infoFreshness[packetIndex] -= 5; // Becomes staler with each use
-      this.infoFreshness[packetIndex] = max(0, this.infoFreshness[packetIndex]);
-    }
-
-
-    // Emit "order" based on the quality & freshness of the blasted info
-    let blastEffectiveness = packetToBlast.contentQuality * (this.infoFreshness[packetIndex] / 100);
-
-    for (let other of agents) {
-      if (other !== this && p5.Vector.dist(this.position, other.position) < 50) {
-        if (blastEffectiveness > 0.3) { // Only effective if info is somewhat good/fresh
-          // Other agents might "consume" this blasted info
-          if (other.currentAnimalState === 'Consume' || (other.currentAnimalState === 'Play' && random(1) < 0.5)) {
-            let dSE = (other.objectiveEntropyKnowledge - (100 - blastEffectiveness * 100)) * 0.1;
-            dSE = max(0, dSE); // only reduce if current knowledge is higher than "truth"
-            other.objectiveEntropyKnowledge = max(0, other.objectiveEntropyKnowledge - dSE * 0.2); // More effective reduction
-            other.subjectiveEntropy = min(100, other.subjectiveEntropy + blastEffectiveness * 5); // New info, even if good, needs processing
-
-            // Blaster might get a small positive feedback (e.g., slight actionEnergy gain if others "learn")
-            if (dSE > 0.1) this.actionEnergy = min(100, this.actionEnergy + 0.05);
-          }
-        } else {
-          // Stale/bad info might slightly increase others' objective entropy (confusion)
-          other.objectiveEntropyKnowledge = min(100, other.objectiveEntropyKnowledge + 0.1);
-        }
-      }
-    }
-    // If all info is stale, major pressure to go Consume
-    let averageFreshness = this.infoFreshness.reduce((acc, val) => acc + val, 0) / (this.infoFreshness.length || 1);
-    if (averageFreshness < 20 && this.organizedInfoStore.length > 0) {
-      this.demonStateTriggerPressure += 1.0; // Strong pressure for Blaster to Consume
-      // console.log(`${this.opsTemperament} Blaster has stale info! Pressure: ${this.demonStateTriggerPressure}`);
-    }
-  }
-
-  performPlay(allAgents) {
-    // Move erratically, maybe towards other agents
-    if (!this.targetAgent || random(1) < 0.05) {
-      this.targetAgent = random(allAgents.filter(a => a !== this));
-    }
-    if (this.targetAgent) {
-      let desired = p5.Vector.sub(this.targetAgent.position, this.position);
-      this.velocity.add(desired.normalize().mult(0.2));
-    } else {
-      this.velocity.add(p5.Vector.random2D().mult(0.5));
-    }
-    this.velocity.limit(2);
-
-    // Disrupts local objectiveEntropyKnowledge for others
-    for (let other of allAgents) {
-      if (other !== this && p5.Vector.dist(this.position, other.position) < 40) {
-        other.objectiveEntropyKnowledge = min(100, other.objectiveEntropyKnowledge + (this.isInDemonState ? 0.5 : 0.25));
-      }
-    }
-    this.actionEnergy = max(0, this.actionEnergy - 0.2);
-  }
-
-
-  // --- Helper for slight random movement ---
-  wanderSlightly() {
-    this.velocity.add(p5.Vector.random2D().mult(0.2));
-    this.velocity.limit(0.8);
-  }
-
-
-  // --- Update agent state based on OPS Temperament ---
-  applyTemperamentLogic(allAgents, informationPips) {
-    // IP: Prefers Sleep/Consume. If tribe cohesion low, may "abandon" (move to edge).
-    if (this.opsTemperament === 'IP') {
-      if (this.currentAnimalState === 'Blast' || this.currentAnimalState === 'Play') {
-        this.demonStateTriggerPressure += 0.2; // Slightly more pressure if in De animal
-      }
-      // Simplified "abandon" logic: if low energy and many agents nearby, move away
-      if (this.actionEnergy < 30) {
-        let nearbyAgents = allAgents.filter(a => a !== this && p5.Vector.dist(this.position, a.position) < 100).length;
-        if (nearbyAgents > agents.length / 3) {
-          let escapeVector = createVector(this.position.x - width / 2, this.position.y - height / 2).mult(-1);
-          this.velocity.add(escapeVector.normalize().mult(0.3));
-        }
-      }
-    }
-    // EJ: Prefers Blast/Play. If sees IP dominating resources or an IP "abandoning", might "counter."
-    else if (this.opsTemperament === 'EJ') {
-      if (this.currentAnimalState === 'Sleep' || this.currentAnimalState === 'Consume') {
-        this.demonStateTriggerPressure += 0.2;
-      }
-      for (let other of allAgents) {
-        if (other.opsTemperament === 'IP' && p5.Vector.dist(this.position, other.position) < 150) {
-          // If IP is Consuming heavily (many pips nearby it) or seems to be "hoarding"
-          // This is abstract. Maybe if IP is near many pips and EJ has high objectiveEntropy.
-          if (other.currentAnimalState === 'Consume' && this.objectiveEntropyKnowledge > 70) {
-            this.targetAgent = other; // Move towards to potentially Blast/Play and "correct"
-          }
-        }
-      }
-    }
-    // IJ: Prefers Sleep/Blast. Dislikes EP chaos.
-    else if (this.opsTemperament === 'IJ') {
-      if (this.currentAnimalState === 'Consume' || this.currentAnimalState === 'Play') {
-        this.demonStateTriggerPressure += 0.2;
-      }
-      for (let other of allAgents) {
-        if (other.opsTemperament === 'EP' && other.currentAnimalState === 'Play' && p5.Vector.dist(this.position, other.position) < 80) {
-          if (this.currentAnimalState !== 'Blast' && random(1) < 0.1) this.currentAnimalState = 'Blast'; // Try to restore order
-          else { // Flee the chaos
-            let fleeVector = p5.Vector.sub(this.position, other.position);
-            this.velocity.add(fleeVector.normalize().mult(0.4));
-          }
-        }
-      }
-    }
-    // EP: Prefers Consume/Play. Dislikes IJ rigid order.
-    else if (this.opsTemperament === 'EP') {
-      if (this.currentAnimalState === 'Sleep' || this.currentAnimalState === 'Blast') {
-        this.demonStateTriggerPressure += 0.2;
-      }
-      for (let other of allAgents) {
-        if (other.opsTemperament === 'IJ' && other.currentAnimalState === 'Blast' && p5.Vector.dist(this.position, other.position) < 100) {
-          if (this.currentAnimalState !== 'Play' && random(1) < 0.1) this.currentAnimalState = 'Play'; // Disrupt order
-        }
-      }
-    }
-  }
-
-
-  update(informationPips, allAgents) {
-    if (this.actionEnergy <= 0 && !this.isInDemonState) { // If out of energy, force Sleep to recover
-      this.currentAnimalState = 'Sleep';
-      this.timeInCurrentAnimalState = 0;
-    } else if (this.actionEnergy <= 0 && this.isInDemonState) {
-      // If in demon state and out of energy, transition out of demon state
-      this.isInDemonState = false;
-      this.currentAnimalState = random(this.saviorAnimals); // Back to a savior
-      this.timeInCurrentAnimalState = 0;
-      this.demonStateTriggerPressure = 0; // Reset pressure
-      this.actionEnergy = 20; // Give some starting energy
-    }
-
-
-            this.timeInCurrentAnimalState++;
-
-        // Demon state / Tidal Wave logic
-        let forceToDemon = false;
-        if (!this.isInDemonState) {
-            if (this.saviorAnimals.includes(this.currentAnimalState)) {
-                this.demonStateTriggerPressure -= 0.1;
-            } else {
-                this.demonStateTriggerPressure += 0.1;
-            }
-            // Specific trigger for Blaster types (IJ/EJ) if info is stale
-            if ((this.opsTemperament === 'IJ' || this.opsTemperament === 'EJ') && this.currentAnimalState === 'Blast') {
-                let averageFreshness = this.infoFreshness.reduce((acc, val) => acc + val, 0) / (this.infoFreshness.length || 1);
-                if (this.organizedInfoStore.length === 0 || (averageFreshness < 15 && this.infoFreshness.length > 0) ) {
-                    this.demonStateTriggerPressure += 1.5; // Stronger pressure if blasting stale/no info
-                     // console.log(`${this.opsTemperament} Blaster has very stale/no info! Pressure now: ${this.demonStateTriggerPressure}`);
-                }
-            }
-
-            this.demonStateTriggerPressure = constrain(this.demonStateTriggerPressure, 0, this.demonStatePressureThreshold * 1.5);
-
-            if (this.timeInCurrentAnimalState > this.maxTimeInSaviorState || this.demonStateTriggerPressure >= this.demonStatePressureThreshold) {
-                forceToDemon = true;
-            }
-        } else { // Is in Demon State
-            if (this.timeInCurrentAnimalState > this.demonStateDuration) {
-                this.isInDemonState = false;
-                this.currentAnimalState = random(this.saviorAnimals);
-                this.timeInCurrentAnimalState = 0;
-                this.demonStateTriggerPressure = 0;
-                this.actionEnergy = 30;
-            }
-        }
-
-        if (forceToDemon && !this.isInDemonState) {
-            this.isInDemonState = true;
-            // Blaster-specific tidal wave: if pressure is high due to stale info, more likely to go into Demon Consume
-            if ((this.opsTemperament === 'IJ' || this.opsTemperament === 'EJ') && this.demonStateTriggerPressure > this.demonStatePressureThreshold * 0.8 && this.demonAnimals.includes('Consume')) {
-                this.currentAnimalState = 'Consume';
-                 console.log(`${this.opsTemperament} BLASTER TIDAL WAVE into DEMON CONSUME`);
-            } else if (this.demonAnimals.length > 0) {
-                this.currentAnimalState = random(this.demonAnimals);
-            } else { // Fallback if no specific demon animals defined (shouldn't happen)
-                this.currentAnimalState = random(this.allAnimals.filter(a => a !== this.currentAnimalState));
-            }
-            console.log(`${this.opsTemperament} triggered into DEMON ${this.currentAnimalState} (Pressure: ${this.demonStateTriggerPressure.toFixed(1)})`);
-            this.timeInCurrentAnimalState = 0;
-            this.demonStateTriggerPressure = 0;
-        }
-
-
-        // Perform actions based on current animal state
-        if (this.currentAnimalState === 'Sleep') this.performSleep();
-        else if (this.currentAnimalState === 'Consume') this.performConsume(informationPips);
-        else if (this.currentAnimalState === 'Blast') this.performBlast(); // Pass allAgents for interaction scope
-        else if (this.currentAnimalState === 'Play') this.performPlay(allAgents);
-
-        this.applyTemperamentLogic(allAgents, informationPips);
-
-        this.position.add(this.velocity);
-        this.edges();
-        this.updateColor();
-  }
-
-  edges() { /* ... same as before ... */ }
-  updateColor() { /* ... similar to setAppearanceByState, but can be simpler if only color changes ... */
-    let baseHue;
-    if (this.currentAnimalState === 'Sleep') baseHue = 240; // Blue
-    else if (this.currentAnimalState === 'Consume') baseHue = 60; // Yellow
-    else if (this.currentAnimalState === 'Blast') baseHue = 0; // Red
-    else if (this.currentAnimalState === 'Play') baseHue = 120; // Green
-
-    let saturation = this.isInDemonState ? 50 : 100;
-    let brightness = map(this.actionEnergy, 0, 100, 40, 100);
-    if (this.isInDemonState) brightness = max(20, brightness * 0.7); // Darker if demon
-
-    // Temperament overlay
-    if (this.opsTemperament === 'IP') baseHue = (baseHue + 30) % 360;
-    else if (this.opsTemperament === 'EJ') baseHue = (baseHue - 30 + 360) % 360;
-    else if (this.opsTemperament === 'IJ') saturation = max(30, saturation - 20);
-    else if (this.opsTemperament === 'EP') brightness = min(100, brightness + 10);
-
-
-    colorMode(HSB);
-    this.color = color(baseHue, saturation, brightness, 0.8);
-    colorMode(RGB); // Reset to default
-  }
-
-  display() { /* ... same as before, but use this.color ... */
-    stroke(0);
-    fill(this.color);
-    ellipse(this.position.x, this.position.y, this.size * 2);
-
-    fill(this.isInDemonState ? color(255, 0, 0) : 0); // Red text if demon
-    noStroke();
-    textAlign(CENTER, CENTER);
-    textSize(8);
-    text(`${this.opsTemperament}\n${this.currentAnimalState[0]}${this.isInDemonState ? '(D)' : ''}\nE:${floor(this.actionEnergy)}\nSE:${floor(this.subjectiveEntropy)}`, this.position.x, this.position.y);
-  }
-}
-
-// --- Information Pip Class ---
-class InformationPip {
-  constructor(x, y) {
-    this.position = createVector(x, y);
-    this.type = random(1) < 0.1 ? 'Known' : 'Novel'; // More known than novel
-    this.value = this.type === 'Novel' ? random(20, 40) : random(5, 15); // Novelty/Surprisal value
-    this.size = this.type === 'Novel' ? 10 : 7;
-    this.color = this.type === 'Novel' ? color(250, 200, 50) : color(180, 180, 220);
-    this.consumed = false;
-  }
-
-  display() {
-    if (!this.consumed) {
-      fill(this.color);
-      noStroke();
-      ellipse(this.position.x, this.position.y, this.size);
-    }
-  }
-}
-
-// --- Global Variables ---
+// --- Global Variables & Settings ---
 let agents = [];
-let numAgents = 10; // Increased for more interaction
+let numAgents = 15; // More agents for richer interactions
 let informationPips = [];
-let numPips = 30;
+let numPips = 60;
+
+const NOVEL_PIP_COLOR_HSB = [50, 80, 90];   // Bright Yellow
+const KNOWN_PIP_COLOR_HSB = [220, 30, 85];  // Desaturated Light Blue/Grey
+
+const IP_HUE_SHIFT = 0;     // Base Red-ish
+const EJ_HUE_SHIFT = 120;   // Base Green-ish
+const IJ_HUE_SHIFT = 240;   // Base Blue-ish
+const EP_HUE_SHIFT = 60;    // Base Yellow-ish (distinct from Novel Pip)
+
+const DEMON_STATE_BRIGHTNESS_FACTOR = 0.5;
+const DEMON_STATE_SATURATION_FACTOR = 0.7;
+
+// For smoother steering
+let perceptionRadius = 75;
+
 
 function setup() {
-  createCanvas(800, 600);
-  const temperaments = ['IP', 'EP', 'EJ', 'IJ'];
-  for (let i = 0; i < numAgents; i++) {
-    let temperament = random(temperaments);
-    // Simplified initial savior animals based on temperament (can be refined)
-    let saviors;
-    if (temperament === 'IP') saviors = ['Sleep', 'Consume'];
-    else if (temperament === 'EP') saviors = ['Consume', 'Play'];
-    else if (temperament === 'EJ') saviors = ['Blast', 'Play'];
-    else if (temperament === 'IJ') saviors = ['Sleep', 'Blast'];
-    else saviors = ['Sleep', 'Consume']; // Default
+    createCanvas(800, 600);
+    colorMode(HSB, 360, 100, 100, 1);
 
-    agents.push(new OpsAgent(random(width), random(height), temperament, saviors));
-  }
-  for (let i = 0; i < numPips; i++) {
-    informationPips.push(new InformationPip(random(width), random(height)));
-  }
+    const needs = ['Di', 'De', 'Oi', 'Oe'];
+    for (let i = 0; i < numAgents; i++) {
+        let dominantNeed = random(needs);
+        agents.push(new OpsAgent(random(width), random(height), dominantNeed));
+    }
+
+    for (let i = 0; i < numPips; i++) {
+        informationPips.push(new InformationPip(random(width), random(height)));
+    }
 }
 
 function draw() {
-  background(30, 35, 40);
+    background(220, 15, 20); // Darker, more desaturated blue
 
-  // Manage pips
-  informationPips = informationPips.filter(pip => !pip.consumed);
-  while (informationPips.length < numPips) {
-    informationPips.push(new InformationPip(random(width), random(height)));
-  }
-  for (let pip of informationPips) {
-    pip.display();
-  }
+    // Manage pips
+    informationPips = informationPips.filter(pip => !pip.consumed);
+    while (informationPips.length < numPips) {
+        informationPips.push(new InformationPip(random(width), random(height)));
+    }
+    for (let pip of informationPips) {
+        pip.display();
+    }
 
-  for (let agent of agents) {
-    agent.update(informationPips, agents); // Pass all agents for interaction
-    agent.display();
-  }
+    // Update and display agents
+    for (let agent of agents) {
+        agent.run(agents, informationPips); // Main agent logic loop
+    }
+     for (let agent of agents) { // Separate loop for display to draw all agents on top of all pips
+        agent.display();
+    }
+
+
+    // Display general info
+    push(); // Isolate text styling
+    colorMode(RGB); // Switch to RGB for text for consistency
+    fill(255);
+    noStroke();
+    textSize(12);
+    textAlign(LEFT, TOP);
+    let demonCount = agents.filter(a => a.isInDemonState).length;
+    text(`Agents: ${numAgents} | Pips: ${informationPips.length} | In Demon State: ${demonCount}`, 10, 10);
+    // Display average internal order
+    let avgInternalOrder = agents.reduce((sum, agent) => sum + agent.internalOrder, 0) / agents.length;
+    text(`Avg Internal Order: ${avgInternalOrder.toFixed(2)}`, 10, 30);
+    let avgActionPotential = agents.reduce((sum, agent) => sum + agent.actionPotential, 0) / agents.length;
+    text(`Avg Action Potential: ${avgActionPotential.toFixed(2)}`, 10, 50);
+    pop();
 }
 
-// MousePressed for debugging can remain
-
-// Mouse interaction to inspect an agent
-function mousePressed() {
-  for (let agent of agents) {
-    let d = dist(mouseX, mouseY, agent.position.x, agent.position.y);
-    if (d < agent.size) {
-      console.log("--- Agent Info ---");
-      console.log("Human Needs:", agent.humanNeeds);
-      console.log("Savior Functions:", agent.saviorFunctions);
-      console.log("Savior Animals:", agent.saviorAnimals);
-      console.log("Current State:", agent.currentAnimalState);
-      console.log("------------------");
+// --- InformationPip Class ---
+class InformationPip {
+    constructor(x, y) {
+        this.position = createVector(x, y);
+        this.type = random(1) < 0.35 ? 'Novel' : 'Known'; // Slightly fewer novel
+        this.value = this.type === 'Novel' ? random(20, 35) : random(5, 12);
+        this.size = this.type === 'Novel' ? 9 : 6;
+        this.hsbColor = this.type === 'Novel' ? NOVEL_PIP_COLOR_HSB : KNOWN_PIP_COLOR_HSB;
+        this.consumed = false;
     }
-  }
+
+    display() {
+        if (!this.consumed) {
+            noStroke();
+            fill(this.hsbColor[0], this.hsbColor[1], this.hsbColor[2], 0.85);
+            ellipse(this.position.x, this.position.y, this.size * 2);
+        }
+    }
+}
+
+// --- OpsAgent Class ---
+class OpsAgent {
+    constructor(x, y, dominantHumanNeed) {
+        this.position = createVector(x, y);
+        this.velocity = p5.Vector.random2D().mult(0.1); // Start with a little motion
+        this.acceleration = createVector(0, 0);
+        this.maxSpeed = 1.2;
+        this.maxForce = 0.08;
+        this.size = 16;
+        this.wanderTheta = random(TWO_PI);
+
+
+        this.dominantHumanNeed = dominantHumanNeed;
+        this.opsTemperament = this.getTemperamentFromNeed(dominantHumanNeed);
+        this.demonNeed = this.getDemonNeed(this.dominantHumanNeed);
+
+        this.internalOrder = random(0.4, 0.8);
+        this.perceivedExternalOrder_local = random(0.4, 0.8);
+        this.actionPotential = random(0.6, 1.0);
+        this.socialPressure = 0;
+
+        this.imbalanceCounters = { Di: 0, De: 0, Oi: 0, Oe: 0 };
+        this.imbalanceThreshold = 150; // Increased threshold
+        this.isInDemonState = false;
+        this.demonStateTimer = 0;
+        this.demonStateDuration = round(random(250, 400));
+
+        this.baseHue = this.getBaseHue();
+        this.currentSat = 70;
+        this.currentBrt = 70;
+        this.currentAlpha = 0.9;
+
+        this.debugLastStrongestDrive = "None";
+    }
+
+    getTemperamentFromNeed(need) { /* ... same ... */ return need === 'Di' ? 'IP' : need === 'De' ? 'EJ' : need === 'Oi' ? 'IJ' : 'EP';}
+    getDemonNeed(dominantNeed) { /* ... same ... */ return dominantNeed === 'Di' ? 'De' : dominantNeed === 'De' ? 'Di' : dominantNeed === 'Oi' ? 'Oe' : 'Oi';}
+    getBaseHue() { /* ... same ... */ return this.dominantHumanNeed === 'Di' ? IP_HUE_SHIFT : this.dominantHumanNeed === 'De' ? EJ_HUE_SHIFT : this.dominantHumanNeed === 'Oi' ? IJ_HUE_SHIFT : EP_HUE_SHIFT; }
+    
+  getShapeForTemperament() {
+        if (this.opsTemperament === 'IP') return 'ellipse';
+        if (this.opsTemperament === 'EJ') return 'rect'; // Square/Rectangle
+        if (this.opsTemperament === 'IJ') return 'triangle';
+        if (this.opsTemperament === 'EP') return 'star'; // Or another distinct polygon
+        return 'ellipse';
+    }
+    applyForce(force) {
+        this.acceleration.add(force);
+    }
+
+    // MAIN AGENT LOGIC LOOP
+    run(allAgents, pips) {
+        this.calculateDriveForces(allAgents, pips); // Calculate all potential drive forces
+        this.applyTemperamentAndStateBiases();    // Bias these forces
+        this.manageImbalanceAndDemonStates();     // Check/update demon state
+        this.updateMovement();                    // Apply forces, move
+        this.updatePrimitives();                  // Update internal states based on actions/time
+        this.updateVisuals();
+    }
+
+    calculateDriveForces(allAgents, pips) {
+        this.forces = {
+            internalOrder: createVector(0,0),      // Sleep-like
+            externalInfoSelf: createVector(0,0),   // Consume-like
+            influenceExternalOrder: createVector(0,0),// Blast-like
+            tribeInteraction: createVector(0,0)    // Play-like
+        };
+        this.driveActivationLevels = { // How much each drive *wants* to be active
+            internalOrder: 0, externalInfoSelf: 0, influenceExternalOrder: 0, tribeInteraction: 0
+        };
+
+
+        // 1. Drive for Internal Order (Sleep-like)
+        if (this.internalOrder < 0.45 || this.actionPotential < 0.25) {
+            this.driveActivationLevels.internalOrder = map(this.internalOrder, 0.45, 0, 0.2, 1.0, true);
+            // Force is to slow down / become still
+            this.forces.internalOrder = p5.Vector.mult(this.velocity, -0.1); // Dampening force
+        }
+
+        // 2. Drive for External Info for Self (Consume-like)
+        if (this.internalOrder > 0.75 || (this.opsTemperament === 'EP' && this.perceivedExternalOrder_local > 0.7)) {
+            this.driveActivationLevels.externalInfoSelf = 0.7; // Strong base activation
+            let targetPip = this.findClosestPip(pips, 'Novel', perceptionRadius * 1.5);
+            if (targetPip) {
+                this.forces.externalInfoSelf = this.steer(targetPip.position);
+            } else { // If no novel pip, explore more broadly
+                this.forces.externalInfoSelf = this.getWanderForce().mult(0.5);
+            }
+        }
+
+        // 3. Drive to Influence External Order (Blast-like)
+        if (this.internalOrder > 0.65 && (this.perceivedExternalOrder_local < 0.4 || (this.opsTemperament === 'EJ' && this.socialPressure < -0.1))) {
+            this.driveActivationLevels.influenceExternalOrder = 0.6;
+             // Force is to slow down and "emit"
+            this.forces.influenceExternalOrder = p5.Vector.mult(this.velocity, -0.05);
+            // Actual emission effect handled in updatePrimitives or separate interaction phase
+        }
+
+        // 4. Drive for Tribe Interaction (Play-like)
+        if (this.actionPotential > 0.55 && (this.internalOrder > 0.6 || (this.opsTemperament === 'EJ' && this.socialPressure < 0.3))) {
+            this.driveActivationLevels.tribeInteraction = 0.65;
+            let targetAgent = this.findClosestAgent(allAgents, perceptionRadius * 2);
+            if (targetAgent) {
+                this.forces.tribeInteraction = this.steer(targetAgent.position, true); // Playful approach
+            } else {
+                this.forces.tribeInteraction = this.getWanderForce().mult(0.7);
+            }
+        }
+    }
+
+    applyTemperamentAndStateBiases() {
+        // Apply temperament biases to driveActivationLevels
+        if (this.opsTemperament === 'IP') {
+            this.driveActivationLevels.internalOrder *= 1.5; this.driveActivationLevels.externalInfoSelf *= 1.3;
+            this.driveActivationLevels.influenceExternalOrder *= 0.4; this.driveActivationLevels.tribeInteraction *= 0.4;
+        } else if (this.opsTemperament === 'EJ') {
+            this.driveActivationLevels.influenceExternalOrder *= 1.4; this.driveActivationLevels.tribeInteraction *= 1.5;
+            this.driveActivationLevels.internalOrder *= (0.6 + this.socialPressure * 0.4);
+            this.driveActivationLevels.externalInfoSelf *= 0.5;
+        } else if (this.opsTemperament === 'IJ') {
+            this.driveActivationLevels.internalOrder *= 1.6; this.driveActivationLevels.influenceExternalOrder *= 1.5;
+            this.driveActivationLevels.externalInfoSelf *= 0.5; this.driveActivationLevels.tribeInteraction *= 0.3;
+        } else if (this.opsTemperament === 'EP') {
+            this.driveActivationLevels.externalInfoSelf *= 1.5; this.driveActivationLevels.tribeInteraction *= 1.4;
+            this.driveActivationLevels.internalOrder *= 0.5; this.driveActivationLevels.influenceExternalOrder *= 0.4;
+        }
+
+        // If in Demon State, amplify the demon need's drive but make the force less effective or chaotic
+        if (this.isInDemonState) {
+            if (this.demonNeed === 'Di') this.driveActivationLevels.internalOrder *= 1.5;
+            if (this.demonNeed === 'Oe') this.driveActivationLevels.externalInfoSelf *= 1.5;
+            if (this.demonNeed === 'Oi') this.driveActivationLevels.influenceExternalOrder *= 1.5; // Demon Oi might try to over-control
+            if (this.demonNeed === 'De') this.driveActivationLevels.tribeInteraction *= 1.5;
+        }
+
+        // Combine forces based on activation levels (simple weighted sum for now)
+        this.acceleration.mult(0); // Reset from previous frame
+        let totalActivation = 0;
+        for (let drive in this.driveActivationLevels) totalActivation += this.driveActivationLevels[drive];
+
+        if (totalActivation > 0) {
+            this.debugLastStrongestDrive = "None";
+            let maxAct = 0;
+            for (let drive in this.forces) {
+                let weight = this.driveActivationLevels[drive] / totalActivation;
+                this.applyForce(p5.Vector.mult(this.forces[drive], weight));
+                if(this.driveActivationLevels[drive] > maxAct){maxAct = this.driveActivationLevels[drive]; this.debugLastStrongestDrive = drive;}
+            }
+        } else {
+             // If no strong drive, apply a generic wander/separation
+            this.applyForce(this.getWanderForce().mult(0.2));
+            this.debugLastStrongestDrive = "Wandering";
+        }
+         this.applyForce(this.separate(agents).mult(1.5)); // General separation
+    }
+
+    manageImbalanceAndDemonStates() {
+        // Update imbalance counters
+        let dominantNeedFulfilled = false;
+        if ((this.dominantHumanNeed === 'Di' || this.dominantHumanNeed === 'Oi') && this.driveActivationLevels.internalOrder > 0.1) dominantNeedFulfilled = true;
+        if ((this.dominantHumanNeed === 'Di' || this.dominantHumanNeed === 'Oe') && this.driveActivationLevels.externalInfoSelf > 0.1) dominantNeedFulfilled = true;
+        if ((this.dominantHumanNeed === 'De' || this.dominantHumanNeed === 'Oi') && this.driveActivationLevels.influenceExternalOrder > 0.1) dominantNeedFulfilled = true;
+        if ((this.dominantHumanNeed === 'De' || this.dominantHumanNeed === 'Oe') && this.driveActivationLevels.tribeInteraction > 0.1) dominantNeedFulfilled = true;
+
+        if (!this.isInDemonState) {
+            if (dominantNeedFulfilled) {
+                this.imbalanceCounters[this.demonNeed] += 0.15; // More pressure if saviors active
+            }
+            for (let need in this.imbalanceCounters) { // All imbalances decay slowly
+                 this.imbalanceCounters[need] = max(0, this.imbalanceCounters[need] - 0.01);
+            }
+
+            if (this.imbalanceCounters[this.demonNeed] > this.imbalanceThreshold) {
+                this.isInDemonState = true;
+                this.demonStateTimer = this.demonStateDuration;
+                this.imbalanceCounters[this.demonNeed] = 0;
+                console.log(`${this.opsTemperament} (${this.dominantHumanNeed}) triggered DEMON ${this.demonNeed}`);
+            }
+        } else { // In Demon State
+            this.demonStateTimer--;
+            this.actionPotential = max(0, this.actionPotential - 0.002); // Demon state is tiring
+            if (this.demonStateTimer <= 0 || this.actionPotential <= 0.05) {
+                this.isInDemonState = false;
+                this.actionPotential = max(this.actionPotential, 0.2); // Some recovery
+                console.log(`${this.opsTemperament} exited DEMON state`);
+            }
+        }
+    }
+
+    updateMovement() {
+        this.velocity.add(this.acceleration);
+        let speedLimit = this.maxSpeed * (this.isInDemonState ? 0.8 : 1.0);
+        if(this.driveActivationLevels.tribeInteraction > 0.5 && !this.isInDemonState) speedLimit *=1.3; // Playful agents faster
+        this.velocity.limit(speedLimit);
+        this.position.add(this.velocity);
+        this.acceleration.mult(0); // Reset acceleration
+        this.edges();
+    }
+
+    updatePrimitives() { // Effects of actions on internal states
+        let consumedThisFrame = false;
+
+        // Internal Order Drive Effect
+        if (this.driveActivationLevels.internalOrder > 0.1) {
+            this.internalOrder = min(1, this.internalOrder + 0.002 * this.driveActivationLevels.internalOrder);
+            this.actionPotential = min(1, this.actionPotential + 0.001 * this.driveActivationLevels.internalOrder);
+            this.velocity.mult(0.98); // Naturally slows if focusing inward
+        }
+
+        // Consume Drive Effect (Interaction with Pips)
+        if (this.driveActivationLevels.externalInfoSelf > 0.1) {
+            for (let i = informationPips.length - 1; i >= 0; i--) {
+                let pip = informationPips[i];
+                if (!pip.consumed && p5.Vector.dist(this.position, pip.position) < this.size / 2 + pip.size / 2) {
+                    this.internalOrder = max(0, this.internalOrder - pip.value * (pip.type === 'Novel' ? 0.0015 : 0.0005)); // Novelty temporarily reduces order
+                    this.perceivedExternalOrder_local = min(1, this.perceivedExternalOrder_local + pip.value * 0.001); // Gained knowledge
+                    this.actionPotential = min(1, this.actionPotential + (pip.type === 'Novel' ? 0.03 : 0.01)); // More energy from novel
+                    pip.consumed = true;
+                    consumedThisFrame = true;
+                    break; // Consume one pip per frame for simplicity
+                }
+            }
+            if (!consumedThisFrame) this.actionPotential = max(0, this.actionPotential - 0.0005); // Cost of searching
+        }
+
+
+        // Blast Drive Effect
+        if (this.driveActivationLevels.influenceExternalOrder > 0.1) {
+            let effectStrength = 0.002 * this.driveActivationLevels.influenceExternalOrder;
+            if (this.isInDemonState) effectStrength *= -0.5; // Demon blast is confusing
+            for (let other of agents) {
+                if (other !== this && p5.Vector.dist(this.position, other.position) < perceptionRadius) {
+                    other.perceivedExternalOrder_local = constrain(other.perceivedExternalOrder_local + effectStrength, 0, 1);
+                }
+            }
+            this.actionPotential = max(0, this.actionPotential - 0.001);
+            if(this.opsTemperament === 'EJ' && !this.isInDemonState) this.socialPressure = min(1, this.socialPressure + 0.0005 * this.driveActivationLevels.influenceExternalOrder);
+
+        }
+
+        // Play Drive Effect
+        if (this.driveActivationLevels.tribeInteraction > 0.1) {
+            let effectStrength = -0.0015 * this.driveActivationLevels.tribeInteraction; // Play introduces novelty/chaos
+            if (this.isInDemonState) effectStrength *= 2; // Demon play is more chaotic
+             for (let other of agents) {
+                if (other !== this && p5.Vector.dist(this.position, other.position) < perceptionRadius * 0.8) {
+                    other.perceivedExternalOrder_local = constrain(other.perceivedExternalOrder_local + effectStrength, 0, 1);
+                }
+            }
+            this.actionPotential = max(0, this.actionPotential - 0.0015);
+            if(this.opsTemperament === 'EJ' && !this.isInDemonState) this.socialPressure = min(1, this.socialPressure + 0.0008 * this.driveActivationLevels.tribeInteraction);
+        }
+
+        // Generic action potential decay & social pressure normalization
+        this.actionPotential = max(0, this.actionPotential - 0.0002); // Baseline decay
+        this.socialPressure *= 0.995; // Decay towards neutral
+        this.internalOrder = constrain(this.internalOrder, 0, 1);
+        this.perceivedExternalOrder_local = constrain(this.perceivedExternalOrder_local, 0, 1); // Assume it's always local for now
+    }
+
+
+    updateVisuals() {
+        let hue = this.baseHue;
+        let sat = 75;
+        let brt = 75;
+
+        // Temperament Visual Overlays (subtle shifts from base hue)
+        if (this.opsTemperament === 'IP' && !this.isInDemonState) sat = max(50, sat - 15); // Slightly more desaturated/introspective
+        if (this.opsTemperament === 'EJ' && !this.isInDemonState) brt = min(90, brt + 10); // Slightly brighter/more expressive
+        if (this.opsTemperament === 'IJ' && !this.isInDemonState) { hue = (hue + 5 + 360)%360; brt = max(60, brt -10); } // Shift hue slightly, slightly darker
+        if (this.opsTemperament === 'EP' && !this.isInDemonState) { hue = (hue - 5 + 360)%360; sat = min(90, sat +10); } // Shift hue, slightly more saturated
+
+
+        brt = map(this.actionPotential, 0, 1, brt * 0.6, brt * 1.1, true);
+        sat = map(this.internalOrder, 0, 1, sat * 0.7, sat * 1.1, true); // More internal order = more saturated/defined
+
+        if (this.isInDemonState) {
+            brt *= DEMON_STATE_BRIGHTNESS_FACTOR;
+            sat *= DEMON_STATE_SATURATION_FACTOR;
+            // Could also add a visual effect like slight shaking or a border
+            hue = (hue + 180) % 360; // Opposite hue for demon state for strong visual cue
+        }
+
+        this.currentSat = constrain(sat, 20, 100);
+        this.currentBrt = constrain(brt, 20, 100);
+        this.currentAlpha = this.isInDemonState ? 0.7 : 0.9;
+        this.baseHue = hue; // Update baseHue if temperament shifted it for demon state inversion next time
+    }
+
+
+    // --- Utility & Steering Behaviors ---
+    steer(target, arrive = false, arrivalRadius = 10) {
+        let desired = p5.Vector.sub(target, this.position);
+        let d = desired.mag();
+        if (d > 0) {
+            desired.normalize();
+            if (arrive && d < arrivalRadius) {
+                desired.mult(map(d, 0, arrivalRadius, 0, this.maxSpeed));
+            } else {
+                desired.mult(this.maxSpeed);
+            }
+            let steerForce = p5.Vector.sub(desired, this.velocity);
+            steerForce.limit(this.maxForce);
+            return steerForce;
+        }
+        return createVector(0,0);
+    }
+
+     getWanderForce() {
+        // Slightly change wander direction over time
+        this.wanderTheta += random(-0.2, 0.2);
+        // Create a vector pointing in the direction of wanderTheta
+        let wanderDir = p5.Vector.fromAngle(this.wanderTheta);
+        // Scale it by some amount
+        return wanderDir.mult(this.maxForce * 0.3);
+    }
+
+
+    separate(agents) {
+        let desiredSeparation = this.size * 2.5;
+        let steer = createVector(0, 0);
+        let count = 0;
+        for (let other of agents) {
+            let d = p5.Vector.dist(this.position, other.position);
+            if ((d > 0) && (d < desiredSeparation)) {
+                let diff = p5.Vector.sub(this.position, other.position);
+                diff.normalize();
+                diff.div(d); // Weight by distance
+                steer.add(diff);
+                count++;
+            }
+        }
+        if (count > 0) {
+            steer.div(count);
+        }
+        if (steer.mag() > 0) {
+            steer.normalize();
+            steer.mult(this.maxSpeed);
+            steer.sub(this.velocity);
+            steer.limit(this.maxForce * 1.2); // Separation can be a bit stronger
+        }
+        return steer;
+    }
+
+    findClosestPip(pips, type = 'Novel', searchRadius = perceptionRadius) {
+        let closest = null;
+        let record = searchRadius + 1; // Start with a distance greater than searchRadius
+        for (let pip of pips) {
+            if (!pip.consumed && pip.type === type) {
+                let d = p5.Vector.dist(this.position, pip.position);
+                if (d < record) {
+                    record = d;
+                    closest = pip;
+                }
+            }
+        }
+        return closest;
+    }
+
+    findClosestAgent(agents, searchRadius = perceptionRadius) {
+        let closest = null;
+        let record = searchRadius + 1;
+        for (let other of agents) {
+            if (other !== this) {
+                let d = p5.Vector.dist(this.position, other.position);
+                if (d < record) {
+                    record = d;
+                    closest = other;
+                }
+            }
+        }
+        return closest;
+    }
+
+
+    edges() {
+        if (this.position.x > width + this.size) this.position.x = -this.size;
+        if (this.position.x < -this.size) this.position.x = width + this.size;
+        if (this.position.y > height + this.size) this.position.y = -this.size;
+        if (this.position.y < -this.size) this.position.y = height + this.size;
+    }
+
+    display() {
+        noStroke();
+        fill(this.baseHue, this.currentSat, this.currentBrt, this.currentAlpha);
+        ellipse(this.position.x, this.position.y, this.size * 2);
+
+        // Info text
+        push();
+        colorMode(RGB);
+        let textColor = this.isInDemonState ? color(255,100,100) : color(230);
+        if (this.currentBrt < 40) textColor = color(255); // Ensure text is visible on dark agents
+        fill(textColor);
+
+        textSize(8);
+        textAlign(CENTER, TOP); // Align text better under the agent
+        let needStr = `${this.dominantHumanNeed}`;
+        if (this.isInDemonState) needStr = `D:${this.demonNeed}`;
+
+        // For debugging active drive
+        // let activeDriveDisplay = this.debugLastStrongestDrive.substring(0,2).toUpperCase();
+        // text(`${this.opsTemperament} ${activeDriveDisplay}\n${needStr}\nAP:${this.actionPotential.toFixed(1)} IO:${this.internalOrder.toFixed(1)}`, this.position.x, this.position.y + this.size + 2);
+
+        text(`${this.opsTemperament}\n${needStr}\nAP:${this.actionPotential.toFixed(1)} IO:${this.internalOrder.toFixed(1)}`, this.position.x, this.position.y + this.size + 2);
+
+
+        // Social pressure indicator (optional, can be cluttered)
+        // let pressureY = this.position.y - this.size - 5;
+        // stroke(0,0,100);
+        // line(this.position.x - 10, pressureY, this.position.x + 10, pressureY);
+        // fill(this.socialPressure > 0 ? 'green' : 'red');
+        // ellipse(this.position.x + this.socialPressure * 10, pressureY, 5, 5);
+        pop();
+    }
 }
