@@ -7,13 +7,13 @@ let params = {
     numCogentsPerType: 10,
     perceptionRadius: 60,
     interactionRadius: 25,
-    maxSpeedMultiplier: 1.0,
+    maxSpeedMultiplier: 3.0,
     maxForceMultiplier: 1.0,
     seekerProcessingTime: 90, // frames
     reviserProcessingTime: 240, // frames
     directorCohesionStrength: 0.5, // Multiplier
     conferrerExplorationUrgency: 0.1, // Chance to find new target
-    separationForceMultiplier: 0.6
+    separationForceMultiplier: 1.3
 };
 
 // Slider objects
@@ -335,7 +335,7 @@ function createSliders() {
 
 
     yPos = height - 130; // Reset for second column
-    sliders.maxSpeedMult = createSlider(0.1, 3, params.maxSpeedMultiplier, 0.1);
+    sliders.maxSpeedMult = createSlider(1, 5, params.maxSpeedMultiplier, 0.1);
     sliders.maxSpeedMult.position(col2XStart, yPos); sliders.maxSpeedMult.style('width', sliderWidth + 'px');
     sliderTexts.maxSpeedMult = createP('Max Speed Mult:'); sliderTexts.maxSpeedMult.position(col2XStart, yPos - 20);
 
