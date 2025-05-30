@@ -2,9 +2,11 @@
 let cogents = [];
 let simulationSpeed = 1; // Updates per frame
 
+CANVAS_WIDTH = 1200 * 2;
+CANVAS_HEIGHT = 800 * 2;
 // Default Parameter Values (will be controlled by sliders)
 let params = {
-    numCogentsPerType: 10,
+    numCogentsPerType: 10 * 2,
     perceptionRadius: 60,
     interactionRadius: 25,
     maxSpeedMultiplier: 3.0,
@@ -302,7 +304,7 @@ class Cogent {
 
 // --- P5.js Sketch Functions ---
 function setup() {
-    createCanvas(800, 750); // Increased height for sliders
+    createCanvas(CANVAS_WIDTH, CANVAS_HEIGHT);
     createSliders();
     resetSimulation(); // Initialize cogents
 }
