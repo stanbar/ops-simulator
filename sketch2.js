@@ -2,8 +2,8 @@
 let cogents = [];
 let simulationSpeed = 1; // Updates per frame
 
-CANVAS_WIDTH = 1200 * 2;
-CANVAS_HEIGHT = 800 * 2;
+CANVAS_WIDTH = 1200;
+CANVAS_HEIGHT = 800;
 // Default Parameter Values (will be controlled by sliders)
 let params = {
     numCogentsPerType: 10 * 2,
