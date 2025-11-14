@@ -1,36 +1,917 @@
 <!DOCTYPE html>
 <html lang="en">
-  <head>
-    <title>Binary Cognitive Mechanics Simulator</title>
-    <meta name="description" content="Explore emergent social behaviors with our interactive agent-based simulator. Visualize how different cognitive 'personality types' interact to create complex group dynamics.">
-    <meta name="keywords" content="Agent-Based Simulation, Social Dynamics Simulator, Cognitive Simulation, Personality Simulation, Group Behavior Model, Emergent Behavior, Complex Systems Visualization, Simulation, Interactive Psychology Demo, Cognitive Entropy, Order and Chaos Theory, Objective Personality System, Behavioral Modeling, Artificial Life, Information Theory in Cognition, binary, cognitive mechanics, simulator, ops-simulator, interactive">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <link rel="canonical" href="https://sim.objectivepersonality.ai">
+<head>
+  <meta charset="utf-8"/>
+  <title>BCM Cognitive Landscape Simulator — Perlin + Lookahead + Phase-Synced Mean + Collisions</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1"/>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/p5.js/1.9.0/p5.min.js"></script>
+  <style>
+    :root { --uiw: 340px; }
+    html, body { margin: 0; height: 100%; background: #0e0f12; color: #e8eaf1; font-family: system-ui,-apple-system,Segoe UI,Roboto,Ubuntu,Cantarell,"Helvetica Neue",Arial,"Noto Sans",sans-serif; }
+    #ui { position: fixed; top: 0; right: 0; width: var(--uiw); height: 100%; overflow-y: auto; box-sizing: border-box; padding: 14px 14px 120px; background: #14161b; border-left: 1px solid #1e2230; }
+    #ui h2 { margin: 8px 0 10px; font-size: 16px; font-weight: 700; letter-spacing: .3px; }
+    #ui .group { border: 1px solid #1f2535; border-radius: 10px; padding: 10px; margin-bottom: 12px; background: #10131a; }
+    #ui label { display: block; font-size: 12px; opacity: .85; margin: 6px 0 4px; }
+    #ui input[type=range]{ width: 100%; }
+    #ui .row { display: flex; gap: 8px; align-items: center; }
+    #ui .row > * { flex: 1; }
+    #ui button, #ui select { width: 100%; border-radius: 8px; border: 1px solid #2a3248; padding: 8px 10px; background: #18202d; color: #e8eaf1; cursor: pointer; }
+    #ui button:hover { background: #1c2737; }
+    #ui .tiny { font-size: 11px; opacity: .8; }
+    #metrics { position: fixed; left: 10px; top: 10px; background: rgba(8,10,14,.78); padding: 8px 10px; border-radius: 8px; border: 1px solid #1e2230; backdrop-filter: blur(6px); }
+    canvas { display: block; }
+  </style>
+</head>
+<body>
+  <div id="ui">
+    <h2>BCM Cognitive Landscape</h2>
 
-    <!-- Open Graph / Facebook -->
-    <meta property="og:type" content="website">
-    <meta property="og:url" content="https://sim.objectivepersonality.ai">
-    <meta property="og:title" content="Binary Cognitive Mechanics Simulators">
-    <meta property="og:description" content="Explore emergent social behaviors with our interactive agent-based simulator. Visualize how different cognitive 'personality types' interact to create complex group dynamics.">
-    <meta property="og:image" content="https://sim.objectivepersonality.ai/logo.avif">
+    <!-- Environment preset -->
+    <div class="group">
+      <div class="row">
+        <select id="envPresetSel" title="Environment Presets">
+          <option value="balanced">Env: Balanced</option>
+          <option value="conferring">Env: Conferring</option>
+          <option value="revising">Env: Revising</option>
+          <option value="explore">Env: Explorer</option>
+          <option value="consensus">Env: Consensus</option>
+        </select>
+      </div>
+      <div class="row" style="margin-top:8px;gap:6px">
+        <button id="applyEnvPreset">Apply Env Preset</button>
+        <button id="pauseBtn">Pause</button>
+      </div>
+    </div>
 
-    <!-- Twitter -->
-    <meta name="twitter:url" content="https://sim.objectivepersonality.ai">
-    <meta name="twitter:title" content="Binary Cognitive Mechanics Simulators">
-    <meta name="twitter:description" content="Explore emergent social behaviors with our interactive agent-based simulator. Visualize how different cognitive 'personality types' interact to create complex group dynamics.">
-    <meta name="twitter:image" content="https://sim.objectivepersonality.ai/logo.avif">
-    <link rel="icon" href="favicon.ico" type="image/x-icon">
-    
-    <script src="https://cdn.jsdelivr.net/npm/p5@1.11.5/lib/p5.js"></script>
-    <script src="https://cdnjs.cloudflare.com/ajax/libs/p5.js/1.11.3/addons/p5.sound.min.js"></script>
-    <link rel="stylesheet" type="text/css" href="style.css">
-    <meta charset="utf-8" />
+    <!-- Global multipliers -->
+    <div class="group">
+      <label>Certainty multiplier β×: <span id="lblCert">1.00</span></label>
+      <input id="sCert" type="range" min="0" max="5.0" step="0.01" value="1.00">
 
-  </head>
-  <body>
-    <main>
-    </main>
-    <script src="sketch2.js "></script>
-    <!-- <script src="sketch3.js"></script> -->
-  </body>
+      <label>Variety multiplier σ×: <span id="lblVar">1.00</span></label>
+      <input id="sVar" type="range" min="0" max="5.0" step="0.01" value="1.00">
+
+      <label>Connection multiplier κ×: <span id="lblConn">1.00</span></label>
+      <input id="sConn" type="range" min="0" max="5.0" step="0.01" value="1.00">
+
+      <label>Significance multiplier κ×: <span id="lblSig">1.00</span></label>
+      <input id="sSig" type="range" min="0" max="5.0" step="0.01" value="1.00">
+
+      <label>Simulation speed: <span id="lblDt">1.00</span></label>
+      <input id="sDt" type="range" min="0.2" max="30.0" step="0.01" value="1.00">
+    </div>
+
+    <!-- Field (Perlin) -->
+    <div class="group">
+      <label>Perlin frequency: <span id="lblFreq">2.50</span></label>
+      <input id="sPerlinFreq" type="range" min="0.5" max="8.0" step="0.05" value="2.50">
+
+      <label>Perlin octaves: <span id="lblOct">3</span></label>
+      <input id="sPerlinOct" type="range" min="1" max="6" step="1" value="3">
+
+      <label>Perlin contrast (amplitude): <span id="lblNoise">0.40</span></label>
+      <input id="sNoise" type="range" min="0" max="1.00" step="0.01" value="0.40">
+
+      <label><input type="checkbox" id="chkEvolve"> Animate field over time</label>
+      <label>Field evolution speed: <span id="lblEvo">0.50</span></label>
+      <input id="sEvo" type="range" min="0.0" max="3.0" step="0.01" value="0.50">
+
+      <label>Externalize low-entropy (deepen basins): <span id="lblExt">0.000</span></label>
+      <input id="sExt" type="range" min="0" max="0.03" step="0.001" value="0.000">
+
+      <label>Flatten ridges (diffusion): <span id="lblFlat">0.000</span></label>
+      <input id="sFlat" type="range" min="0" max="0.01" step="0.0005" value="0.000">
+    </div>
+
+    <!-- Gradient lookahead -->
+    <div class="group">
+      <h3 style="margin:6px 0 6px;font-size:13px">Gradient Lookahead</h3>
+      <label>Gradient radius (cells): <span id="lblGradR">8</span></label>
+      <input id="sGradR" type="range" min="1" max="30" step="1" value="8">
+      <label>Coarse weight: <span id="lblGradW">0.50</span></label>
+      <input id="sGradW" type="range" min="0" max="1" step="0.01" value="0.50">
+      <div class="tiny">Final ∇ = (1−w)·∇<sub>fine</sub>(1 cell) + w·∇<sub>coarse</sub>(R cells).</div>
+    </div>
+
+    <!-- Agents, trails -->
+    <div class="group">
+      <label>Agents: <span id="lblN">20</span></label>
+      <input id="sN" type="range" min="0" max="200" step="1" value="20">
+
+      <label>Show Trails <input id="chkTrails" type="checkbox" checked></label>
+      <label>Show Group Mean <input id="chkMean" type="checkbox" checked></label>
+      <div class="row" style="margin-top:8px;gap:6px">
+        <button id="btnResetAgents">Reset Agents</button>
+        <button id="btnRandomField">Randomize Field</button>
+        <button id="btnClearTrails">Clear Trails</button>
+      </div>
+    </div>
+
+    <!-- Per-agent controls -->
+    <div class="group">
+      <h3 style="margin:6px 0 6px;font-size:13px">Agent Spawner</h3>
+      <label>Preset for new agent</label>
+      <select id="agentSpawnPreset">
+        <option value="balanced">Balanced (●)</option>
+        <option value="conferring">Conferring (▲)</option>
+        <option value="revising">Revising (◆)</option>
+        <option value="explorer">Explorer (✦)</option>
+        <option value="consensus">Consensus (■)</option>
+        <option value="pure-certainty">Certainty-only (▼)</option>
+        <option value="pure-variety">Variety-only (✦)</option>
+        <option value="pure-connection">Connection-only (+)</option>
+        <option value="pure-significance">Significance-only (×)</option>
+      </select>
+      <label><input type="checkbox" id="chkAddByClick" checked> Add by click on canvas</label>
+      <div class="row" style="margin-top:8px;gap:6px">
+        <button id="btnAddCenter">Add at center</button>
+        <button id="btnRandomizeMix">Add 10 mixed</button>
+      </div>
+    </div>
+
+    <div class="group">
+      <h3 style="margin:6px 0 6px;font-size:13px">Selected Agent</h3>
+      <div class="tiny">Click an agent to select it. Shift-click to delete.</div>
+      <div style="margin-top:6px">Selected: <span id="selInfo">None</span></div>
+      <label>Change preset</label>
+      <select id="selAgentPreset">
+        <option value="balanced">Balanced (●)</option>
+        <option value="conferring">Conferring (▲)</option>
+        <option value="revising">Revising (◆)</option>
+        <option value="explorer">Explorer (✦)</option>
+        <option value="consensus">Consensus (■)</option>
+        <option value="pure-certainty">Certainty-only (▼)</option>
+        <option value="pure-variety">Variety-only (✦)</option>
+        <option value="pure-connection">Connection-only (+)</option>
+        <option value="pure-significance">Significance-only (×)</option>
+      </select>
+      <div class="row" style="margin-top:8px;gap:6px">
+        <button id="btnApplySelPreset">Apply to selected</button>
+        <button id="btnDeleteSel">Delete selected</button>
+      </div>
+    </div>
+
+    <div class="group tiny">
+      <div><strong>Legend</strong> — Base fill: <span style="color:#3aaaff">Blue</span> = seeks low entropy (kVar&lt;0), <span style="color:#ffd400">Yellow</span> = seeks high entropy (kVar&gt;0), <span style="color:#5ee0ff">Cyan</span> = neutral. Rings: <span style="color:#fff">White</span> = Connection&gt;0, <span style="color:#000;background:#e8eaf1;padding:0 4px;border-radius:3px;">Black</span> = Significance&gt;0. Outer ring: green→red = comfort.</div>
+    </div>
+  </div>
+
+  <div id="metrics"></div>
+
+  <script>
+    // ===== Perlin field + lookahead gradients + fixed-step dynamics + phase-synced mean + collisions =====
+
+    // Canvas & grid
+    let uiW = 340, canvasW, canvasH;
+    let gw = 220, gh = 140;
+
+    // Field buffers
+    let baseField, deltaField, L, tmpL, gImg;
+    let minL = 0, maxL = 1;
+
+    // Agents
+    let agents = [], trailsLayer;
+    let paused = false, selectedIdx = -1;
+
+    // Unwrapped mean phases (in cycles; not mod 1)
+    let meanPhaseX = 0.5, meanPhaseY = 0.5;
+
+    // Timing
+    let PHYS_H = 0.01;
+    let timeAcc = 0, lastSec = 0;
+    let fieldAcc = 0;
+    const FIELD_DT = 0.05;
+
+    // Perlin time
+    let noiseT = 0;
+
+    // Collision settings
+    const COLLISION_PX = 12;     // visual spacing (pixels)
+    const COLLISION_ITERS = 2;   // projection passes per physics step
+
+    // UI
+    const UI = {};
+
+    function setup() {
+      canvasW = windowWidth - parseInt(getComputedStyle(document.documentElement).getPropertyValue('--uiw'));
+      canvasH = windowHeight;
+      createCanvas(canvasW, canvasH);
+      trailsLayer = createGraphics(canvasW, canvasH); trailsLayer.clear();
+
+      const N = gw * gh;
+      baseField = new Float32Array(N);
+      deltaField = new Float32Array(N);
+      L = new Float32Array(N);
+      tmpL = new Float32Array(N);
+      gImg = createImage(gw, gh);
+
+      hookUI();
+      randomizeField();
+      resetAgents(parseInt(document.getElementById('sN').value));
+      frameRate(60);
+      noStroke();
+      lastSec = millis()/1000;
+    }
+
+    function windowResized() {
+      canvasW = windowWidth - parseInt(getComputedStyle(document.documentElement).getPropertyValue('--uiw'));
+      canvasH = windowHeight;
+      resizeCanvas(canvasW, canvasH);
+      trailsLayer = createGraphics(canvasW, canvasH);
+      trailsLayer.clear();
+    }
+
+    // ===== UI =====
+    function hookUI() {
+      function LBL(id, v) { select(id).html(typeof v === 'number' ? v.toFixed(3) : v); }
+
+      UI.envPresetSel = document.getElementById('envPresetSel');
+      UI.applyEnvPreset = document.getElementById('applyEnvPreset');
+      UI.pauseBtn = document.getElementById('pauseBtn');
+
+      UI.sCert = document.getElementById('sCert');
+      UI.sVar  = document.getElementById('sVar');
+      UI.sConn = document.getElementById('sConn');
+      UI.sSig  = document.getElementById('sSig');
+      UI.sDt   = document.getElementById('sDt');
+
+      UI.sN = document.getElementById('sN');
+      UI.chkTrails = document.getElementById('chkTrails');
+      UI.chkMean   = document.getElementById('chkMean');
+      UI.btnResetAgents = document.getElementById('btnResetAgents');
+      UI.btnRandomField = document.getElementById('btnRandomField');
+      UI.btnClearTrails = document.getElementById('btnClearTrails');
+
+      UI.sPerlinFreq = document.getElementById('sPerlinFreq');
+      UI.sPerlinOct  = document.getElementById('sPerlinOct');
+      UI.sNoise      = document.getElementById('sNoise');
+      UI.chkEvolve   = document.getElementById('chkEvolve');
+      UI.sEvo        = document.getElementById('sEvo');
+
+      UI.sExt  = document.getElementById('sExt');
+      UI.sFlat = document.getElementById('sFlat');
+
+      // Lookahead controls
+      UI.sGradR = document.getElementById('sGradR');
+      UI.sGradW = document.getElementById('sGradW');
+
+      UI.agentSpawnPreset = document.getElementById('agentSpawnPreset');
+      UI.chkAddByClick = document.getElementById('chkAddByClick');
+      UI.btnAddCenter = document.getElementById('btnAddCenter');
+      UI.btnRandomizeMix = document.getElementById('btnRandomizeMix');
+
+      UI.selInfo = document.getElementById('selInfo');
+      UI.selAgentPreset = document.getElementById('selAgentPreset');
+      UI.btnApplySelPreset = document.getElementById('btnApplySelPreset');
+      UI.btnDeleteSel = document.getElementById('btnDeleteSel');
+
+      const refreshLabels = () => {
+        LBL('#lblCert', parseFloat(UI.sCert.value));
+        LBL('#lblVar',  parseFloat(UI.sVar.value));
+        LBL('#lblConn', parseFloat(UI.sConn.value));
+        LBL('#lblSig',  parseFloat(UI.sSig.value));
+        LBL('#lblDt',   parseFloat(UI.sDt.value));
+        LBL('#lblN',    agents.length);
+        LBL('#lblExt',  parseFloat(UI.sExt.value));
+        LBL('#lblFlat', parseFloat(UI.sFlat.value));
+        LBL('#lblNoise',parseFloat(UI.sNoise.value));
+        LBL('#lblEvo',  parseFloat(UI.sEvo.value));
+        LBL('#lblFreq', parseFloat(UI.sPerlinFreq.value));
+        select('#lblOct').html(parseInt(UI.sPerlinOct.value));
+        select('#lblGradR').html(parseInt(UI.sGradR.value));
+        LBL('#lblGradW', parseFloat(UI.sGradW.value));
+      };
+      refreshLabels();
+
+      ['input','change'].forEach(evt => {
+        [UI.sCert, UI.sVar, UI.sConn, UI.sSig, UI.sDt, UI.sExt, UI.sFlat, UI.sNoise, UI.sEvo, UI.sPerlinFreq, UI.sPerlinOct, UI.sGradR, UI.sGradW].forEach(el => {
+          el.addEventListener(evt, refreshLabels);
+        });
+      });
+
+      [UI.sPerlinFreq, UI.sPerlinOct, UI.sNoise].forEach(el => {
+        el.addEventListener('input', () => { rebuildBaseField(); combineField(); });
+      });
+
+      UI.sN.addEventListener('input', () => { adjustAgentCount(parseInt(UI.sN.value)); refreshLabels(); });
+
+      UI.btnResetAgents.addEventListener('click', () => { resetAgents(parseInt(UI.sN.value)); refreshLabels(); });
+      UI.btnRandomField.addEventListener('click', () => randomizeField());
+      UI.btnClearTrails.addEventListener('click', () => trailsLayer.clear());
+
+      UI.applyEnvPreset.addEventListener('click', applyEnvPreset);
+
+      UI.pauseBtn.addEventListener('click', () => togglePause());
+      window.addEventListener('keydown', (e) => {
+        if (e.code === 'Space') { togglePause(); e.preventDefault(); }
+        if (e.key.toLowerCase() === 'r') randomizeField();
+        if (e.key.toLowerCase() === 'a') resetAgents(parseInt(UI.sN.value));
+        if (e.key.toLowerCase() === 'd') deleteSelected();
+      });
+
+      UI.btnAddCenter.addEventListener('click', () => { addAgentAt(0.5, 0.5, UI.agentSpawnPreset.value); UI.sN.value = agents.length; refreshLabels(); });
+      UI.btnRandomizeMix.addEventListener('click', () => {
+        const names = ["balanced","conferring","revising","explorer","consensus","pure-certainty","pure-variety","pure-connection","pure-significance"];
+        for (let i = 0; i < 10; i++) addAgentAt(Math.random(), Math.random(), names[Math.floor(Math.random()*names.length)]);
+        UI.sN.value = agents.length; refreshLabels();
+      });
+
+      UI.btnApplySelPreset.addEventListener('click', () => {
+        if (selectedIdx >= 0 && selectedIdx < agents.length) applyAgentPreset(agents[selectedIdx], UI.selAgentPreset.value);
+      });
+      UI.btnDeleteSel.addEventListener('click', () => deleteSelected());
+    }
+
+    function togglePause() {
+      paused = !paused;
+      lastSec = millis()/1000;
+      timeAcc = 0;
+      fieldAcc = 0;
+      document.getElementById('pauseBtn').textContent = paused ? 'Resume' : 'Pause';
+    }
+
+    // ===== Field (Perlin base + delta overlay) =====
+    function randomizeField() {
+      noiseSeed(Math.floor(Math.random() * 1e9));
+      noiseT = 0;
+      deltaField.fill(0);
+      rebuildBaseField();
+      combineField();
+      trailsLayer.clear();
+    }
+
+    function rebuildBaseField() {
+      const freq = parseFloat(document.getElementById('sPerlinFreq').value);
+      const oct  = parseInt(document.getElementById('sPerlinOct').value);
+      const amp  = parseFloat(document.getElementById('sNoise').value);
+      let idx = 0;
+      for (let j=0;j<gh;j++){
+        for (let i=0;i<gw;i++,idx++){
+          const x = i/(gw-1), y = j/(gh-1);
+          const v = fbm(x*freq, y*freq, noiseT, oct);
+          baseField[idx] = amp * (v - 0.5);
+        }
+      }
+    }
+
+    function fbm(x, y, t, octaves) {
+      let sum = 0, amp = 1, freq = 1, norm = 0;
+      for (let o=0; o<octaves; o++){
+        sum  += amp * noise(x*freq, y*freq, t);
+        norm += amp;
+        amp *= 0.5;
+        freq *= 2.0;
+      }
+      return sum / norm; // 0..1
+    }
+
+    function combineField() {
+      minL = Infinity; maxL = -Infinity;
+      for (let i=0;i<L.length;i++){
+        L[i] = baseField[i] + deltaField[i];
+        if (L[i] < minL) minL = L[i];
+        if (L[i] > maxL) maxL = L[i];
+      }
+    }
+
+    function laplaceDiffuseMixed(lambda) {
+      let idx = 0;
+      for (let y=0;y<gh;y++){
+        for (let x=0;x<gw;x++,idx++){
+          const Lc = L[idx];
+          const Lr = L[idx2(x+1,y)], Ll = L[idx2(x-1,y)], Lu = L[idx2(x,y-1)], Ld = L[idx2(x,y+1)];
+          tmpL[idx] = Lc + lambda * (Lr + Ll + Lu + Ld - 4*Lc);
+        }
+      }
+      minL = Infinity; maxL = -Infinity;
+      for (let i=0;i<L.length;i++){
+        L[i] = tmpL[i];
+        deltaField[i] = L[i] - baseField[i];
+        if (L[i] < minL) minL = L[i];
+        if (L[i] > maxL) maxL = L[i];
+      }
+    }
+
+    function externalizeBasins(strengthPerStep) {
+      if (strengthPerStep <= 0) return;
+      const rCells = Math.max(1, Math.floor(0.04 * Math.min(gw, gh)));
+      const r2 = rCells * rCells;
+      for (const a of agents) {
+        const gx = Math.round(a.x * (gw - 1));
+        const gy = Math.round(a.y * (gh - 1));
+        for (let dy=-rCells; dy<=rCells; dy++){
+          for (let dx=-rCells; dx<=rCells; dx++){
+            const x = gx + dx, y = gy + dy; if (x<0||x>=gw||y<0||y>=gh) continue;
+            const d2 = dx*dx + dy*dy; if (d2 > r2) continue;
+            const k = Math.exp(-d2 / (2 * r2 * 0.5));
+            const id = y * gw + x;
+            const delta = strengthPerStep * k;
+            L[id] -= delta;
+            deltaField[id] -= delta;
+            if (L[id] < minL) minL = L[id];
+          }
+        }
+      }
+    }
+
+    // Rendering helpers
+    function fieldToImage() {
+      const inv = (maxL - minL) > 1e-9 ? (1 / (maxL - minL)) : 1.0;
+      const COLOR_CAP = 0.88, GAMMA = 0.95;
+      gImg.loadPixels();
+      for (let j=0;j<gh;j++) for (let i=0;i<gw;i++){
+        const idx = j*gw+i;
+        const tRaw = (L[idx] - minL) * inv;
+        const t = Math.min(COLOR_CAP, Math.pow(tRaw, GAMMA));
+        const c = colormapCool(t);
+        const p = 4*idx;
+        gImg.pixels[p+0] = c[0]; gImg.pixels[p+1] = c[1]; gImg.pixels[p+2] = c[2]; gImg.pixels[p+3] = 255;
+      }
+      gImg.updatePixels();
+    }
+
+    function colormapCool(t) {
+      t = Math.min(1, Math.max(0, t));
+      const h = 240 - 200 * t; // blue→teal→orange
+      const s = 1.0, v = 0.90;
+      return hsv2rgb(h, s, v);
+    }
+    function hsv2rgb(h, s, v) {
+      const c = v*s, hh = (h/60), x = c*(1 - Math.abs(hh % 2 - 1));
+      let r=0,g=0,b=0;
+      if (0<=hh && hh<1){ r=c; g=x; b=0; }
+      else if (1<=hh && hh<2){ r=x; g=c; b=0; }
+      else if (2<=hh && hh<3){ r=0; g=c; b=x; }
+      else if (3<=hh && hh<4){ r=0; g=x; b=c; }
+      else if (4<=hh && hh<5){ r=x; g=0; b=c; }
+      else if (5<=hh && hh<=6){ r=c; g=0; b=x; }
+      const m = v - c;
+      return [Math.round(255*(r+m)), Math.round(255*(g+m)), Math.round(255*(b+m))];
+    }
+
+    function idx2(x, y) { const xi=(x+gw)%gw, yi=(y+gh)%gh; return yi*gw+xi; }
+    function wrap01(u){ u = u % 1; if (u < 0) u += 1; return u; }
+    function wrapDelta(d){ if (d>0.5)d-=1; if (d<-0.5)d+=1; return d; } // [-0.5,0.5]
+    function wrapDeltaPhase(d){ return d - Math.round(d); }             // [-0.5,0.5] for unwrapped phases
+    function frac01(u){ return u - Math.floor(u); }
+
+    // ===== Scalar sampling & gradients (with lookahead) =====
+    function sampleScalar(u, v){
+      const gx = u * (gw - 1), gy = v * (gh - 1);
+      let x0 = Math.floor(gx), y0 = Math.floor(gy);
+      const tx = gx - x0, ty = gy - y0;
+      const x1 = x0 + 1, y1 = y0 + 1;
+      const L00 = L[idx2(x0, y0)], L10 = L[idx2(x1, y0)], L01 = L[idx2(x0, y1)], L11 = L[idx2(x1, y1)];
+      const Lx0 = lerp(L00, L10, tx), Lx1 = lerp(L01, L11, tx);
+      return lerp(Lx0, Lx1, ty);
+    }
+
+    function sampleGradRadius(u, v, rCells){
+      const rx = rCells / (gw - 1);
+      const ry = rCells / (gh - 1);
+      const Lx1 = sampleScalar(wrap01(u + rx), v);
+      const Lx0 = sampleScalar(wrap01(u - rx), v);
+      const Ly1 = sampleScalar(u, wrap01(v + ry));
+      const Ly0 = sampleScalar(u, wrap01(v - ry));
+      let dLdu = (Lx1 - Lx0) / (2 * rx);
+      let dLdv = (Ly1 - Ly0) / (2 * ry);
+      const denom = (maxL - minL);
+      const norm = denom > 1e-9 ? (1.0 / denom) : 1.0;
+      return createVector(dLdu * norm, dLdv * norm);
+    }
+
+    function sampleGradLookahead(u, v){
+      const w  = parseFloat(document.getElementById('sGradW').value);
+      const rC = parseInt(document.getElementById('sGradR').value);
+      const gFine   = sampleGradRadius(u, v, 1);
+      const gCoarse = sampleGradRadius(u, v, Math.max(1, rC));
+      return createVector(
+        (1 - w) * gFine.x + w * gCoarse.x,
+        (1 - w) * gFine.y + w * gCoarse.y
+      );
+    }
+
+    // ===== Agents (presets & visuals) =====
+    function presetParams(name) {
+      switch (name) {
+        case 'conferring':         return { kCert:-1.0, kVar: 1.0, kConn: 1.0,  kSig:-1.0, glyph:'triangle'      };
+        case 'revising':           return { kCert: 1.0, kVar:-1.0, kConn:-1.0, kSig: 1.0,  glyph:'diamond'       };
+        case 'explorer':           return { kCert:-1.0, kVar: 1.0, kConn:-1.0, kSig: 1.0,  glyph:'star'          };
+        case 'consensus':          return { kCert: 1.0, kVar:-1.0, kConn: 1.0,  kSig:-1.0, glyph:'square'        };
+        case 'pure-certainty':     return { kCert: 2.0, kVar:-2.0, kConn: 0.0,  kSig: 0.0,  glyph:'triangleDown' };
+        case 'pure-variety':       return { kCert:-2.0, kVar: 2.0, kConn: 0.0,  kSig: 0.0,  glyph:'star'          };
+        case 'pure-connection':    return { kCert: 0.0, kVar: 0.0, kConn: 2.0,  kSig:-2.0, glyph:'plus'          };
+        case 'pure-significance':  return { kCert: 0.0, kVar: 0.0, kConn:-2.0, kSig: 2.0,  glyph:'cross'         };
+        default:                   return { kCert: 1.0, kVar: 1.0, kConn: 0.5,  kSig: 0.5,  glyph:'circle'       };
+      }
+    }
+    function applyAgentPreset(a, name) {
+      const p = presetParams(name);
+      a.kCert=p.kCert; a.kVar=p.kVar; a.kConn=p.kConn; a.kSig=p.kSig;
+      a.glyph=p.glyph; a.preset=name;
+    }
+    function addAgentAt(u, v, presetName='balanced') {
+      const a = {
+        x:u, y:v, x_prev:u, y_prev:v,
+        px:u, py:v, // unwrapped phases
+        vx:0, vy:0, glyph:'circle', preset:'balanced',
+        id: Math.random().toString(36).slice(2)
+      };
+      applyAgentPreset(a, presetName);
+      agents.push(a);
+      selectedIdx = agents.length - 1;
+      updateSelectionUI();
+    }
+    function resetAgents(n) {
+      agents = [];
+      for (let i=0;i<n;i++) addAgentAt(Math.random(), Math.random(), document.getElementById('agentSpawnPreset').value);
+      trailsLayer.clear(); selectedIdx=-1; updateSelectionUI();
+    }
+    function adjustAgentCount(n) {
+      const cur = agents.length;
+      if (n>cur) for (let i=cur;i<n;i++) addAgentAt(Math.random(), Math.random(), document.getElementById('agentSpawnPreset').value);
+      else agents.length = n;
+      if (selectedIdx >= agents.length) selectedIdx = -1;
+      updateSelectionUI();
+    }
+    function updateSelectionUI() {
+      const t = (selectedIdx>=0 && selectedIdx<agents.length) ? `#${selectedIdx} (${agents[selectedIdx].preset})` : 'None';
+      document.getElementById('selInfo').textContent = t;
+      if (selectedIdx>=0 && selectedIdx<agents.length) document.getElementById('selAgentPreset').value = agents[selectedIdx].preset;
+      document.getElementById('lblN').textContent = agents.length;
+      document.getElementById('sN').value = agents.length;
+    }
+
+    function mousePressed() {
+      if (mouseX>=0 && mouseX<canvasW && mouseY>=0 && mouseY<canvasH) {
+        const { idx, d } = nearestAgent(mouseX/canvasW, mouseY/canvasH);
+        const pxThresh = 10;
+        if (d * Math.min(canvasW, canvasH) < pxThresh) {
+          selectedIdx = idx;
+          if (keyIsDown(SHIFT)) { deleteSelected(); return; }
+          updateSelectionUI();
+        } else if (document.getElementById('chkAddByClick').checked) {
+          addAgentAt(mouseX/canvasW, mouseY/canvasH, document.getElementById('agentSpawnPreset').value);
+          updateSelectionUI();
+        }
+      }
+    }
+    function deleteSelected() {
+      if (selectedIdx>=0 && selectedIdx<agents.length) { agents.splice(selectedIdx,1); selectedIdx=-1; updateSelectionUI(); }
+    }
+    function nearestAgent(u,v){
+      let best=-1, bestD=1e9;
+      for (let i=0;i<agents.length;i++){
+        const dx=wrapDelta(agents[i].x-u), dy=wrapDelta(agents[i].y-v);
+        const d=Math.hypot(dx,dy); if (d<bestD){bestD=d; best=i;}
+      }
+      return { idx:best, d:bestD };
+    }
+
+    // ===== Comfort model =====
+    function sampleNorm(u, v) {
+      const gx=u*(gw-1), gy=v*(gh-1);
+      const x0=Math.floor(gx), y0=Math.floor(gy);
+      const tx=gx-x0, ty=gy-y0;
+      function Lat(ix,iy){ return L[idx2(ix,iy)]; }
+      const L00=Lat(x0,y0), L10=Lat(x0+1,y0), L01=Lat(x0,y0+1), L11=Lat(x0+1,y0+1);
+      const Lx0=lerp(L00,L10,tx), Lx1=lerp(L01,L11,tx), Lv=lerp(Lx0,Lx1,ty);
+      const denom=(maxL-minL);
+      return denom>1e-9 ? (Lv-minL)/denom : 0.0;
+    }
+    function agentDiscomfort(a, xr, yr, GM) {
+      const mVar  = parseFloat(document.getElementById('sVar').value);
+      const mConn = parseFloat(document.getElementById('sConn').value);
+      const mSig  = parseFloat(document.getElementById('sSig').value);
+
+      const e = sampleNorm(xr, yr);
+      const targetVar = (a.kVar >= 0) ? 1.0 : 0.0;
+      const wVar = Math.abs(a.kVar * mVar);
+      const varMismatch = Math.abs(e - targetVar);
+
+      const dxS = wrapDeltaPhase(a.px - GM.mxPhase);
+      const dyS = wrapDeltaPhase(a.py - GM.myPhase);
+      const MAX_TORUS_DIST = Math.SQRT2 / 2;
+      const dNorm = Math.min(1, Math.hypot(dxS, dyS) / MAX_TORUS_DIST);
+
+      const targetSig  = (a.kSig  >= 0) ? 0.75 : 0.00;
+      const targetConn = (a.kConn >= 0) ? 0.00 : 0.75;
+      const wSig  = Math.abs(a.kSig  * mSig);
+      const wConn = Math.abs(a.kConn * mConn);
+      const sigMismatch  = Math.abs(dNorm - targetSig);
+      const connMismatch = Math.abs(dNorm - targetConn);
+
+      const num = wVar*varMismatch + wSig*sigMismatch + wConn*connMismatch;
+      const den = wVar + wSig + wConn + 1e-9;
+      return Math.min(1, Math.max(0, num / den));
+    }
+
+    // ===== Mean (phase-synced) =====
+    function computeGroupMean() {
+      if (agents.length === 0) {
+        return { mx: frac01(meanPhaseX), my: frac01(meanPhaseY), mxPhase: meanPhaseX, myPhase: meanPhaseY };
+      }
+      let sx = 0, sy = 0;
+      for (const a of agents) { sx += a.px; sy += a.py; }
+      const candX = sx / agents.length, candY = sy / agents.length;
+      const ALPHA = 0.12; // smoothing
+      meanPhaseX += ALPHA * (candX - meanPhaseX);
+      meanPhaseY += ALPHA * (candY - meanPhaseY);
+      return { mx: frac01(meanPhaseX), my: frac01(meanPhaseY), mxPhase: meanPhaseX, myPhase: meanPhaseY };
+    }
+
+    // ===== Collision handling (wrap-aware spatial hash + projection) =====
+    function collideAgents(radiusNorm, iterations=2) {
+      if (agents.length <= 1) return;
+      const cell = radiusNorm;                       // grid cell size (normalized)
+      const nx = Math.max(1, Math.ceil(1 / cell));
+      const ny = Math.max(1, Math.ceil(1 / cell));
+      const buckets = new Array(nx * ny);
+      for (let i=0;i<buckets.length;i++) buckets[i] = [];
+
+      // Fill grid
+      for (let i=0;i<agents.length;i++) {
+        const a = agents[i];
+        let cx = Math.floor(frac01(a.x) / cell);
+        let cy = Math.floor(frac01(a.y) / cell);
+        if (cx < 0) cx = 0; if (cx >= nx) cx = nx-1;
+        if (cy < 0) cy = 0; if (cy >= ny) cy = ny-1;
+        buckets[cy*nx + cx].push(i);
+      }
+
+      // Neighbor cell offsets (including own cell)
+      const neigh = [-1,0,1];
+
+      for (let iter=0; iter<iterations; iter++) {
+        for (let cy=0; cy<ny; cy++) {
+          for (let cx=0; cx<nx; cx++) {
+            for (let oy of neigh) for (let ox of neigh) {
+              const nxC = (cx + ox + nx) % nx;
+              const nyC = (cy + oy + ny) % ny;
+              const listA = buckets[cy*nx + cx];
+              const listB = buckets[nyC*nx + nxC];
+              // Pairs: if same bucket, enforce j>i to avoid double work
+              if (listA === listB) {
+                for (let u=0; u<listA.length; u++) {
+                  const i = listA[u];
+                  for (let v=u+1; v<listA.length; v++) projectPair(i, listA[v], radiusNorm);
+                }
+              } else {
+                for (let u=0; u<listA.length; u++) {
+                  const i = listA[u];
+                  for (let v=0; v<listB.length; v++) projectPair(i, listB[v], radiusNorm);
+                }
+              }
+            }
+          }
+        }
+      }
+    }
+
+    function projectPair(i, j, r) {
+      const a = agents[i], b = agents[j];
+      let dx = wrapDelta(a.x - b.x);
+      let dy = wrapDelta(a.y - b.y);
+      const d2 = dx*dx + dy*dy;
+      const r2 = r*r;
+      if (d2 >= r2 || d2 < 1e-12) return; // no overlap or exact same spot
+
+      const d = Math.sqrt(d2);
+      const overlap = r - d;
+      // push half the overlap to each, along separation direction
+      const k = (overlap / (d + 1e-12)) * 0.5;
+      const cx = dx * k;
+      const cy = dy * k;
+
+      a.x = wrap01(a.x + cx);
+      a.y = wrap01(a.y + cy);
+      b.x = wrap01(b.x - cx);
+      b.y = wrap01(b.y - cy);
+
+      // keep unwrapped phases consistent with the applied (minimal) displacement
+      a.px += cx; a.py += cy;
+      b.px -= cx; b.py -= cy;
+    }
+
+    // ===== Dynamics =====
+    function stepAgents(h) {
+      const mCert=parseFloat(document.getElementById('sCert').value);
+      const mVar =parseFloat(document.getElementById('sVar').value);
+      const mConn=parseFloat(document.getElementById('sConn').value);
+      const mSig =parseFloat(document.getElementById('sSig').value);
+
+      const GM = computeGroupMean();
+      const noiseScale = Math.sqrt(h / PHYS_H);
+      const stabilityFactor = 0.002, maxStep = 0.10; // clamp
+
+      // Integrate forces
+      for (const a of agents) {
+        a.x_prev=a.x; a.y_prev=a.y;
+
+        const grad = sampleGradLookahead(a.x, a.y);
+        const effCert = a.kCert * mCert;
+        const effConn = a.kConn * mConn;
+        const effSig  = a.kSig  * mSig;
+        const meanK = effConn - effSig;
+
+        let fx = - effCert * grad.x;
+        let fy = - effCert * grad.y;
+
+        const dxMean = wrapDeltaPhase(GM.mxPhase - a.px);
+        const dyMean = wrapDeltaPhase(GM.myPhase - a.py);
+        fx += meanK * dxMean; fy += meanK * dyMean;
+
+        fx += (a.kVar * mVar) * noiseScale * randn();
+        fy += (a.kVar * mVar) * noiseScale * randn();
+
+        let dx = fx * h * stabilityFactor;
+        let dy = fy * h * stabilityFactor;
+        const stepMag=Math.hypot(dx,dy);
+        if (stepMag>maxStep){ const s=maxStep/stepMag; dx*=s; dy*=s; }
+
+        a.x += dx; a.y += dy;
+        if (a.x<0) a.x+=1; if (a.x>=1) a.x-=1;
+        if (a.y<0) a.y+=1; if (a.y>=1) a.y-=1;
+
+        // advance unwrapped phases by minimal wrapped displacement
+        a.px += wrapDelta(a.x - a.x_prev);
+        a.py += wrapDelta(a.y - a.y_prev);
+      }
+
+      // ---- Collisions (post-integration projection) ----
+      const rNorm = COLLISION_PX / Math.min(canvasW, canvasH);
+      collideAgents(rNorm, COLLISION_ITERS);
+
+      // Trails (after final corrected positions)
+      if (document.getElementById('chkTrails').checked) {
+        for (const a of agents) {
+          trailsLayer.noStroke();
+          trailsLayer.fill(240,240,255,40);
+          trailsLayer.circle(a.x*canvasW, a.y*canvasH, 2.2);
+        }
+        trailsLayer.push(); trailsLayer.erase(12,12);
+        trailsLayer.rect(0,0,trailsLayer.width,trailsLayer.height);
+        trailsLayer.noErase(); trailsLayer.pop();
+      }
+    }
+
+    // Visuals (semantic colors & comfort ring)
+    function lerpWrap(a,b,t){ let d=b-a; if(d>0.5)d-=1; if(d<-0.5)d+=1; let x=a+d*t; if(x<0)x+=1; if(x>=1)x-=1; return x; }
+    function drawAgent(a, i, alpha, GM) {
+      const xr=lerpWrap(a.x_prev,a.x,alpha), yr=lerpWrap(a.y_prev,a.y,alpha);
+      const px=xr*canvasW, py=yr*canvasH;
+
+      const base = (a.kVar > 0) ? [255, 212, 0] : (a.kVar < 0) ? [60, 170, 255] : [94, 224, 255];
+      const d = agentDiscomfort(a, xr, yr, GM);
+      const hue = 120 * (1 - d);
+      const comfortRGB = hsv2rgb(hue, 1.0, 1.0);
+
+      noStroke(); fill(base[0], base[1], base[2], 50); circle(px, py, 10);
+      fill(base[0], base[1], base[2], 255);
+      drawGlyph(a.glyph, px, py, 6);
+
+      if (a.kSig > 0) { noFill(); stroke(0, 0, 0, 235); strokeWeight(2.2); circle(px, py, 11); }
+      if (a.kConn > 0) { noFill(); stroke(255, 255, 255, 235); strokeWeight(2.2); circle(px, py, 13); }
+
+      noFill(); stroke(comfortRGB[0], comfortRGB[1], comfortRGB[2], 235); strokeWeight(2.6); circle(px, py, 15);
+
+      if (i===selectedIdx) { noFill(); stroke(255,220,120,230); strokeWeight(2); circle(px, py, 9); }
+      noStroke(); fill(200); circle(px, py, 2.2);
+    }
+    function drawGlyph(type, px, py, size) {
+      push(); translate(px,py);
+      switch(type){
+        case 'triangle': { const r=size*0.62, h=r*Math.sqrt(3); triangle(0,-h/2,-r,h/2,r,h/2); } break;
+        case 'triangleDown': { const r=size*0.62, h=r*Math.sqrt(3); triangle(0,h/2,-r,-h/2,r,-h/2); } break;
+        case 'square': rectMode(CENTER); square(0,0,size,2); break;
+        case 'diamond': rotate(Math.PI/4); rectMode(CENTER); square(0,0,size,2); break;
+        case 'star': { beginShape(); const points=5, outerR=size*0.6, innerR=size*0.28;
+          for (let i=0;i<points*2;i++){ const ang=i*Math.PI/points; const r=(i%2===0)?outerR:innerR; vertex(Math.cos(ang)*r, Math.sin(ang)*r); }
+          endShape(CLOSE); } break;
+        case 'plus': { rectMode(CENTER); push(); rotate(0); rect(0,0,size*1.2,size*0.28,2); pop(); push(); rotate(Math.PI/2); rect(0,0,size*1.2,size*0.28,2); pop(); } break;
+        case 'cross': { rectMode(CENTER); push(); rotate(Math.PI/4); rect(0,0,size*1.2,size*0.28,2); pop(); push(); rotate(-Math.PI/4); rect(0,0,size*1.2,size*0.28,2); pop(); } break;
+        default: circle(0, 0, size);
+      }
+      pop();
+    }
+
+    function computeMetrics(GM) {
+      const binsX=12, binsY=8, N=agents.length;
+      const H=new Array(binsX*binsY).fill(0);
+      let meanD = 0;
+      for (const a of agents){
+        let ix=Math.floor(frac01(a.x)*binsX); ix=Math.min(binsX-1,Math.max(0,ix));
+        let iy=Math.floor(frac01(a.y)*binsY); iy=Math.min(binsY-1,Math.max(0,iy));
+        H[iy*binsX+ix]++;
+        meanD += agentDiscomfort(a, a.x, a.y, GM);
+      }
+      meanD = N>0 ? meanD/N : 0;
+
+      let entropy=0; for (let i=0;i<H.length;i++){ if(H[i]>0){ const p=H[i]/N; entropy -= p*Math.log(p); } }
+      const entropyNorm = H.length>1 ? entropy/Math.log(H.length) : 0;
+
+      let s2=0; for (const a of agents){
+        const dx = wrapDeltaPhase(a.px - GM.mxPhase);
+        const dy = wrapDeltaPhase(a.py - GM.myPhase);
+        s2 += dx*dx + dy*dy;
+      }
+      const sigma = N>0? Math.sqrt(s2/N) : 0;
+
+      // simple clustering in wrapped coord space
+      const eps=0.07, eps2=eps*eps, parent=Array.from({length:N},(_,i)=>i);
+      const find=i=>parent[i]===i?i:(parent[i]=find(parent[i]));
+      const unite=(a,b)=>{a=find(a);b=find(b);if(a!==b)parent[a]=b;};
+      for (let i=0;i<N;i++) for (let j=i+1;j<N;j++){
+        const dx=wrapDelta(agents[i].x - agents[j].x), dy=wrapDelta(agents[i].y - agents[j].y);
+        if (dx*dx+dy*dy < eps2) unite(i,j);
+      }
+      let roots=new Set(); for (let i=0;i<N;i++) roots.add(find(i));
+      const clusters = N===0?0:roots.size;
+
+      const el=document.getElementById('metrics');
+      el.innerHTML = `
+        <div><strong>H</strong> (spatial entropy): ${entropyNorm.toFixed(3)}</div>
+        <div><strong>σ</strong> (spread): ${sigma.toFixed(3)}</div>
+        <div><strong>Clusters</strong>: ${clusters}</div>
+        <div><strong>Avg discomfort</strong>: ${meanD.toFixed(3)}</div>
+        <div class="tiny">L range: ${minL.toFixed(2)} .. ${maxL.toFixed(2)} | fps: ${Math.round(frameRate())}</div>
+      `;
+    }
+
+    function draw() {
+      const simSpeed = parseFloat(document.getElementById('sDt').value);
+      const nowSec = millis()/1000; let dtReal = nowSec - lastSec; lastSec = nowSec;
+
+      let fieldTouched = false;
+
+      if (!paused) {
+        timeAcc += dtReal * simSpeed;
+
+        const flatRate = parseFloat(document.getElementById('sFlat').value);
+        const extRate  = parseFloat(document.getElementById('sExt').value);
+        const evoOn    = document.getElementById('chkEvolve').checked;
+        const evoSpd   = parseFloat(document.getElementById('sEvo').value);
+
+        while (timeAcc >= PHYS_H) {
+          if (evoOn && evoSpd > 0) {
+            noiseT += evoSpd * PHYS_H;
+            fieldAcc += PHYS_H;
+            if (fieldAcc >= FIELD_DT) {
+              rebuildBaseField();
+              combineField();
+              fieldTouched = true;
+              fieldAcc = 0;
+            }
+          }
+
+          if (flatRate > 0) { laplaceDiffuseMixed(flatRate * PHYS_H); fieldTouched = true; }
+          if (extRate  > 0) { externalizeBasins(extRate * PHYS_H);   fieldTouched = true; }
+
+          stepAgents(PHYS_H);
+          timeAcc -= PHYS_H;
+        }
+      } else {
+        timeAcc = 0;
+      }
+
+      if (fieldTouched || frameCount % 2 === 0) fieldToImage();
+      image(gImg, 0, 0, canvasW, canvasH);
+      image(trailsLayer, 0, 0);
+
+      const alpha = paused ? 0 : Math.min(1, timeAcc / PHYS_H);
+      const GM = computeGroupMean();
+      for (let i=0;i<agents.length;i++) drawAgent(agents[i], i, alpha, GM);
+
+      if (document.getElementById('chkMean').checked && agents.length > 0) {
+        push(); stroke(255,230); strokeWeight(1);
+        const px = GM.mx*canvasW, py=GM.my*canvasH;
+        line(px-10,py,px+10,py); line(px,py-10,px,py+10);
+        pop();
+      }
+
+      computeMetrics(GM);
+    }
+
+    // ===== Helpers =====
+    let spare=null;
+    function randn(){ if(spare!==null){const v=spare; spare=null; return v;}
+      let u=0,v=0; while(u===0)u=Math.random(); while(v===0)v=Math.random();
+      const mag=Math.sqrt(-2.0*Math.log(u)); const z0=mag*Math.cos(TWO_PI*v), z1=mag*Math.sin(TWO_PI*v); spare=z1; return z0; }
+
+    function applyEnvPreset() {
+      const p=document.getElementById('envPresetSel').value;
+      const set=(el,v)=>{ el.value=v; el.dispatchEvent(new Event('input')); };
+      const sCert=document.getElementById('sCert'), sVar=document.getElementById('sVar'),
+            sConn=document.getElementById('sConn'), sSig=document.getElementById('sSig'),
+            sExt=document.getElementById('sExt'), sFlat=document.getElementById('sFlat');
+      switch (p) {
+        case 'balanced':  set(sCert,1.00); set(sVar,1.00); set(sConn,1.00); set(sSig,1.00); set(sExt,0.000); set(sFlat,0.000); break;
+        case 'conferring':set(sCert,0.65); set(sVar,1.50); set(sConn,1.60); set(sSig,0.60); set(sExt,0.004); set(sFlat,0.0045); break;
+        case 'revising':  set(sCert,1.50); set(sVar,0.70); set(sConn,0.80); set(sSig,1.60); set(sExt,0.010); set(sFlat,0.000); break;
+        case 'explore':   set(sCert,0.60); set(sVar,2.00); set(sConn,0.80); set(sSig,0.70); set(sExt,0.000); set(sFlat,0.000); break;
+        case 'consensus': set(sCert,0.80); set(sVar,0.90); set(sConn,2.00); set(sSig,0.40); set(sExt,0.002); set(sFlat,0.0020); break;
+      }
+    }
+  </script>
+</body>
 </html>
