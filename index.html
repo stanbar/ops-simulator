@@ -253,6 +253,9 @@
                     >Show Trails <input id="chkTrails" type="checkbox" checked
                 /></label>
                 <label
+                    >Show Force Arrows <input id="chkForces" type="checkbox"
+                /></label>
+                <label
                     >Show Group Mean
                     <input id="chkMean" type="checkbox" checked
                 /></label>
@@ -434,6 +437,7 @@
 
                 UI.sN = document.getElementById("sN");
                 UI.chkTrails = document.getElementById("chkTrails");
+                UI.chkForces = document.getElementById("chkForces");
                 UI.chkMean = document.getElementById("chkMean");
                 UI.btnResetAgents = document.getElementById("btnResetAgents");
                 UI.btnRandomField = document.getElementById("btnRandomField");
@@ -1391,8 +1395,10 @@ function addAgentAt(u, v, presetName) {
                 // strokeWeight(3);
                 // circle(px, py, 3);
 
-                drawForceArrow(px, py, a.dispDxGrad, a.dispDyGrad, [30, 120, 255], 1.0);
-                drawForceArrow(px, py, a.dispDxMean, a.dispDyMean, [255, 80, 80], 1.0);
+                if (UI.chkForces.checked) {
+                    drawForceArrow(px, py, a.dispDxGrad, a.dispDyGrad, [30, 120, 255], 1.0);
+                    drawForceArrow(px, py, a.dispDxMean, a.dispDyMean, [255, 80, 80], 1.0);
+                }
 
                 if (i === selectedIdx) {
                     noFill();
