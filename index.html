@@ -2,77 +2,63 @@
 <html lang="en">
     <head>
         <meta charset="utf-8" />
-        <title>BCM Simulator: Full Cognitive Roles</title>
+        <title>BCM Simulator: Balanced Population</title>
         <meta name="viewport" content="width=device-width, initial-scale=1" />
         <script src="https://cdnjs.cloudflare.com/ajax/libs/p5.js/1.9.0/p5.min.js"></script>
         <style>
-            :root { --uiw: 340px; }
-            html, body { margin: 0; height: 100%; background: #0e0f12; color: #e8eaf1; font-family: system-ui, sans-serif; overflow: hidden; }
-            #ui { position: fixed; top: 0; right: 0; width: var(--uiw); height: 100%; overflow-y: auto; box-sizing: border-box; padding: 14px 14px 120px; background: #14161b; border-left: 1px solid #1e2230; z-index: 10; }
-            #ui h2 { margin: 8px 0 10px; font-size: 16px; font-weight: 700; color: #fff; }
-            #ui .group { border: 1px solid #1f2535; border-radius: 10px; padding: 10px; margin-bottom: 12px; background: #10131a; }
-            #ui label { display: block; font-size: 12px; opacity: 0.85; margin: 6px 0 4px; }
-            #ui input[type="range"] { width: 100%; }
-            #ui .row { display: flex; gap: 8px; align-items: center; }
-            #ui .row > * { flex: 1; }
-            #ui button, #ui select { width: 100%; border-radius: 8px; border: 1px solid #2a3248; padding: 8px 10px; background: #18202d; color: #e8eaf1; cursor: pointer; transition: 0.2s; }
-            #ui button:hover { background: #252f42; }
-            #ui .tiny { font-size: 11px; opacity: 0.8; margin-top: 5px; line-height: 1.4; }
-            #metrics { position: fixed; left: 10px; top: 10px; background: rgba(8, 10, 14, 0.85); padding: 10px; border-radius: 8px; border: 1px solid #1e2230; backdrop-filter: blur(4px); font-size: 12px; pointer-events: none; z-index: 5; }
-            canvas { display: block; }
+            :root { --uiw: 320px; }
+            html, body { margin: 0; height: 100%; background: #0e0f12; color: #b0b3c0; font-family: 'Segoe UI', sans-serif; overflow: hidden; }
+            #ui { position: fixed; top: 0; right: 0; width: var(--uiw); height: 100%; overflow-y: auto; background: #14161b; border-left: 1px solid #1e2230; padding: 15px; box-sizing: border-box; z-index: 10; }
+            h2 { margin: 0 0 10px; font-size: 16px; color: #e8eaf1; }
+            h3 { margin: 15px 0 5px; font-size: 13px; color: #6fb3ff; text-transform: uppercase; letter-spacing: 1px; }
+            .group { background: #1a1d26; padding: 10px; border-radius: 6px; border: 1px solid #252a35; margin-bottom: 10px; }
+            label { display: block; font-size: 11px; margin-bottom: 4px; color: #8b9bb4; }
+            input[type=range] { width: 100%; margin-bottom: 8px; }
+            button { width: 100%; padding: 8px; background: #2a3248; border: 1px solid #3e4a63; color: white; border-radius: 4px; cursor: pointer; margin-top: 5px; }
+            button:hover { background: #35415b; }
+            .legend-item { display: flex; align-items: center; font-size: 11px; margin-bottom: 4px; }
+            .dot { width: 8px; height: 8px; border-radius: 50%; margin-right: 8px; }
+            #metrics { position: fixed; left: 15px; top: 15px; background: rgba(20,22,27,0.85); padding: 12px; border-radius: 8px; border: 1px solid #2a3248; font-size: 12px; pointer-events: none; backdrop-filter: blur(4px); color: #fff; }
         </style>
     </head>
     <body>
         <div id="ui">
-            <h2>BCM: Cognitive Roles</h2>
-
+            <h2>BCM: Dynamic Population</h2>
+            
             <div class="group">
-                <div class="row">
-                    <button id="pauseBtn">Pause</button>
-                    <button id="btnResetAll">Reset World</button>
-                </div>
-            </div>
-
-            <div class="group" style="border-color: #5d2b2b;">
-                <h3 style="margin: 6px 0 6px; font-size: 13px; color: #ff8080;">Role Mechanics</h3>
+                <h3>Population Control</h3>
+                <label>Total Agents: <span id="lblAgentCount">30</span></label>
+                <input id="sAgentCount" type="range" min="0" max="100" step="1" value="30">
                 
-                <div class="tiny" style="margin-bottom:8px;">
-                    <strong>Deciders (Solvers):</strong><br/>
-                    • <b>De (Te/Fe) ■:</b> "Common Keys". Attacks ALL voids. Constant low damage. High battery drain.<br/>
-                    • <b>Di (Ti/Fi) ●:</b> "Rare Keys". Attacks MATCHING voids only. Massive critical hits.
-                </div>
-                
-                <div class="tiny">
-                    <strong>Observers (Navigators):</strong><br/>
-                    • <b>Oe (Ne/Se) ▲:</b> "The Scouts". 2.0x Attraction to Voids. They find the problems first.<br/>
-                    • <b>Oi (Ni/Si) ▼:</b> "The Anchors". Extreme efficiency. Lowest battery drain. They outlast everyone.
-                </div>
+                <button id="btnReset">Reset Simulation</button>
+                <button id="btnPause">Pause / Resume</button>
             </div>
 
             <div class="group">
-                <label>Void Chaos (Spawn Rate): <span id="lblVoidRate">0.5</span></label>
-                <input id="sVoidRate" type="range" min="0" max="2.0" step="0.001" value="0.5" />
-                <label>Void Complexity (HP): <span id="lblVoidHp">150</span></label>
-                <input id="sVoidHp" type="range" min="10" max="500" step="10" value="150" />
+                <h3>Global Entropy</h3>
+                <label>External Chaos Rate (Voids)</label>
+                <input id="sVoidRate" type="range" min="0" max="0.1" step="0.001" value="0.02">
+                <label>Internal Entropy (Boredom Rate)</label>
+                <input id="sBoredom" type="range" min="0" max="0.05" step="0.001" value="0.01">
             </div>
 
             <div class="group">
-                <label>Simulation Speed: <span id="lblDt">2.0</span></label>
-                <input id="sDt" type="range" min="0.5" max="5.0" step="0.1" value="2.0" />
-                <label>Agent Count: <span id="lblN">40</span></label>
-                <input id="sN" type="range" min="0" max="150" step="1" value="40" />
-                <label>Collision Radius: <span id="lblCol">16</span></label>
-                <input id="sColRadius" type="range" min="5" max="30" step="1" value="16" />
-                <label>Field Opacity: <span id="lblOp">0.3</span></label>
-                <input id="sOpacity" type="range" min="0" max="1" step="0.05" value="0.3" />
+                <h3>Evolution</h3>
+                <label>Adaptation Rate (Learning)</label>
+                <input id="sAdapt" type="range" min="0" max="0.5" step="0.01" value="0.1">
+                <label>Battery Drain Multiplier</label>
+                <input id="sDrain" type="range" min="0.1" max="2.0" step="0.1" value="1.0">
             </div>
 
             <div class="group">
-                <label>Add Agent Type:</label>
-                <select id="agentSpawnPreset"></select>
-                <div class="row" style="margin-top: 8px;">
-                    <button id="btnAddCenter">Add (Center)</button>
-                    <button id="btnRandomizeMix">Add 10 Random</button>
+                <h3>Legend</h3>
+                <div class="legend-item"><div class="dot" style="background:#40b0ff"></div>Oi: Certainty/Structure</div>
+                <div class="legend-item"><div class="dot" style="background:#ffb040"></div>Oe: Variety/Chaos</div>
+                <div class="legend-item"><div class="dot" style="background:#ff4040"></div>Di: Significance/Self</div>
+                <div class="legend-item"><div class="dot" style="background:#40ff40"></div>De: Connection/Tribe</div>
+                <div style="margin-top:8px; font-size:10px; color:#666;">
+                    * Rings = Internal Voids (Needs)<br>
+                    * Shapes = Current Solution Mode
                 </div>
             </div>
         </div>
@@ -80,354 +66,427 @@
         <div id="metrics">Initializing...</div>
 
         <script>
-            // --- Configuration ---
-            const UI_WIDTH = 340;
-            const VOID_TYPES = ['#ff4040', '#40ff40', '#4040ff', '#ffff40']; 
+            // --- CONSTANTS ---
+            const NEEDS = ['Oi', 'Oe', 'Di', 'De'];
+            const COLORS = {
+                Oi: [64, 176, 255], // Blue (Structure)
+                Oe: [255, 176, 64], // Orange (Variety)
+                Di: [255, 64, 64],  // Red (Significance)
+                De: [64, 255, 64]   // Green (Connection)
+            };
+
+            // Global Archetype Definitions for Population Balancing
+            const ARCHETYPES = [
+                { name: 'Oi-Dom', stats: { Oi: 90, Oe: 20, Di: 50, De: 50 } },
+                { name: 'Oe-Dom', stats: { Oi: 20, Oe: 90, Di: 50, De: 50 } },
+                { name: 'Di-Dom', stats: { Oi: 50, Oe: 50, Di: 90, De: 20 } },
+                { name: 'De-Dom', stats: { Oi: 50, Oe: 50, Di: 20, De: 90 } },
+            ];
             
-            // --- State ---
-            let canvasW, canvasH;
+            // --- STATE ---
             let agents = [];
-            let voids = []; 
-            let fieldGraphics; 
+            let voids = [];
+            let canvasW, canvasH;
+            let fieldGraphics;
             let noiseZ = 0;
             
-            // --- Settings linked to UI ---
             const SETTINGS = {
-                dt: 2.0,
-                voidRate: 0.6,
-                voidHp: 150,
-                agentCount: 40,
-                colRadius: 16,
-                opacity: 0.3
+                voidRate: 0.02,
+                boredomRate: 0.01,
+                adaptRate: 0.1,
+                drainMult: 1.0,
+                // agentCount is now managed by the slider directly
             };
 
-            // --- Presets ---
-            const PRESETS = {
-                'Te/Fe (De)': { label: "De (Common Keys) ■", De: 2.0, Di: -1.0, Oe: 0.5, Oi: 0.0, type: 'decider_ext' },
-                'Ti/Fi (Di)': { label: "Di (Rare Keys) ●", De: -2.0, Di: 2.0, Oe: 0.0, Oi: 1.0, type: 'decider_int' },
-                'Ne/Se (Oe)': { label: "Oe (Scouts) ▲", De: 0.0, Di: 0.0, Oe: 2.0, Oi: -1.0, type: 'observer_ext' },
-                'Ni/Si (Oi)': { label: "Oi (Anchors) ▼", De: 0.0, Di: 0.0, Oe: -2.0, Oi: 2.0, type: 'observer_int' },
-                'Balanced':   { label: "Balanced", De: 0.5, Di: 0.5, Oe: 0.5, Oi: 0.5, type: 'balanced' }
-            };
+            // --- CLASSES ---
+            class Agent {
+                constructor(x, y, preset) {
+                    this.pos = createVector(x, y);
+                    this.vel = createVector(0, 0);
+                    this.battery = 100;
+                    
+                    // 1. The 4 Cognitive Capabilities (0-100)
+                    this.stats = { ...preset.stats };
+                    this.baseBias = preset.name; // For tracking original type
+                    
+                    // 2. Internal Voids (Deficits) - 0 to 100
+                    this.deficits = { Oi: 0, Oe: 0, Di: 0, De: 0 };
+                    
+                    // 3. Current State
+                    this.mode = 'Neutral'; 
+                    this.target = null;
+                }
 
-            // --- P5.js Setup ---
+                update() {
+                    // Internal Entropy (Boredom/Decay)
+                    for (let n of NEEDS) {
+                        let decay = (this.stats[n] / 200) * SETTINGS.boredomRate * 10;
+                        this.deficits[n] = min(100, this.deficits[n] + decay);
+                    }
+
+                    // Battery recharge (slow)
+                    if (!this.target) this.battery = min(100, this.battery + 0.2);
+
+                    this.navigate();
+                    
+                    // Resolve Boundaries
+                    this.pos.x = (this.pos.x + canvasW) % canvasW;
+                    this.pos.y = (this.pos.y + canvasH) % canvasH;
+                }
+
+                navigate() {
+                    // Field Drift
+                    let n = noise(this.pos.x * 0.003, this.pos.y * 0.003, noiseZ);
+                    let angle = n * TWO_PI * 4;
+                    let drift = p5.Vector.fromAngle(angle).mult(0.3);
+                    this.vel.add(drift);
+                    
+                    this.findTarget();
+                    
+                    if (this.target) {
+                        let desire = p5.Vector.sub(this.target.pos, this.pos);
+                        let d = desire.mag();
+                        desire.normalize();
+                        
+                        if (d < 100) desire.mult(2.0); 
+                        else desire.mult(0.8);
+                        
+                        this.vel.add(desire);
+                        
+                        if (d < this.target.r + 10) {
+                            this.interact(this.target);
+                        }
+                    }
+
+                    this.vel.limit(2);
+                    this.pos.add(this.vel);
+                }
+
+                findTarget() {
+                    // Priority 1: High Internal Deficit > 80%
+                    let biggestDeficit = 0;
+                    let urgentNeed = null;
+                    for(let n of NEEDS) {
+                        if(this.deficits[n] > biggestDeficit) {
+                            biggestDeficit = this.deficits[n];
+                            urgentNeed = n;
+                        }
+                    }
+
+                    if (biggestDeficit > 70) {
+                        this.target = this.findVoidByType(urgentNeed);
+                        return;
+                    }
+
+                    // Priority 2: External Voids (Duty)
+                    if (this.battery > 40 && !this.target) {
+                        let bestVoid = null;
+                        let bestScore = -Infinity;
+                        
+                        for (let v of voids) {
+                            let d = dist(this.pos.x, this.pos.y, v.pos.x, v.pos.y);
+                            if (d > 300) continue; 
+                            
+                            let skill = this.stats[v.type];
+                            let score = skill / d;
+                            if (score > bestScore) {
+                                bestScore = score;
+                                bestVoid = v;
+                            }
+                        }
+                        this.target = bestVoid;
+                    }
+                }
+
+                findVoidByType(type) {
+                    let closest = null;
+                    let minD = Infinity;
+                    for (let v of voids) {
+                        if (v.type === type) {
+                            let d = dist(this.pos.x, this.pos.y, v.pos.x, v.pos.y);
+                            if (d < minD) { minD = d; closest = v; }
+                        }
+                    }
+                    return closest;
+                }
+
+                interact(v) {
+                    if (v.hp <= 0) { this.target = null; return; }
+
+                    this.mode = v.type;
+                    let skill = this.stats[v.type]; 
+                    let efficiency = map(skill, 0, 100, 0.1, 1.0);
+                    let drain = (1.1 - efficiency) * 0.5 * SETTINGS.drainMult;
+                    
+                    if (this.battery > drain) {
+                        v.hp -= efficiency * 2;
+                        this.battery -= drain;
+                        
+                        // Adaptation
+                        let xp = (1.1 - efficiency) * SETTINGS.adaptRate;
+                        this.stats[v.type] = min(100, this.stats[v.type] + xp);
+
+                        // Satisfaction
+                        this.deficits[v.type] = max(0, this.deficits[v.type] - 2);
+
+                        strokeWeight(efficiency * 3);
+                        let c = COLORS[v.type];
+                        stroke(c[0], c[1], c[2], 150);
+                        line(this.pos.x, this.pos.y, v.pos.x, v.pos.y);
+                        strokeWeight(1);
+                    } else {
+                        this.target = null;
+                        let flee = p5.Vector.sub(this.pos, v.pos).normalize().mult(5);
+                        this.vel.add(flee);
+                    }
+                }
+
+                draw() {
+                    push();
+                    translate(this.pos.x, this.pos.y);
+                    
+                    let hungerColor = [100, 100, 100];
+                    let maxDef = 0;
+                    for(let n of NEEDS) {
+                        if(this.deficits[n] > maxDef) {
+                            maxDef = this.deficits[n];
+                            hungerColor = COLORS[n];
+                        }
+                    }
+                    
+                    fill(lerpColor(color(60), color(hungerColor), maxDef/100));
+                    
+                    let batCol = lerpColor(color(255, 0, 0), color(0, 255, 0), this.battery/100);
+                    stroke(batCol);
+                    strokeWeight(2);
+                    
+                    if (this.baseBias === 'Di-Dom') circle(0,0, 16);
+                    else if (this.baseBias === 'De-Dom') rect(-7,-7, 14, 14);
+                    else if (this.baseBias === 'Oe-Dom') triangle(0,-9, -8,7, 8,7);
+                    else if (this.baseBias === 'Oi-Dom') { rect(-6,-6, 12,12); }
+
+                    noStroke();
+                    let yOff = -15;
+                    for(let i=0; i<4; i++) {
+                        let n = NEEDS[i];
+                        let val = this.stats[n];
+                        fill(COLORS[n]);
+                        rect(-8 + (i*4), yOff, 3, val/20);
+                    }
+
+                    pop();
+                }
+            }
+
+            class Void {
+                constructor() {
+                    this.pos = createVector(random(canvasW), random(canvasH));
+                    this.type = random(NEEDS);
+                    this.hp = 100;
+                    this.maxHp = 100;
+                    this.r = random(20, 40);
+                }
+                
+                update() {
+                    if (frameCount % 60 === 0 && this.hp < 200) {
+                        this.hp += 1;
+                        this.r += 0.1;
+                    }
+                }
+
+                draw() {
+                    push();
+                    translate(this.pos.x, this.pos.y);
+                    
+                    let c = COLORS[this.type];
+                    fill(c[0], c[1], c[2], map(this.hp, 0, 200, 50, 200));
+                    noStroke();
+                    
+                    let p = sin(frameCount * 0.05) * 2;
+                    
+                    if (this.type === 'Oi') rect(-(this.r+p)/2, -(this.r+p)/2, this.r+p, this.r+p);
+                    else if (this.type === 'Oe') { 
+                        beginShape();
+                        for(let i=0; i<5; i++) {
+                            let a = TWO_PI * i / 5;
+                            vertex(cos(a)*(this.r+p), sin(a)*(this.r+p));
+                        }
+                        endShape(CLOSE);
+                    } 
+                    else if (this.type === 'Di') circle(0,0, this.r*2 + p);
+                    else if (this.type === 'De') {
+                        rect(-(this.r)/4, -this.r, this.r/2, this.r*2);
+                        rect(-this.r, -(this.r)/4, this.r*2, this.r/2);
+                    }
+
+                    fill(0); rect(-15, -5, 30, 4);
+                    fill(255); rect(-15, -5, 30 * (this.hp/this.maxHp), 4);
+                    
+                    pop();
+                }
+            }
+
+            // --- SETUP & LOOP ---
             function setup() {
-                canvasW = windowWidth - UI_WIDTH;
+                canvasW = windowWidth - 320;
                 canvasH = windowHeight;
                 createCanvas(canvasW, canvasH);
                 fieldGraphics = createGraphics(canvasW, canvasH);
+                
                 initUI();
-                resetWorld();
+                adjustPopulation(30); // Initial spawn
             }
 
-            function windowResized() {
-                canvasW = windowWidth - UI_WIDTH;
-                canvasH = windowHeight;
-                resizeCanvas(canvasW, canvasH);
-                fieldGraphics.resizeCanvas(canvasW, canvasH);
-            }
-
-            // --- Main Loop ---
             function draw() {
-                background(14, 15, 18);
+                background(18, 20, 26);
+                
                 drawField();
-                manageVoids();
-                updateAgents();
-                resolveCollisions();
+                image(fieldGraphics, 0, 0);
 
-                image(fieldGraphics, 0, 0); 
-                drawVoids();
-                drawAgents();
+                if (random() < SETTINGS.voidRate) voids.push(new Void());
+                for (let i = voids.length - 1; i >= 0; i--) {
+                    voids[i].update();
+                    voids[i].draw();
+                    if (voids[i].hp <= 0) voids.splice(i, 1);
+                }
+
+                resolveCollisions();
+                for (let a of agents) {
+                    a.update();
+                    a.draw();
+                }
+
+                noiseZ += 0.005;
                 updateMetrics();
             }
 
-            // --- Logic: Voids ---
-            function manageVoids() {
-                if (random() < SETTINGS.voidRate * 0.1) {
-                    voids.push({
-                        x: random(canvasW),
-                        y: random(canvasH),
-                        hp: SETTINGS.voidHp,
-                        maxHp: SETTINGS.voidHp,
-                        typeIdx: floor(random(VOID_TYPES.length)), 
-                        radius: random(20, 50),
-                        birth: millis()
-                    });
-                }
-                for (let i = voids.length - 1; i >= 0; i--) {
-                    if (voids[i].hp <= 0) voids.splice(i, 1);
-                }
-            }
-
-            // --- Logic: Collisions ---
             function resolveCollisions() {
-                let minD = SETTINGS.colRadius; 
-                let count = agents.length;
-                for (let i = 0; i < count; i++) {
-                    for (let j = i + 1; j < count; j++) {
+                for (let i = 0; i < agents.length; i++) {
+                    for (let j = i + 1; j < agents.length; j++) {
                         let a = agents[i], b = agents[j];
-                        let dx = b.x - a.x, dy = b.y - a.y;
-                        
-                        // Wrap delta
-                        if (dx > canvasW * 0.5) dx -= canvasW;
-                        else if (dx < -canvasW * 0.5) dx += canvasW;
-                        if (dy > canvasH * 0.5) dy -= canvasH;
-                        else if (dy < -canvasH * 0.5) dy += canvasH;
-                        
-                        let distSq = dx*dx + dy*dy;
-                        if (distSq < minD*minD && distSq > 0) {
-                            let d = Math.sqrt(distSq);
-                            let push = (minD - d) * 0.5;
-                            let nx = dx / d, ny = dy / d;
-                            a.x -= nx * push; a.y -= ny * push;
-                            b.x += nx * push; b.y += ny * push;
+                        let d = p5.Vector.dist(a.pos, b.pos);
+                        let minDist = 25;
+                        if (d < minDist && d > 0) {
+                            let push = p5.Vector.sub(a.pos, b.pos).normalize().mult((minDist - d) * 0.5);
+                            a.pos.add(push);
+                            b.pos.sub(push);
                         }
                     }
                 }
             }
-
-            // --- Logic: Agents ---
-            function updateAgents() {
-                const dt = SETTINGS.dt;
-                
-                for (let a of agents) {
-                    // 1. Field Drift
-                    let nVal = noise(a.x * 0.005, a.y * 0.005, noiseZ);
-                    let angle = nVal * TWO_PI * 4;
-                    let vx = cos(angle) * 0.5;
-                    let vy = sin(angle) * 0.5;
-
-                    // 2. Void Attraction
-                    let closestVoid = null;
-                    let minDist = 10000;
-
-                    // Only look for work if battery is decent
-                    if (a.battery > 0.2) {
-                        for (let v of voids) {
-                            let dx = v.x - a.x, dy = v.y - a.y;
-                            if (dx > canvasW * 0.5) dx -= canvasW; else if (dx < -canvasW * 0.5) dx += canvasW;
-                            if (dy > canvasH * 0.5) dy -= canvasH; else if (dy < -canvasH * 0.5) dy += canvasH;
-                            let d = Math.sqrt(dx*dx + dy*dy);
-                            
-                            if (d < minDist) { minDist = d; closestVoid = v; }
-                        }
-                        
-                        if (closestVoid && minDist < 350) {
-                            // Oe (Explorers) have 2.0x pull strength. Others have 1.0x
-                            let pullFactor = (a.type === 'observer_ext' || a.Oe > 0.5) ? 2.0 : 1.0; 
-                            let pullStr = 0.05 * pullFactor; 
-                            
-                            // Recalculate wrapped vector
-                            let dx = closestVoid.x - a.x, dy = closestVoid.y - a.y;
-                            if (dx > canvasW * 0.5) dx -= canvasW; else if (dx < -canvasW * 0.5) dx += canvasW;
-                            if (dy > canvasH * 0.5) dy -= canvasH; else if (dy < -canvasH * 0.5) dy += canvasH;
-                            
-                            // Stop pulling if inside interaction ring (prevents merging)
-                            if (minDist > closestVoid.radius * 0.8) {
-                                vx += (dx / minDist) * pullStr * 20; 
-                                vy += (dy / minDist) * pullStr * 20;
-                            }
-                        }
-                    }
-
-                    a.x += vx * dt;
-                    a.y += vy * dt;
-
-                    // Wrap Edges
-                    if (a.x < 0) a.x += canvasW; if (a.x >= canvasW) a.x -= canvasW;
-                    if (a.y < 0) a.y += canvasH; if (a.y >= canvasH) a.y -= canvasH;
-
-                    // 3. Interaction
-                    a.isBlasting = false; 
-                    a.battery = min(1.0, a.battery + 0.001); // Passive recharge
-
-                    if (closestVoid && minDist < (closestVoid.radius + 30)) {
-                        interactWithVoid(a, closestVoid);
-                    }
-                }
-                noiseZ += 0.002 * dt; 
-            }
-
-            function interactWithVoid(a, v) {
-                // De (Te/Fe)
-                if (a.type === 'decider_ext' || a.De > 0.5) {
-                    if (a.battery > 0.05) {
-                        v.hp -= 2.0; 
-                        a.battery -= 0.005; // High drain
-                        drawBeam(a, v, color(255, 100));
-                    }
-                }
-                // Di (Ti/Fi)
-                else if (a.type === 'decider_int' || a.Di > 0.5) {
-                    if (a.keyAffinity === v.typeIdx) {
-                        if (a.battery > 0.3) {
-                             v.hp -= 15.0; 
-                             a.battery -= 0.02; 
-                             drawBeam(a, v, color(255, 255, 0, 200), 2);
-                        }
-                    } else {
-                        a.isBlasting = true; // Signal help
-                    }
-                }
-                // Observers (Oe/Oi)
-                else {
-                    if (a.battery > 0.05) {
-                         v.hp -= 0.5; // Low damage
-                         
-                         // Oi (Ni/Si) = Extremely efficient
-                         if (a.type === 'observer_int' || a.Oi > 0.5) {
-                            a.battery -= 0.0005; // Almost no drain
-                         } else {
-                            a.battery -= 0.002; // Standard drain for Oe
-                         }
-                    }
-                }
-            }
-
-            // --- Rendering ---
-            function drawBeam(a, v, col, weight=1) {
-                let dx = v.x - a.x;
-                let dy = v.y - a.y;
-                if(abs(dx) < 100 && abs(dy) < 100) { // Don't draw across wrap
-                    stroke(col); strokeWeight(weight);
-                    line(a.x, a.y, v.x, v.y);
-                    strokeWeight(1);
-                }
-            }
-
+            
             function drawField() {
-                if (frameCount % 3 !== 0) return;
-                fieldGraphics.clear(); fieldGraphics.noStroke();
-                let op = SETTINGS.opacity, cell = 20;
-                for(let x=0; x<canvasW; x+=cell) {
-                    for(let y=0; y<canvasH; y+=cell) {
+                if(frameCount % 5 !== 0) return;
+                fieldGraphics.clear();
+                fieldGraphics.noStroke();
+                let sz = 40;
+                for(let x=0; x<width; x+=sz) {
+                    for(let y=0; y<height; y+=sz) {
                         let n = noise(x*0.005, y*0.005, noiseZ);
-                        if (n > 0.55) {
-                            fieldGraphics.fill(255, 255, 255, (n-0.5)*100 * op);
-                            fieldGraphics.circle(x, y, cell*0.8);
+                        if(n > 0.6) {
+                            fieldGraphics.fill(255, 255, 255, (n-0.6)*20);
+                            fieldGraphics.rect(x,y,sz,sz);
                         }
                     }
                 }
             }
 
-            function drawVoids() {
-                for(let v of voids) {
-                    push(); translate(v.x, v.y);
-                    let pulse = sin(millis() * 0.005) * 5;
-                    let c = color(VOID_TYPES[v.typeIdx]);
-                    c.setAlpha(150 + (v.hp/v.maxHp)*105);
-                    fill(c); noStroke();
-                    beginShape();
-                    let sides = 3 + v.typeIdx; 
-                    for(let i=0; i<sides; i++) {
-                        let ang = TWO_PI * i / sides + (millis()*0.001);
-                        vertex(cos(ang)*(v.radius+pulse), sin(ang)*(v.radius+pulse));
-                    }
-                    endShape(CLOSE);
-                    fill(0); rect(-15, -5, 30, 4);
-                    fill(255); rect(-15, -5, 30 * (v.hp/v.maxHp), 4);
-                    pop();
-                }
-            }
-
-            function drawAgents() {
-                for(let a of agents) {
-                    push(); translate(a.x, a.y);
-                    let batCol = lerpColor(color(100,0,0), color(0,255,0), a.battery);
-                    stroke(batCol); fill(20, 20, 30);
+            // --- POPULATION LOGIC ---
+            
+            function adjustPopulation(targetCount) {
+                // ADDING AGENTS
+                while (agents.length < targetCount) {
+                    // Count current biases
+                    let counts = { 'Oi-Dom':0, 'Oe-Dom':0, 'Di-Dom':0, 'De-Dom':0 };
+                    agents.forEach(a => counts[a.baseBias]++);
                     
-                    if (a.type === 'decider_ext') rect(-6,-6, 12, 12);
-                    else if (a.type === 'decider_int') circle(0,0, 14); 
-                    else if (a.type === 'observer_ext') triangle(0, -7, -6, 5, 6, 5); // Triangle Up
-                    else if (a.type === 'observer_int') triangle(0, 7, -6, -5, 6, -5); // Triangle Down
-                    else circle(0,0,10); // Balanced
-
-                    if (a.type === 'decider_int') {
-                        noStroke(); fill(VOID_TYPES[a.keyAffinity]); circle(0,0, 6);
+                    // Find least represented archetype
+                    let minType = 'Oi-Dom';
+                    let minVal = Infinity;
+                    for (let k in counts) {
+                        if (counts[k] < minVal) { minVal = counts[k]; minType = k; }
                     }
-                    if (a.isBlasting) {
-                        noFill(); stroke(255, 50, 50, 150);
-                        circle(0,0, 20 + (millis()%500)/10);
-                        fill(255); noStroke(); textSize(9); textAlign(CENTER); text("BLAST", 0, -15);
-                    }
-                    pop();
+                    
+                    // Create new agent of that type
+                    let preset = ARCHETYPES.find(p => p.name === minType);
+                    agents.push(new Agent(random(width), random(height), preset));
                 }
+
+                // REMOVING AGENTS
+                while (agents.length > targetCount) {
+                    // Count current biases
+                    let counts = { 'Oi-Dom':0, 'Oe-Dom':0, 'Di-Dom':0, 'De-Dom':0 };
+                    agents.forEach(a => counts[a.baseBias]++);
+                    
+                    // Find most represented archetype
+                    let maxType = 'Oi-Dom';
+                    let maxVal = -Infinity;
+                    for (let k in counts) {
+                        if (counts[k] > maxVal) { maxVal = counts[k]; maxType = k; }
+                    }
+                    
+                    // Find all agents of this type
+                    let candidates = agents.map((a, i) => a.baseBias === maxType ? i : -1).filter(i => i !== -1);
+                    
+                    // Remove a random one of them
+                    if (candidates.length > 0) {
+                        let rIndex = candidates[floor(random(candidates.length))];
+                        agents.splice(rIndex, 1);
+                    } else {
+                        agents.pop(); // Fallback
+                    }
+                }
+                
+                document.getElementById('lblAgentCount').innerText = agents.length;
             }
 
+            function resetSim() {
+                agents = [];
+                voids = [];
+                let t = parseInt(document.getElementById('sAgentCount').value);
+                adjustPopulation(t);
+            }
+            
             function updateMetrics() {
-                document.getElementById('metrics').innerHTML = `
-                    <div><strong>FPS:</strong> ${floor(frameRate())}</div>
-                    <div><strong>Agents:</strong> ${agents.length}</div>
-                    <div><strong>Voids:</strong> ${voids.length}</div>
-                    <div><strong>Avg Battery:</strong> ${(agents.reduce((acc,a)=>acc+a.battery,0)/max(1,agents.length)).toFixed(2)}</div>
+                // Count archetypes
+                let counts = { 'Oi-Dom':0, 'Oe-Dom':0, 'Di-Dom':0, 'De-Dom':0 };
+                agents.forEach(a => counts[a.baseBias]++);
+                
+                let html = `
+                    <div style="font-weight:bold; margin-bottom:5px;">Population Balance</div>
+                    <div style="color:rgb(${COLORS.Oi})">Oi Agents: ${counts['Oi-Dom']}</div>
+                    <div style="color:rgb(${COLORS.Oe})">Oe Agents: ${counts['Oe-Dom']}</div>
+                    <div style="color:rgb(${COLORS.Di})">Di Agents: ${counts['Di-Dom']}</div>
+                    <div style="color:rgb(${COLORS.De})">De Agents: ${counts['De-Dom']}</div>
+                    <hr style="border-color:#333">
+                    <div>Active Voids: ${voids.length}</div>
                 `;
-            }
-
-            function createAgent(x, y, presetName) {
-                let p = PRESETS[presetName] || PRESETS['Balanced'];
-                return {
-                    x: x, y: y, battery: 1.0, type: p.type,
-                    keyAffinity: floor(random(VOID_TYPES.length)),
-                    De: p.De, Di: p.Di, Oe: p.Oe, Oi: p.Oi,
-                    isBlasting: false
-                };
-            }
-
-            function resetWorld() {
-                agents = []; voids = [];
-                let n = parseInt(document.getElementById('sN').value);
-                let keys = Object.keys(PRESETS);
-                for(let i=0; i<n; i++) agents.push(createAgent(random(canvasW), random(canvasH), keys[floor(random(keys.length))]));
+                document.getElementById('metrics').innerHTML = html;
             }
 
             function initUI() {
-                let sel = document.getElementById('agentSpawnPreset');
-                for(let k in PRESETS) {
-                    let opt = document.createElement('option');
-                    opt.value = k; opt.innerHTML = PRESETS[k].label;
-                    sel.appendChild(opt);
-                }
-                const linkRange = (id, obj, key) => {
-                    let el = document.getElementById(id);
-                    el.addEventListener('input', () => {
-                        obj[key] = parseFloat(el.value);
-                        let lbl = document.getElementById('lbl' + id.substring(1));
-                        if(lbl) lbl.innerText = el.value;
-                    });
+                const bind = (id, obj, key) => {
+                    document.getElementById(id).addEventListener('input', (e) => obj[key] = parseFloat(e.target.value));
                 };
-                linkRange('sDt', SETTINGS, 'dt'); linkRange('sVoidRate', SETTINGS, 'voidRate');
-                linkRange('sVoidHp', SETTINGS, 'voidHp'); linkRange('sOpacity', SETTINGS, 'opacity');
-                linkRange('sColRadius', SETTINGS, 'colRadius');
-
-                document.getElementById('sN').addEventListener('input', (e) => {
-                    SETTINGS.agentCount = parseInt(e.target.value);
-                    document.getElementById('lblN').innerText = SETTINGS.agentCount;
-                    while(agents.length < SETTINGS.agentCount) {
-                         let keys = Object.keys(PRESETS);
-                         agents.push(createAgent(random(canvasW), random(canvasH), keys[floor(random(keys.length))]));
-                    }
-                    if(agents.length > SETTINGS.agentCount) agents.splice(SETTINGS.agentCount);
+                bind('sVoidRate', SETTINGS, 'voidRate');
+                bind('sBoredom', SETTINGS, 'boredomRate');
+                bind('sAdapt', SETTINGS, 'adaptRate');
+                bind('sDrain', SETTINGS, 'drainMult');
+                
+                // Agent Slider Logic
+                document.getElementById('sAgentCount').addEventListener('input', (e) => {
+                    adjustPopulation(parseInt(e.target.value));
                 });
-
-                document.getElementById('pauseBtn').addEventListener('click', () => { if(isLooping()) noLoop(); else loop(); });
-                document.getElementById('btnResetAll').addEventListener('click', resetWorld);
-                document.getElementById('btnAddCenter').addEventListener('click', () => {
-                    let k = document.getElementById('agentSpawnPreset').value;
-                    agents.push(createAgent(canvasW/2, canvasH/2, k));
-                });
-                document.getElementById('btnRandomizeMix').addEventListener('click', () => {
-                    for(let i=0; i<10; i++) {
-                        let keys = Object.keys(PRESETS);
-                         agents.push(createAgent(random(canvasW), random(canvasH), keys[floor(random(keys.length))]));
-                    }
-                });
+                
+                document.getElementById('btnReset').onclick = resetSim;
+                document.getElementById('btnPause').onclick = () => isLooping() ? noLoop() : loop();
             }
 
-            function mousePressed() {
-                if (mouseX < canvasW && mouseY < canvasH) {
-                    let k = document.getElementById('agentSpawnPreset').value;
-                    agents.push(createAgent(mouseX, mouseY, k));
-                }
+            function windowResized() {
+                canvasW = windowWidth - 320;
+                canvasH = windowHeight;
+                resizeCanvas(canvasW, canvasH);
+                fieldGraphics.resizeCanvas(canvasW, canvasH);
             }
         </script>
     </body>
