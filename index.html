@@ -1,493 +1,963 @@
 <!doctype html>
 <html lang="en">
-    <head>
-        <meta charset="utf-8" />
-        <title>BCM Simulator: Balanced Population</title>
-        <meta name="viewport" content="width=device-width, initial-scale=1" />
-        <script src="https://cdnjs.cloudflare.com/ajax/libs/p5.js/1.9.0/p5.min.js"></script>
-        <style>
-            :root { --uiw: 320px; }
-            html, body { margin: 0; height: 100%; background: #0e0f12; color: #b0b3c0; font-family: 'Segoe UI', sans-serif; overflow: hidden; }
-            #ui { position: fixed; top: 0; right: 0; width: var(--uiw); height: 100%; overflow-y: auto; background: #14161b; border-left: 1px solid #1e2230; padding: 15px; box-sizing: border-box; z-index: 10; }
-            h2 { margin: 0 0 10px; font-size: 16px; color: #e8eaf1; }
-            h3 { margin: 15px 0 5px; font-size: 13px; color: #6fb3ff; text-transform: uppercase; letter-spacing: 1px; }
-            .group { background: #1a1d26; padding: 10px; border-radius: 6px; border: 1px solid #252a35; margin-bottom: 10px; }
-            label { display: block; font-size: 11px; margin-bottom: 4px; color: #8b9bb4; }
-            input[type=range] { width: 100%; margin-bottom: 8px; }
-            button { width: 100%; padding: 8px; background: #2a3248; border: 1px solid #3e4a63; color: white; border-radius: 4px; cursor: pointer; margin-top: 5px; }
-            button:hover { background: #35415b; }
-            .legend-item { display: flex; align-items: center; font-size: 11px; margin-bottom: 4px; }
-            .dot { width: 8px; height: 8px; border-radius: 50%; margin-right: 8px; }
-            #metrics { position: fixed; left: 15px; top: 15px; background: rgba(20,22,27,0.85); padding: 12px; border-radius: 8px; border: 1px solid #2a3248; font-size: 12px; pointer-events: none; backdrop-filter: blur(4px); color: #fff; }
-        </style>
-    </head>
-    <body>
-        <div id="ui">
-            <h2>BCM: Dynamic Population</h2>
-            
-            <div class="group">
-                <h3>Population Control</h3>
-                <label>Total Agents: <span id="lblAgentCount">30</span></label>
-                <input id="sAgentCount" type="range" min="0" max="100" step="1" value="30">
-                
-                <button id="btnReset">Reset Simulation</button>
-                <button id="btnPause">Pause / Resume</button>
-            </div>
+<head>
+  <meta charset="utf-8" />
+  <title>BCM v2 — Voids (Locks) + Energy (Harvest) + Keys (Compose/Transfer)</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/p5.js/1.9.0/p5.min.js"></script>
+  <style>
+    :root { --uiw: 420px; }
+    html, body { margin:0; height:100%; background:#0e0f12; color:#e8eaf1; font-family:system-ui,-apple-system,Segoe UI,Roboto,Arial; }
+    #ui{
+      position:fixed; top:0; right:0; width:var(--uiw); height:100%;
+      overflow:auto; box-sizing:border-box; padding:14px 14px 120px;
+      background:#14161b; border-left:1px solid #1e2230;
+    }
+    #ui h2{ margin:6px 0 10px; font-size:16px; font-weight:700; }
+    .group{ border:1px solid #1f2535; border-radius:10px; padding:10px; margin-bottom:12px; background:#10131a; }
+    label{ display:block; font-size:12px; opacity:.9; margin:6px 0 4px; }
+    input[type="range"]{ width:100%; }
+    button, select{
+      width:100%; border-radius:8px; border:1px solid #2a3248;
+      padding:8px 10px; background:#18202d; color:#e8eaf1; cursor:pointer;
+    }
+    button:hover{ background:#1c2737; }
+    .row{ display:flex; gap:8px; align-items:center; }
+    .row > * { flex:1; }
+    details summary{ cursor:pointer; user-select:none; }
+    pre{
+      white-space:pre-wrap; background:#0c0f16; border:1px solid #1f2535;
+      border-radius:8px; padding:10px; color:#d6dbef; font-size:12px; line-height:1.35;
+    }
+    #metrics{
+      position:fixed; left:10px; top:10px;
+      background:rgba(8,10,14,.78); border:1px solid #1e2230; border-radius:8px;
+      padding:8px 10px; backdrop-filter:blur(6px);
+      max-width:420px;
+    }
+    canvas{ display:block; }
+    .tiny{ font-size:11px; opacity:.85; }
+  </style>
+</head>
 
-            <div class="group">
-                <h3>Global Entropy</h3>
-                <label>External Chaos Rate (Voids)</label>
-                <input id="sVoidRate" type="range" min="0" max="0.1" step="0.001" value="0.02">
-                <label>Internal Entropy (Boredom Rate)</label>
-                <input id="sBoredom" type="range" min="0" max="0.05" step="0.001" value="0.01">
-            </div>
+<body>
 
-            <div class="group">
-                <h3>Evolution</h3>
-                <label>Adaptation Rate (Learning)</label>
-                <input id="sAdapt" type="range" min="0" max="0.5" step="0.01" value="0.1">
-                <label>Battery Drain Multiplier</label>
-                <input id="sDrain" type="range" min="0.1" max="2.0" step="0.1" value="1.0">
-            </div>
+<div id="ui">
+  <h2>BCM v2 — Harvest → Spend → Adapt</h2>
 
-            <div class="group">
-                <h3>Legend</h3>
-                <div class="legend-item"><div class="dot" style="background:#40b0ff"></div>Oi: Certainty/Structure</div>
-                <div class="legend-item"><div class="dot" style="background:#ffb040"></div>Oe: Variety/Chaos</div>
-                <div class="legend-item"><div class="dot" style="background:#ff4040"></div>Di: Significance/Self</div>
-                <div class="legend-item"><div class="dot" style="background:#40ff40"></div>De: Connection/Tribe</div>
-                <div style="margin-top:8px; font-size:10px; color:#666;">
-                    * Rings = Internal Voids (Needs)<br>
-                    * Shapes = Current Solution Mode
-                </div>
-            </div>
-        </div>
+  <div class="group">
+    <div class="row">
+      <button id="btnPause">Pause</button>
+      <button id="btnReset">Reset</button>
+    </div>
+  </div>
 
-        <div id="metrics">Initializing...</div>
+  <div class="group">
+    <details open>
+      <summary><b>How it works</b></summary>
+      <pre id="notes">
+- Voids: 2D lock patterns (7x7 cells).
+- Energy sources: 2D harvest patterns (same kind).
+- Keys: patterns carried by agents (storage limited).
+- Harvest: match key to local energy pattern -> gain energy.
+- Solve: match key to void pattern -> reduce void area, costs energy.
+- Communication: signals send (voidId, areaBefore, keyId, areaAfter, shapeId).
+- Adaptation: when stuck, agents compose two keys (OR).
+- Transfer: on signal receipt, agents can copy sender key shape if they pay energy + have storage.
+</pre>
+    </details>
+    <details open>
+      <summary><b>Notes</b></summary>
+      <pre id="notes">
+We should add entropy/energy as a source and a destination.
 
-        <script>
-            // --- CONSTANTS ---
-            const NEEDS = ['Oi', 'Oe', 'Di', 'De'];
-            const COLORS = {
-                Oi: [64, 176, 255], // Blue (Structure)
-                Oe: [255, 176, 64], // Orange (Variety)
-                Di: [255, 64, 64],  // Red (Significance)
-                De: [64, 255, 64]   // Green (Connection)
-            };
+We should harvest energy, and use it to solve voids.
+Changing keys requires energy, and using keys requires energy.
 
-            // Global Archetype Definitions for Population Balancing
-            const ARCHETYPES = [
-                { name: 'Oi-Dom', stats: { Oi: 90, Oe: 20, Di: 50, De: 50 } },
-                { name: 'Oe-Dom', stats: { Oi: 20, Oe: 90, Di: 50, De: 50 } },
-                { name: 'Di-Dom', stats: { Oi: 50, Oe: 50, Di: 90, De: 20 } },
-                { name: 'De-Dom', stats: { Oi: 50, Oe: 50, Di: 20, De: 90 } },
-            ];
-            
-            // --- STATE ---
-            let agents = [];
-            let voids = [];
-            let canvasW, canvasH;
-            let fieldGraphics;
-            let noiseZ = 0;
-            
-            const SETTINGS = {
-                voidRate: 0.02,
-                boredomRate: 0.01,
-                adaptRate: 0.1,
-                drainMult: 1.0,
-                // agentCount is now managed by the slider directly
-            };
+Keep it simple and geometric:
+- Voids are randomized 2D patterns (locks), with some patterns more likely.
+- Energy is where you harvest a pattern.
+- A key can harvest a pattern and then use it to fill a void.
 
-            // --- CLASSES ---
-            class Agent {
-                constructor(x, y, preset) {
-                    this.pos = createVector(x, y);
-                    this.vel = createVector(0, 0);
-                    this.battery = 100;
-                    
-                    // 1. The 4 Cognitive Capabilities (0-100)
-                    this.stats = { ...preset.stats };
-                    this.baseBias = preset.name; // For tracking original type
-                    
-                    // 2. Internal Voids (Deficits) - 0 to 100
-                    this.deficits = { Oi: 0, Oe: 0, Di: 0, De: 0 };
-                    
-                    // 3. Current State
-                    this.mode = 'Neutral'; 
-                    this.target = null;
-                }
+Interesting part: when a new void pattern emerges.
+It forces organisms to try different keys, either worsening or improving it.
 
-                update() {
-                    // Internal Entropy (Boredom/Decay)
-                    for (let n of NEEDS) {
-                        let decay = (this.stats[n] / 200) * SETTINGS.boredomRate * 10;
-                        this.deficits[n] = min(100, this.deficits[n] + decay);
-                    }
+Each void should be a collection of voids (sub-locks), so organisms can try keys on parts.
 
-                    // Battery recharge (slow)
-                    if (!this.target) this.battery = min(100, this.battery + 0.2);
+Communication could be:
+1) Void ID
+2) Void Area
+3) Key ID
+4) Void Area after key
 
-                    this.navigate();
-                    
-                    // Resolve Boundaries
-                    this.pos.x = (this.pos.x + canvasW) % canvasW;
-                    this.pos.y = (this.pos.y + canvasH) % canvasH;
-                }
+While solving, organisms accumulate data to figure out the new key.
+If they have previous keys, they can do simple operations to add key shapes together.
 
-                navigate() {
-                    // Field Drift
-                    let n = noise(this.pos.x * 0.003, this.pos.y * 0.003, noiseZ);
-                    let angle = n * TWO_PI * 4;
-                    let drift = p5.Vector.fromAngle(angle).mult(0.3);
-                    this.vel.add(drift);
-                    
-                    this.findTarget();
-                    
-                    if (this.target) {
-                        let desire = p5.Vector.sub(this.target.pos, this.pos);
-                        let d = desire.mag();
-                        desire.normalize();
-                        
-                        if (d < 100) desire.mult(2.0); 
-                        else desire.mult(0.8);
-                        
-                        this.vel.add(desire);
-                        
-                        if (d < this.target.r + 10) {
-                            this.interact(this.target);
-                        }
-                    }
+If void below threshold (e.g., 20% area), it dissipates (solved).
 
-                    this.vel.limit(2);
-                    this.pos.add(this.vel);
-                }
+Keys can be transferred, but agents must sacrifice keys (storage limit) to process keys.
 
-                findTarget() {
-                    // Priority 1: High Internal Deficit > 80%
-                    let biggestDeficit = 0;
-                    let urgentNeed = null;
-                    for(let n of NEEDS) {
-                        if(this.deficits[n] > biggestDeficit) {
-                            biggestDeficit = this.deficits[n];
-                            urgentNeed = n;
-                        }
-                    }
+Emergent property:
+agents converge on a compact set of functional keys that solve everything in combination.
+      </pre>
+    </details>
+  </div>
 
-                    if (biggestDeficit > 70) {
-                        this.target = this.findVoidByType(urgentNeed);
-                        return;
-                    }
+  <div class="group">
+    <label>Sim speed: <span id="lblSpeed">1.00</span></label>
+    <input id="sSpeed" type="range" min="0.2" max="5" step="0.01" value="1.00" />
+    <label>Agents: <span id="lblAgents">40</span></label>
+    <input id="sAgents" type="range" min="1" max="160" step="1" value="40" />
+    <label>Key storage limit per agent: <span id="lblKCap">8</span></label>
+    <input id="sKCap" type="range" min="2" max="18" step="1" value="8" />
+    <label><input id="chkTrails" type="checkbox" checked /> Trails</label>
+    <label><input id="chkSignals" type="checkbox" checked /> Signals</label>
+  </div>
 
-                    // Priority 2: External Voids (Duty)
-                    if (this.battery > 40 && !this.target) {
-                        let bestVoid = null;
-                        let bestScore = -Infinity;
-                        
-                        for (let v of voids) {
-                            let d = dist(this.pos.x, this.pos.y, v.pos.x, v.pos.y);
-                            if (d > 300) continue; 
-                            
-                            let skill = this.stats[v.type];
-                            let score = skill / d;
-                            if (score > bestScore) {
-                                bestScore = score;
-                                bestVoid = v;
-                            }
-                        }
-                        this.target = bestVoid;
-                    }
-                }
+  <div class="group">
+    <h3 style="margin:6px 0 6px; font-size:13px">Voids (Locks)</h3>
+    <label>Spawn rate / min: <span id="lblVoidRate">18</span></label>
+    <input id="sVoidRate" type="range" min="0" max="120" step="1" value="18" />
+    <label>Max active voids: <span id="lblVoidMax">36</span></label>
+    <input id="sVoidMax" type="range" min="0" max="140" step="1" value="36" />
+    <label>Growth rate: <span id="lblVoidGrow">0.05</span></label>
+    <input id="sVoidGrow" type="range" min="0" max="0.25" step="0.005" value="0.05" />
+    <label>Solve threshold (area %): <span id="lblSolveThr">20</span></label>
+    <input id="sSolveThr" type="range" min="1" max="60" step="1" value="20" />
+  </div>
 
-                findVoidByType(type) {
-                    let closest = null;
-                    let minD = Infinity;
-                    for (let v of voids) {
-                        if (v.type === type) {
-                            let d = dist(this.pos.x, this.pos.y, v.pos.x, v.pos.y);
-                            if (d < minD) { minD = d; closest = v; }
-                        }
-                    }
-                    return closest;
-                }
+  <div class="group">
+    <h3 style="margin:6px 0 6px; font-size:13px">Energy (Harvest)</h3>
+    <label>Spawn rate / min: <span id="lblERate">22</span></label>
+    <input id="sERate" type="range" min="0" max="180" step="1" value="22" />
+    <label>Max active sources: <span id="lblEMax">45</span></label>
+    <input id="sEMax" type="range" min="0" max="200" step="1" value="45" />
+    <label>Harvest rate: <span id="lblHarvest">0.35</span></label>
+    <input id="sHarvest" type="range" min="0" max="1.2" step="0.01" value="0.35" />
+    <label>Energy spend (solve): <span id="lblSpend">0.20</span></label>
+    <input id="sSpend" type="range" min="0" max="1.0" step="0.01" value="0.20" />
+    <div class="tiny">
+      Energy sources are patterns. Keys “match” them to harvest. Solving also costs energy.
+    </div>
+  </div>
 
-                interact(v) {
-                    if (v.hp <= 0) { this.target = null; return; }
+  <div class="group">
+    <h3 style="margin:6px 0 6px; font-size:13px">Key Evolution</h3>
+    <label>Try compose keys when stuck: <span id="lblCompose">On</span></label>
+    <select id="selCompose">
+      <option value="on" selected>On</option>
+      <option value="off">Off</option>
+    </select>
+    <label>Compose cost: <span id="lblComposeCost">0.55</span></label>
+    <input id="sComposeCost" type="range" min="0" max="2.0" step="0.01" value="0.55" />
+    <div class="tiny">
+      Composition here is geometric OR (A ∪ B). It’s cheap and “combinable”, like stacking tools.
+    </div>
+  </div>
 
-                    this.mode = v.type;
-                    let skill = this.stats[v.type]; 
-                    let efficiency = map(skill, 0, 100, 0.1, 1.0);
-                    let drain = (1.1 - efficiency) * 0.5 * SETTINGS.drainMult;
-                    
-                    if (this.battery > drain) {
-                        v.hp -= efficiency * 2;
-                        this.battery -= drain;
-                        
-                        // Adaptation
-                        let xp = (1.1 - efficiency) * SETTINGS.adaptRate;
-                        this.stats[v.type] = min(100, this.stats[v.type] + xp);
+  <div class="group tiny">
+    <div><b>Legend</b></div>
+    <div>🟥 void (lock), severity = ring brightness; pattern drawn as small blocks</div>
+    <div>🟩 energy source (harvest), amount = ring brightness</div>
+    <div>● agents (color shifts with energy); yellow pulse = sending signal</div>
+  </div>
+</div>
 
-                        // Satisfaction
-                        this.deficits[v.type] = max(0, this.deficits[v.type] - 2);
+<div id="metrics"></div>
 
-                        strokeWeight(efficiency * 3);
-                        let c = COLORS[v.type];
-                        stroke(c[0], c[1], c[2], 150);
-                        line(this.pos.x, this.pos.y, v.pos.x, v.pos.y);
-                        strokeWeight(1);
-                    } else {
-                        this.target = null;
-                        let flee = p5.Vector.sub(this.pos, v.pos).normalize().mult(5);
-                        this.vel.add(flee);
-                    }
-                }
+<script>
+/* =========================================================
+   BCM v2 (single file):
+   - Voids: 2D lock patterns (7x7 cells).
+   - Energy sources: 2D harvest patterns (same kind).
+   - Keys: patterns carried by agents (storage limited).
+   - Harvest: match key to local energy pattern -> gain energy.
+   - Solve: match key to void pattern -> reduce void area, costs energy.
+   - Communication: signals send (voidId, areaBefore, keyId, areaAfter, shapeId).
+   - Adaptation: when stuck, agents compose two keys (OR).
+   - Transfer: on signal receipt, agents can copy sender key shape if they pay energy + have storage.
+========================================================= */
 
-                draw() {
-                    push();
-                    translate(this.pos.x, this.pos.y);
-                    
-                    let hungerColor = [100, 100, 100];
-                    let maxDef = 0;
-                    for(let n of NEEDS) {
-                        if(this.deficits[n] > maxDef) {
-                            maxDef = this.deficits[n];
-                            hungerColor = COLORS[n];
-                        }
-                    }
-                    
-                    fill(lerpColor(color(60), color(hungerColor), maxDef/100));
-                    
-                    let batCol = lerpColor(color(255, 0, 0), color(0, 255, 0), this.battery/100);
-                    stroke(batCol);
-                    strokeWeight(2);
-                    
-                    if (this.baseBias === 'Di-Dom') circle(0,0, 16);
-                    else if (this.baseBias === 'De-Dom') rect(-7,-7, 14, 14);
-                    else if (this.baseBias === 'Oe-Dom') triangle(0,-9, -8,7, 8,7);
-                    else if (this.baseBias === 'Oi-Dom') { rect(-6,-6, 12,12); }
+let W, H, trails;
+let paused = false;
 
-                    noStroke();
-                    let yOff = -15;
-                    for(let i=0; i<4; i++) {
-                        let n = NEEDS[i];
-                        let val = this.stats[n];
-                        fill(COLORS[n]);
-                        rect(-8 + (i*4), yOff, 3, val/20);
-                    }
+const UI = {};
+const SHAPE_N = 7;
+const SHAPE_C = SHAPE_N * SHAPE_N;
 
-                    pop();
-                }
-            }
+let SHAPES = [];           // {name, cells:Int8Array, mass}
+let COMMON = [];           // indices in SHAPES
+let nextVoidId = 1;
+let nextKeyId = 1;
 
-            class Void {
-                constructor() {
-                    this.pos = createVector(random(canvasW), random(canvasH));
-                    this.type = random(NEEDS);
-                    this.hp = 100;
-                    this.maxHp = 100;
-                    this.r = random(20, 40);
-                }
-                
-                update() {
-                    if (frameCount % 60 === 0 && this.hp < 200) {
-                        this.hp += 1;
-                        this.r += 0.1;
-                    }
-                }
+let agents = [];
+let voids = [];
+let energySources = [];
+let signals = [];          // {x,y,t,ttl, payload:{voidId, areaB, keyId, areaA, shapeId}}
 
-                draw() {
-                    push();
-                    translate(this.pos.x, this.pos.y);
-                    
-                    let c = COLORS[this.type];
-                    fill(c[0], c[1], c[2], map(this.hp, 0, 200, 50, 200));
-                    noStroke();
-                    
-                    let p = sin(frameCount * 0.05) * 2;
-                    
-                    if (this.type === 'Oi') rect(-(this.r+p)/2, -(this.r+p)/2, this.r+p, this.r+p);
-                    else if (this.type === 'Oe') { 
-                        beginShape();
-                        for(let i=0; i<5; i++) {
-                            let a = TWO_PI * i / 5;
-                            vertex(cos(a)*(this.r+p), sin(a)*(this.r+p));
-                        }
-                        endShape(CLOSE);
-                    } 
-                    else if (this.type === 'Di') circle(0,0, this.r*2 + p);
-                    else if (this.type === 'De') {
-                        rect(-(this.r)/4, -this.r, this.r/2, this.r*2);
-                        rect(-this.r, -(this.r)/4, this.r*2, this.r/2);
-                    }
+function clamp01(x){ return Math.max(0, Math.min(1, x)); }
+function wrap01(u){ u = u % 1; if (u < 0) u += 1; return u; }
+function wrapDelta(d){ if (d > 0.5) d -= 1; if (d < -0.5) d += 1; return d; }
+function torusVec(ax, ay, bx, by){
+  const dx = wrapDelta(bx-ax), dy = wrapDelta(by-ay);
+  return {dx, dy, d: Math.hypot(dx,dy)};
+}
 
-                    fill(0); rect(-15, -5, 30, 4);
-                    fill(255); rect(-15, -5, 30 * (this.hp/this.maxHp), 4);
-                    
-                    pop();
-                }
-            }
+function idxS(x,y){ return y*SHAPE_N + x; }
+function cloneCells(c){ const o = new Int8Array(c.length); o.set(c); return o; }
 
-            // --- SETUP & LOOP ---
-            function setup() {
-                canvasW = windowWidth - 320;
-                canvasH = windowHeight;
-                createCanvas(canvasW, canvasH);
-                fieldGraphics = createGraphics(canvasW, canvasH);
-                
-                initUI();
-                adjustPopulation(30); // Initial spawn
-            }
+function shapeMass(c){
+  let m=0; for (let i=0;i<c.length;i++) m += c[i] ? 1 : 0;
+  return m;
+}
+function shapeOR(a,b){
+  const o = new Int8Array(SHAPE_C);
+  for (let i=0;i<SHAPE_C;i++) o[i] = (a[i] || b[i]) ? 1 : 0;
+  return o;
+}
 
-            function draw() {
-                background(18, 20, 26);
-                
-                drawField();
-                image(fieldGraphics, 0, 0);
+function randomShape(density=0.22, smoothPasses=2){
+  let c = new Int8Array(SHAPE_C);
+  for (let y=0;y<SHAPE_N;y++){
+    for (let x=0;x<SHAPE_N;x++){
+      const cx = (x-(SHAPE_N-1)/2)/(SHAPE_N/2);
+      const cy = (y-(SHAPE_N-1)/2)/(SHAPE_N/2);
+      const centerBias = Math.exp(-(cx*cx+cy*cy)*1.2);
+      const p = density*(0.65 + 0.7*centerBias);
+      c[idxS(x,y)] = (Math.random() < p) ? 1 : 0;
+    }
+  }
+  for (let pass=0; pass<smoothPasses; pass++){
+    const n = new Int8Array(SHAPE_C);
+    for (let y=0;y<SHAPE_N;y++){
+      for (let x=0;x<SHAPE_N;x++){
+        let sum=0;
+        for (let oy=-1;oy<=1;oy++){
+          for (let ox=-1;ox<=1;ox++){
+            if (!ox && !oy) continue;
+            const xx=x+ox, yy=y+oy;
+            if (xx<0||xx>=SHAPE_N||yy<0||yy>=SHAPE_N) continue;
+            sum += c[idxS(xx,yy)];
+          }
+        }
+        const here = c[idxS(x,y)];
+        n[idxS(x,y)] = (sum>=4) ? 1 : (sum<=1 ? 0 : here);
+      }
+    }
+    c = n;
+  }
+  if (shapeMass(c) < 6){
+    // fallback plus
+    for (let i=0;i<SHAPE_C;i++) c[i]=0;
+    const mid = Math.floor(SHAPE_N/2);
+    for (let x=1;x<SHAPE_N-1;x++) c[idxS(x,mid)] = 1;
+    for (let y=1;y<SHAPE_N-1;y++) c[idxS(mid,y)] = 1;
+  }
+  return c;
+}
 
-                if (random() < SETTINGS.voidRate) voids.push(new Void());
-                for (let i = voids.length - 1; i >= 0; i--) {
-                    voids[i].update();
-                    voids[i].draw();
-                    if (voids[i].hp <= 0) voids.splice(i, 1);
-                }
+function matchKeyToPattern(keyCells, patternCells){
+  // fill = key hits 1s, spill = key hits 0s
+  let fill=0, spill=0, mass=0;
+  for (let i=0;i<SHAPE_C;i++){
+    const p = patternCells[i];
+    const k = keyCells[i];
+    if (p) mass++;
+    if (k){
+      if (p) fill++;
+      else spill++;
+    }
+  }
+  const score = (fill - 1.25*spill) / (mass + 1e-6);
+  const good = clamp01((score + 1) / 2);
+  const bad  = clamp01((-score));
+  return {fill, spill, mass, score, good, bad};
+}
 
-                resolveCollisions();
-                for (let a of agents) {
-                    a.update();
-                    a.draw();
-                }
+function initShapes(){
+  SHAPES = [];
+  COMMON = [];
 
-                noiseZ += 0.005;
-                updateMetrics();
-            }
+  const mid = Math.floor(SHAPE_N/2);
+  const blank = () => new Array(SHAPE_C).fill(0);
+  const set = (c,x,y) => { if (x>=0&&x<SHAPE_N&&y>=0&&y<SHAPE_N) c[idxS(x,y)] = 1; };
 
-            function resolveCollisions() {
-                for (let i = 0; i < agents.length; i++) {
-                    for (let j = i + 1; j < agents.length; j++) {
-                        let a = agents[i], b = agents[j];
-                        let d = p5.Vector.dist(a.pos, b.pos);
-                        let minDist = 25;
-                        if (d < minDist && d > 0) {
-                            let push = p5.Vector.sub(a.pos, b.pos).normalize().mult((minDist - d) * 0.5);
-                            a.pos.add(push);
-                            b.pos.sub(push);
-                        }
-                    }
-                }
-            }
-            
-            function drawField() {
-                if(frameCount % 5 !== 0) return;
-                fieldGraphics.clear();
-                fieldGraphics.noStroke();
-                let sz = 40;
-                for(let x=0; x<width; x+=sz) {
-                    for(let y=0; y<height; y+=sz) {
-                        let n = noise(x*0.005, y*0.005, noiseZ);
-                        if(n > 0.6) {
-                            fieldGraphics.fill(255, 255, 255, (n-0.6)*20);
-                            fieldGraphics.rect(x,y,sz,sz);
-                        }
-                    }
-                }
-            }
+  // plus
+  {
+    const c = blank();
+    for (let x=1;x<SHAPE_N-1;x++) set(c,x,mid);
+    for (let y=1;y<SHAPE_N-1;y++) set(c,mid,y);
+    const cells = new Int8Array(c);
+    const id = SHAPES.length;
+    SHAPES.push({name:"plus", cells, mass:shapeMass(cells)});
+    COMMON.push(id);
+  }
+  // ring
+  {
+    const c = blank();
+    for (let x=1;x<SHAPE_N-1;x++){ set(c,x,1); set(c,x,SHAPE_N-2); }
+    for (let y=1;y<SHAPE_N-1;y++){ set(c,1,y); set(c,SHAPE_N-2,y); }
+    const cells = new Int8Array(c);
+    const id = SHAPES.length;
+    SHAPES.push({name:"ring", cells, mass:shapeMass(cells)});
+    COMMON.push(id);
+  }
+  // diag
+  {
+    const c = blank();
+    for (let i=1;i<SHAPE_N-1;i++) set(c,i,i);
+    set(c,mid,mid-1); set(c,mid-1,mid);
+    const cells = new Int8Array(c);
+    const id = SHAPES.length;
+    SHAPES.push({name:"diag", cells, mass:shapeMass(cells)});
+    COMMON.push(id);
+  }
+  // L
+  {
+    const c = blank();
+    for (let y=1;y<SHAPE_N-1;y++) set(c,1,y);
+    for (let x=1;x<SHAPE_N-1;x++) set(c,x,SHAPE_N-2);
+    const cells = new Int8Array(c);
+    const id = SHAPES.length;
+    SHAPES.push({name:"L", cells, mass:shapeMass(cells)});
+    COMMON.push(id);
+  }
+  // blob
+  {
+    const c = blank();
+    for (let y=2;y<=4;y++) for (let x=2;x<=4;x++) set(c,x,y);
+    set(c,1,3); set(c,5,3); set(c,3,1); set(c,3,5);
+    const cells = new Int8Array(c);
+    const id = SHAPES.length;
+    SHAPES.push({name:"blob", cells, mass:shapeMass(cells)});
+    COMMON.push(id);
+  }
 
-            // --- POPULATION LOGIC ---
-            
-            function adjustPopulation(targetCount) {
-                // ADDING AGENTS
-                while (agents.length < targetCount) {
-                    // Count current biases
-                    let counts = { 'Oi-Dom':0, 'Oe-Dom':0, 'Di-Dom':0, 'De-Dom':0 };
-                    agents.forEach(a => counts[a.baseBias]++);
-                    
-                    // Find least represented archetype
-                    let minType = 'Oi-Dom';
-                    let minVal = Infinity;
-                    for (let k in counts) {
-                        if (counts[k] < minVal) { minVal = counts[k]; minType = k; }
-                    }
-                    
-                    // Create new agent of that type
-                    let preset = ARCHETYPES.find(p => p.name === minType);
-                    agents.push(new Agent(random(width), random(height), preset));
-                }
+  // random extras
+  for (let i=0;i<10;i++){
+    const rc = randomShape(0.20 + 0.10*Math.random(), 2);
+    SHAPES.push({name:"rand"+i, cells:rc, mass:shapeMass(rc)});
+  }
+}
 
-                // REMOVING AGENTS
-                while (agents.length > targetCount) {
-                    // Count current biases
-                    let counts = { 'Oi-Dom':0, 'Oe-Dom':0, 'Di-Dom':0, 'De-Dom':0 };
-                    agents.forEach(a => counts[a.baseBias]++);
-                    
-                    // Find most represented archetype
-                    let maxType = 'Oi-Dom';
-                    let maxVal = -Infinity;
-                    for (let k in counts) {
-                        if (counts[k] > maxVal) { maxVal = counts[k]; maxType = k; }
-                    }
-                    
-                    // Find all agents of this type
-                    let candidates = agents.map((a, i) => a.baseBias === maxType ? i : -1).filter(i => i !== -1);
-                    
-                    // Remove a random one of them
-                    if (candidates.length > 0) {
-                        let rIndex = candidates[floor(random(candidates.length))];
-                        agents.splice(rIndex, 1);
-                    } else {
-                        agents.pop(); // Fallback
-                    }
-                }
-                
-                document.getElementById('lblAgentCount').innerText = agents.length;
-            }
+function makeKey(shapeId){
+  return {
+    keyId: nextKeyId++,
+    shapeId,
+    cells: SHAPES[shapeId].cells,
+    uses: 0,
+    createdAt: millis()/1000
+  };
+}
 
-            function resetSim() {
-                agents = [];
-                voids = [];
-                let t = parseInt(document.getElementById('sAgentCount').value);
-                adjustPopulation(t);
-            }
-            
-            function updateMetrics() {
-                // Count archetypes
-                let counts = { 'Oi-Dom':0, 'Oe-Dom':0, 'Di-Dom':0, 'De-Dom':0 };
-                agents.forEach(a => counts[a.baseBias]++);
-                
-                let html = `
-                    <div style="font-weight:bold; margin-bottom:5px;">Population Balance</div>
-                    <div style="color:rgb(${COLORS.Oi})">Oi Agents: ${counts['Oi-Dom']}</div>
-                    <div style="color:rgb(${COLORS.Oe})">Oe Agents: ${counts['Oe-Dom']}</div>
-                    <div style="color:rgb(${COLORS.Di})">Di Agents: ${counts['Di-Dom']}</div>
-                    <div style="color:rgb(${COLORS.De})">De Agents: ${counts['De-Dom']}</div>
-                    <hr style="border-color:#333">
-                    <div>Active Voids: ${voids.length}</div>
-                `;
-                document.getElementById('metrics').innerHTML = html;
-            }
+function agentHasShape(agent, shapeId){
+  return agent.keys.some(k => k.shapeId === shapeId);
+}
 
-            function initUI() {
-                const bind = (id, obj, key) => {
-                    document.getElementById(id).addEventListener('input', (e) => obj[key] = parseFloat(e.target.value));
-                };
-                bind('sVoidRate', SETTINGS, 'voidRate');
-                bind('sBoredom', SETTINGS, 'boredomRate');
-                bind('sAdapt', SETTINGS, 'adaptRate');
-                bind('sDrain', SETTINGS, 'drainMult');
-                
-                // Agent Slider Logic
-                document.getElementById('sAgentCount').addEventListener('input', (e) => {
-                    adjustPopulation(parseInt(e.target.value));
-                });
-                
-                document.getElementById('btnReset').onclick = resetSim;
-                document.getElementById('btnPause').onclick = () => isLooping() ? noLoop() : loop();
-            }
+function ensureStorage(agent){
+  const cap = parseInt(UI.sKCap.value);
+  while (agent.keys.length > cap){
+    // drop least used (and oldest tie-break)
+    agent.keys.sort((a,b) => (a.uses - b.uses) || (a.createdAt - b.createdAt));
+    agent.keys.shift();
+  }
+}
 
-            function windowResized() {
-                canvasW = windowWidth - 320;
-                canvasH = windowHeight;
-                resizeCanvas(canvasW, canvasH);
-                fieldGraphics.resizeCanvas(canvasW, canvasH);
-            }
-        </script>
-    </body>
+function createAgent(x,y){
+  const a = {
+    x, y, vx:0, vy:0,
+    energy: 0.65 + 0.25*Math.random(),
+    maxEnergy: 1.50,
+    keys: [],
+    memory: new Map(),      // voidId -> {bestScore, obs:[{keyId,shapeId,areaB,areaA}]}
+    pulse: 0
+  };
+
+  // start with a few common + one random
+  const kCommon = 3;
+  for (let i=0;i<kCommon;i++){
+    const sid = COMMON[Math.floor(Math.random()*COMMON.length)];
+    if (!agentHasShape(a, sid)) a.keys.push(makeKey(sid));
+  }
+  const sidR = Math.floor(COMMON.length + Math.random()*(SHAPES.length-COMMON.length));
+  a.keys.push(makeKey(sidR));
+  ensureStorage(a);
+  return a;
+}
+
+function resetAll(){
+  paused = false;
+  UI.btnPause.textContent = "Pause";
+
+  nextVoidId = 1;
+  nextKeyId = 1;
+  voids = [];
+  energySources = [];
+  signals = [];
+  trails.clear();
+
+  initShapes();
+
+  agents = [];
+  const n = parseInt(UI.sAgents.value);
+  for (let i=0;i<n;i++) agents.push(createAgent(Math.random(), Math.random()));
+}
+
+function spawnVoid(){
+  const maxV = parseInt(UI.sVoidMax.value);
+  if (voids.length >= maxV) return;
+
+  const rarity = clamp01(Math.random()*Math.random());
+  const complex = (rarity > 0.65 && Math.random() < 0.6) ? 2 : 1;
+
+  // "void as collection": we store subPatterns, overall = OR
+  const subCount = complex + (Math.random()<0.25 ? 1 : 0); // 1..3
+  let merged = new Int8Array(SHAPE_C);
+  const subs = [];
+  for (let i=0;i<subCount;i++){
+    const shapeId = (rarity < 0.45)
+      ? COMMON[Math.floor(Math.random()*COMMON.length)]
+      : Math.floor(Math.random()*SHAPES.length);
+    const cells = cloneCells(SHAPES[shapeId].cells);
+    subs.push({shapeId, cells});
+    merged = shapeOR(merged, cells);
+  }
+
+  const baseR = 0.030 + 0.018*complex;
+  const r = baseR * (0.8 + 0.8*Math.random());
+
+  const v = {
+    id: nextVoidId++,
+    x: Math.random(),
+    y: Math.random(),
+    r,
+    rarity,
+    complex,
+    subs,
+    cells: merged,
+    mass0: Math.max(1, shapeMass(merged)),
+    age: 0
+  };
+  voids.push(v);
+}
+
+function spawnEnergy(){
+  const maxE = parseInt(UI.sEMax.value);
+  if (energySources.length >= maxE) return;
+
+  // make energy patterns more common than void patterns (a "rich environment" baseline)
+  const rare = Math.random() < 0.25;
+  const shapeId = rare
+    ? Math.floor(Math.random()*SHAPES.length)
+    : COMMON[Math.floor(Math.random()*COMMON.length)];
+
+  const amount = 0.55 + 0.65*Math.random(); // resource "pile"
+  const r = 0.028 + 0.020*(rare ? 1 : 0) + 0.010*Math.random();
+
+  energySources.push({
+    x: Math.random(),
+    y: Math.random(),
+    r,
+    shapeId,
+    cells: SHAPES[shapeId].cells,
+    amount0: amount,
+    amount: amount,
+    age: 0
+  });
+}
+
+function growVoid(v, dt){
+  const g = parseFloat(UI.sVoidGrow.value);
+  v.age += dt;
+  if (Math.random() < g*dt*(0.25 + 0.8*v.rarity)){
+    // regrow by adding one cell from one subpattern (or random)
+    const sid = (Math.random()<0.7) ? v.subs[Math.floor(Math.random()*v.subs.length)].shapeId : Math.floor(Math.random()*SHAPES.length);
+    const src = SHAPES[sid].cells;
+    const i = Math.floor(Math.random()*SHAPE_C);
+    if (src[i]) v.cells[i] = 1;
+  }
+}
+
+function bestKey(agent, patternCells){
+  let best = null;
+  for (const k of agent.keys){
+    const m = matchKeyToPattern(k.cells, patternCells);
+    if (!best || m.score > best.m.score) best = {k, m};
+  }
+  return best;
+}
+
+function applyKeyToVoid(v, key, dt, agentSpend){
+  const m = matchKeyToPattern(key.cells, v.cells);
+  const areaB = shapeMass(v.cells);
+  if (areaB <= 0) return {areaB, areaA: 0, m};
+
+  // spend energy proportional to attempt + mismatch
+  const spend = agentSpend * dt * (0.35 + 1.2*(1-m.good) + 0.9*m.bad);
+  key.uses++;
+
+  // reduction probability: scales with goodness and energy spent
+  const p = clamp01((0.10 + 0.85*m.good) * spend * 2.8);
+
+  const newCells = cloneCells(v.cells);
+  for (let i=0;i<SHAPE_C;i++){
+    if (v.cells[i] && key.cells[i]){
+      if (Math.random() < p) newCells[i] = 0;
+    }
+  }
+  v.cells = newCells;
+
+  const areaA = shapeMass(v.cells);
+  return {areaB, areaA, m, spend};
+}
+
+function harvestEnergy(e, key, dt){
+  const m = matchKeyToPattern(key.cells, e.cells);
+  // harvest amount scales with match quality
+  const rate = parseFloat(UI.sHarvest.value);
+  const take = Math.min(e.amount, rate * dt * (0.10 + 1.1*m.good));
+  e.amount -= take;
+  key.uses++;
+  return {take, m};
+}
+
+function maybeCompose(agent, v){
+  if (UI.selCompose.value !== "on") return false;
+  if (agent.keys.length < 2) return false;
+
+  const composeCost = parseFloat(UI.sComposeCost.value);
+  if (agent.energy < composeCost) return false;
+
+  // pick top two keys for this void by score
+  const scored = agent.keys.map(k => ({k, m: matchKeyToPattern(k.cells, v.cells)}));
+  scored.sort((a,b) => b.m.score - a.m.score);
+  const a = scored[0], b = scored[1];
+  if (!a || !b) return false;
+
+  // only compose if still "not good enough"
+  if (a.m.good > 0.70) return false;
+
+  const combined = shapeOR(a.k.cells, b.k.cells);
+  const sid = SHAPES.length;
+  SHAPES.push({name:"combo("+a.k.shapeId+"|"+b.k.shapeId+")", cells: combined, mass: shapeMass(combined)});
+
+  agent.keys.push(makeKey(sid));
+  agent.energy = Math.max(0, agent.energy - composeCost);
+
+  ensureStorage(agent);
+  return true;
+}
+
+function emitSignal(agent, v, key, areaB, areaA){
+  if (!UI.chkSignals.checked) return;
+  signals.push({
+    x: v.x, y: v.y,
+    t: 0,
+    ttl: 6.5,
+    payload: {
+      voidId: v.id,
+      areaB,
+      keyId: key.keyId,
+      shapeId: key.shapeId,
+      areaA
+    }
+  });
+  agent.pulse = 0.25; // visual pulse
+}
+
+function absorbSignals(agent, dt){
+  // if agent is within signal wave, it can "copy key idea" (transfer),
+  // but must pay energy and have storage capacity.
+  const hearR = 0.18;
+  const copyCost = 0.22;
+
+  for (const s of signals){
+    const tv = torusVec(agent.x, agent.y, s.x, s.y);
+    if (tv.d > hearR) continue;
+
+    const p = s.payload;
+    // store observation
+    if (!agent.memory.has(p.voidId)) agent.memory.set(p.voidId, {obs:[]});
+    const rec = agent.memory.get(p.voidId);
+    rec.obs.push({keyId:p.keyId, shapeId:p.shapeId, areaB:p.areaB, areaA:p.areaA});
+
+    // “transfer”: if you don’t have the shape, you can import it by paying energy + storage
+    if (!agentHasShape(agent, p.shapeId)){
+      if (agent.energy >= copyCost){
+        agent.keys.push(makeKey(p.shapeId));
+        agent.energy -= copyCost;
+        ensureStorage(agent);
+      }
+    }
+  }
+
+  // keep memory small
+  for (const [vid, rec] of agent.memory.entries()){
+    if (rec.obs.length > 24) rec.obs.splice(0, rec.obs.length - 24);
+  }
+}
+
+function updateSim(dt){
+  // spawns
+  const vRate = parseFloat(UI.sVoidRate.value)/60;
+  const eRate = parseFloat(UI.sERate.value)/60;
+  if (Math.random() < vRate*dt) spawnVoid();
+  if (Math.random() < eRate*dt) spawnEnergy();
+
+  // update growth/aging
+  for (const v of voids) growVoid(v, dt);
+  for (const e of energySources) e.age += dt;
+  // decay/cleanup energy
+  energySources = energySources.filter(e => e.amount > 0.01);
+
+  // update signals
+  for (const s of signals) s.t += dt;
+  signals = signals.filter(s => s.t < s.ttl);
+
+  // agents
+  const spend = parseFloat(UI.sSpend.value);
+  for (const a of agents){
+    // receive knowledge
+    absorbSignals(a, dt);
+
+    // decide target:
+    // - if low energy -> go harvest
+    // - else go solve largest nearby void
+    const sight = 0.26;
+    let target = null;
+    let targetKind = "wander";
+
+    if (a.energy < 0.35 && energySources.length){
+      let bestE=null, bestScore=-1e9;
+      for (const e of energySources){
+        const tv = torusVec(a.x, a.y, e.x, e.y);
+        if (tv.d > sight) continue;
+        const kb = bestKey(a, e.cells);
+        const score = (0.25 + e.amount) * (0.25 + (kb?.m.good ?? 0)) / (0.04 + tv.d);
+        if (score > bestScore){ bestScore=score; bestE=e; }
+      }
+      if (bestE){ target = bestE; targetKind="energy"; }
+    }
+
+    if (!target && voids.length){
+      let bestV=null, bestScore=-1e9;
+      for (const v of voids){
+        const tv = torusVec(a.x, a.y, v.x, v.y);
+        if (tv.d > sight) continue;
+        const kb = bestKey(a, v.cells);
+        const area = shapeMass(v.cells);
+        const score = (0.3 + area/v.mass0) * (0.25 + (kb?.m.good ?? 0)) * (0.6 + 0.6*v.rarity) / (0.04 + tv.d);
+        if (score > bestScore){ bestScore=score; bestV=v; }
+      }
+      if (bestV){ target = bestV; targetKind="void"; }
+    }
+
+    // movement
+    let gx=0, gy=0;
+    if (target){
+      const tv = torusVec(a.x, a.y, target.x, target.y);
+      const d = tv.d || 1e-6;
+      gx = tv.dx/d; gy = tv.dy/d;
+    } else {
+      const ang = Math.random()*Math.PI*2;
+      gx = Math.cos(ang); gy = Math.sin(ang);
+    }
+    // mild noise to avoid crystal lock-in
+    gx += 0.22*randn(); gy += 0.22*randn();
+    const g = Math.hypot(gx,gy) || 1e-6;
+    gx/=g; gy/=g;
+
+    const speed = (targetKind==="energy") ? 0.28 : 0.22;
+    a.x = wrap01(a.x + gx*speed*dt);
+    a.y = wrap01(a.y + gy*speed*dt);
+
+    // interactions
+    if (targetKind==="energy" && target){
+      const tv = torusVec(a.x, a.y, target.x, target.y);
+      if (tv.d < target.r){
+        const kb = bestKey(a, target.cells);
+        if (kb){
+          const {take} = harvestEnergy(target, kb.k, dt);
+          a.energy = Math.min(a.maxEnergy, a.energy + take);
+        }
+      }
+    }
+
+    if (targetKind==="void" && target){
+      const v = target;
+      const tv = torusVec(a.x, a.y, v.x, v.y);
+      if (tv.d < v.r && a.energy > 0.02){
+        const kb = bestKey(a, v.cells);
+        if (kb){
+          const before = shapeMass(v.cells);
+          // spend energy for solving attempt
+          const agentSpend = Math.min(a.energy, spend);
+          const res = applyKeyToVoid(v, kb.k, dt, agentSpend);
+          a.energy = Math.max(0, a.energy - (res.spend ?? 0));
+          emitSignal(a, v, kb.k, res.areaB, res.areaA);
+
+          // if we didn't improve much, try composing
+          const improved = (res.areaB - res.areaA) >= 1;
+          if (!improved && a.energy > 0.2) maybeCompose(a, v);
+        }
+      }
+    }
+
+    // solve threshold
+    const thrPct = parseFloat(UI.sSolveThr.value)/100;
+    voids = voids.filter(v => (shapeMass(v.cells) / (v.mass0+1e-6)) > thrPct);
+
+    // trails + pulse decay
+    if (UI.chkTrails.checked){
+      trails.noStroke();
+      trails.fill(235,235,255,28);
+      trails.circle(a.x*W, a.y*H, 2.2);
+    }
+    a.pulse = Math.max(0, a.pulse - dt);
+  }
+
+  // gentle trail fade
+  if (UI.chkTrails.checked){
+    trails.push();
+    trails.erase(12,12);
+    trails.rect(0,0,W,H);
+    trails.noErase();
+    trails.pop();
+  }
+
+  // keep counts in check
+  const maxV = parseInt(UI.sVoidMax.value);
+  if (voids.length > maxV) voids.length = maxV;
+  const maxE = parseInt(UI.sEMax.value);
+  if (energySources.length > maxE) energySources.length = maxE;
+}
+
+function drawPatternStamp(x, y, rPx, cells, rgb, alpha=140){
+  const stamp = rPx*2;
+  const cell = stamp / SHAPE_N;
+  const ox = x - stamp/2;
+  const oy = y - stamp/2;
+
+  noStroke();
+  for (let yy=0; yy<SHAPE_N; yy++){
+    for (let xx=0; xx<SHAPE_N; xx++){
+      const i = idxS(xx,yy);
+      if (!cells[i]) continue;
+      fill(rgb[0], rgb[1], rgb[2], alpha);
+      rect(ox + xx*cell, oy + yy*cell, cell*0.92, cell*0.92, 2);
+    }
+  }
+}
+
+function draw(){
+  background(12,14,18);
+
+  const speed = parseFloat(UI.sSpeed.value);
+  const dt = (deltaTime/1000) * speed;
+
+  if (!paused) updateSim(dt);
+
+  // draw trails
+  if (UI.chkTrails.checked) image(trails, 0,0);
+
+  // energy sources
+  for (const e of energySources){
+    const px = e.x*W, py = e.y*H;
+    const rPx = e.r*Math.min(W,H);
+    const a = 60 + 180*(e.amount/(e.amount0+1e-6));
+    drawPatternStamp(px, py, rPx, e.cells, [120,255,140], 95);
+    noFill();
+    stroke(120,255,140,a);
+    strokeWeight(2);
+    circle(px,py, rPx*2.1);
+  }
+
+  // voids
+  for (const v of voids){
+    const px = v.x*W, py = v.y*H;
+    const rPx = v.r*Math.min(W,H);
+    const area = shapeMass(v.cells);
+    const sev = clamp01(area/(v.mass0+1e-6));
+    const a = 70 + 180*sev;
+
+    drawPatternStamp(px, py, rPx, v.cells, [255,110,110], 110);
+    noFill();
+    stroke(255,110,110,a);
+    strokeWeight(2);
+    circle(px,py, rPx*(2.0 + 0.9*sev));
+
+    noStroke();
+    fill(255,255,255,200);
+    textSize(11);
+    textAlign(CENTER, CENTER);
+    text("#"+v.id, px, py + rPx*1.35);
+  }
+
+  // signals (ripples)
+  if (UI.chkSignals.checked){
+    for (const s of signals){
+      const px = s.x*W, py = s.y*H;
+      const wave = (s.t*0.9)%1.0;
+      const r = (0.02 + 0.14*wave)*Math.min(W,H);
+      const a = Math.max(0, 170*(1-wave));
+      noFill();
+      stroke(255,230,120,a);
+      strokeWeight(1.5);
+      circle(px,py,r*2);
+    }
+  }
+
+  // agents
+  for (const a of agents){
+    const px = a.x*W, py = a.y*H;
+    // color by energy
+    const t = clamp01(a.energy/(a.maxEnergy+1e-6));
+    const r = 80 + 175*t;
+    const g = 120 + 120*t;
+    const b = 230 - 140*t;
+
+    noStroke();
+    fill(r,g,b,245);
+    circle(px,py, 7.5);
+
+    // pulse (just emitted a signal)
+    if (a.pulse > 0){
+      noFill();
+      stroke(255,230,120,220*a.pulse/0.25);
+      strokeWeight(2);
+      circle(px,py, 16 + 24*(1 - a.pulse/0.25));
+    }
+  }
+
+  // metrics
+  renderMetrics();
+}
+
+function renderMetrics(){
+  let avgE=0, avgK=0;
+  for (const a of agents){ avgE += a.energy; avgK += a.keys.length; }
+  avgE = agents.length ? avgE/agents.length : 0;
+  avgK = agents.length ? avgK/agents.length : 0;
+
+  const el = document.getElementById("metrics");
+  el.innerHTML = `
+    <div><b>Agents</b>: ${agents.length} | <b>Voids</b>: ${voids.length} | <b>Energy</b>: ${energySources.length} | <b>Signals</b>: ${signals.length}</div>
+    <div><b>Avg energy</b>: ${avgE.toFixed(2)} / 1.50 | <b>Avg keys</b>: ${avgK.toFixed(1)} (cap ${parseInt(UI.sKCap.value)})</div>
+    <div class="tiny">Shapes in library: ${SHAPES.length} | fps: ${Math.round(frameRate())}</div>
+  `;
+}
+
+function setup(){
+  W = windowWidth - parseInt(getComputedStyle(document.documentElement).getPropertyValue("--uiw"));
+  H = windowHeight;
+  createCanvas(W,H);
+
+  trails = createGraphics(W,H);
+  trails.clear();
+
+  hookUI();
+  resetAll();
+  frameRate(60);
+}
+
+function windowResized(){
+  W = windowWidth - parseInt(getComputedStyle(document.documentElement).getPropertyValue("--uiw"));
+  H = windowHeight;
+  resizeCanvas(W,H);
+  trails = createGraphics(W,H);
+  trails.clear();
+}
+
+function hookUI(){
+  UI.btnPause = document.getElementById("btnPause");
+  UI.btnReset = document.getElementById("btnReset");
+
+  UI.sSpeed  = document.getElementById("sSpeed");
+  UI.sAgents = document.getElementById("sAgents");
+  UI.sKCap   = document.getElementById("sKCap");
+  UI.chkTrails = document.getElementById("chkTrails");
+  UI.chkSignals = document.getElementById("chkSignals");
+
+  UI.sVoidRate = document.getElementById("sVoidRate");
+  UI.sVoidMax  = document.getElementById("sVoidMax");
+  UI.sVoidGrow = document.getElementById("sVoidGrow");
+  UI.sSolveThr = document.getElementById("sSolveThr");
+
+  UI.sERate    = document.getElementById("sERate");
+  UI.sEMax     = document.getElementById("sEMax");
+  UI.sHarvest  = document.getElementById("sHarvest");
+  UI.sSpend    = document.getElementById("sSpend");
+
+  UI.selCompose = document.getElementById("selCompose");
+  UI.sComposeCost = document.getElementById("sComposeCost");
+
+  const refresh = ()=>{
+    document.getElementById("lblSpeed").textContent = parseFloat(UI.sSpeed.value).toFixed(2);
+    document.getElementById("lblAgents").textContent = parseInt(UI.sAgents.value);
+    document.getElementById("lblKCap").textContent = parseInt(UI.sKCap.value);
+
+    document.getElementById("lblVoidRate").textContent = parseInt(UI.sVoidRate.value);
+    document.getElementById("lblVoidMax").textContent = parseInt(UI.sVoidMax.value);
+    document.getElementById("lblVoidGrow").textContent = parseFloat(UI.sVoidGrow.value).toFixed(2);
+    document.getElementById("lblSolveThr").textContent = parseInt(UI.sSolveThr.value);
+
+    document.getElementById("lblERate").textContent = parseInt(UI.sERate.value);
+    document.getElementById("lblEMax").textContent = parseInt(UI.sEMax.value);
+    document.getElementById("lblHarvest").textContent = parseFloat(UI.sHarvest.value).toFixed(2);
+    document.getElementById("lblSpend").textContent = parseFloat(UI.sSpend.value).toFixed(2);
+
+    document.getElementById("lblCompose").textContent = UI.selCompose.value === "on" ? "On" : "Off";
+    document.getElementById("lblComposeCost").textContent = parseFloat(UI.sComposeCost.value).toFixed(2);
+  };
+  refresh();
+
+  ["input","change"].forEach(evt=>{
+    [
+      UI.sSpeed, UI.sAgents, UI.sKCap,
+      UI.sVoidRate, UI.sVoidMax, UI.sVoidGrow, UI.sSolveThr,
+      UI.sERate, UI.sEMax, UI.sHarvest, UI.sSpend,
+      UI.selCompose, UI.sComposeCost
+    ].forEach(el => el.addEventListener(evt, refresh));
+  });
+
+  UI.btnPause.addEventListener("click", ()=>{
+    paused = !paused;
+    UI.btnPause.textContent = paused ? "Resume" : "Pause";
+  });
+  UI.btnReset.addEventListener("click", ()=>{
+    resetAll();
+  });
+
+  UI.sAgents.addEventListener("input", ()=>{
+    // rebuild agents count live (simple)
+    const n = parseInt(UI.sAgents.value);
+    agents = [];
+    nextKeyId = 1;
+    for (let i=0;i<n;i++) agents.push(createAgent(Math.random(), Math.random()));
+  });
+
+  // shortcuts
+  window.addEventListener("keydown", (e)=>{
+    if (e.code === "Space"){ paused = !paused; UI.btnPause.textContent = paused ? "Resume" : "Pause"; e.preventDefault(); }
+    if (e.key.toLowerCase() === "r"){ resetAll(); }
+    if (e.key.toLowerCase() === "v"){ spawnVoid(); }       // manual void
+    if (e.key.toLowerCase() === "e"){ spawnEnergy(); }     // manual energy
+  });
+}
+
+// randn
+let spare = null;
+function randn(){
+  if (spare !== null){ const v = spare; spare = null; return v; }
+  let u=0,v=0;
+  while(u===0) u=Math.random();
+  while(v===0) v=Math.random();
+  const mag=Math.sqrt(-2*Math.log(u));
+  const z0=mag*Math.cos(TWO_PI*v);
+  const z1=mag*Math.sin(TWO_PI*v);
+  spare=z1; return z0;
+}
+</script>
+
+</body>
 </html>
