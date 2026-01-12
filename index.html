@@ -2,7 +2,7 @@
 <html lang="en">
 <head>
   <meta charset="utf-8" />
-  <title>BCM v2 — Voids (Locks) + Energy (Harvest) + Keys (Compose/Transfer) + Stable Movement</title>
+  <title>BCM v2 — Voids (Locks) + Energy (Harvest) + Keys (Compose/Transfer) + Inspector</title>
   <meta name="viewport" content="width=device-width, initial-scale=1" />
   <script src="https://cdnjs.cloudflare.com/ajax/libs/p5.js/1.9.0/p5.min.js"></script>
   <style>
@@ -26,8 +26,9 @@
     .row > * { flex:1; }
     details summary{ cursor:pointer; user-select:none; }
     pre{
-      white-space:pre-wrap; background:#0c0f16; border:1px solid #1f2535;
+      white-space:pre; background:#0c0f16; border:1px solid #1f2535;
       border-radius:8px; padding:10px; color:#d6dbef; font-size:12px; line-height:1.35;
+      overflow:auto;
     }
     #metrics{
       position:fixed; left:10px; top:10px;
@@ -38,13 +39,19 @@
     canvas{ display:block; }
     .tiny{ font-size:11px; opacity:.85; }
     .mono{ font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", monospace; }
+    .kv { display:grid; grid-template-columns: 110px 1fr; gap:4px 10px; font-size:12px; }
+    .kv div:nth-child(odd){ opacity:.85; }
+    .pill { display:inline-block; padding:2px 8px; border-radius:999px; border:1px solid #2a3248; background:#141b28; font-size:11px; opacity:.95; }
+    .warn { color:#ffd28a; }
+    .good { color:#8bffb0; }
+    .bad { color:#ff9a9a; }
   </style>
 </head>
 
 <body>
 
 <div id="ui">
-  <h2>BCM v2 — Harvest → Spend → Adapt (stable movement)</h2>
+  <h2>BCM v2 — Harvest → Spend → Adapt</h2>
 
   <div class="group">
     <div class="row">
@@ -54,6 +61,15 @@
     <div class="tiny" style="margin-top:6px">
       Shortcuts: <span class="mono">Space</span>=pause, <span class="mono">R</span>=reset, <span class="mono">V</span>=spawn void, <span class="mono">E</span>=spawn energy
     </div>
+    <div class="tiny" style="margin-top:6px">
+      Click to select: agent / void / energy (white ring highlight).
+    </div>
+  </div>
+
+  <div class="group" id="inspector">
+    <h3 style="margin:6px 0 6px; font-size:13px">Inspector</h3>
+    <div class="tiny">Select an agent, void, or energy source to see its internal state.</div>
+    <div id="inspectContent" style="margin-top:8px"></div>
   </div>
 
   <div class="group">
@@ -136,11 +152,7 @@
 
 <script>
 /* =========================================================
-   BCM v2 (stable movement patch)
-   - Modes: Solve vs Harvest with hysteresis thresholds
-   - Targets: commitment time + switch margin
-   - Smooth steering: velocity-based motion
-   - Locks/keys: 7x7 bit patterns, gradual solve, optional worsening
+   BCM v2 + Inspector
 ========================================================= */
 
 let W, H, trails;
@@ -162,21 +174,21 @@ let voids = [];
 let energySources = [];
 let signals = [];          // {x,y,t,ttl, payload:{voidId, areaB, keyId, areaA, shapeId, delta}}
 
+let selection = { type: null, id: null }; // "agent"|"void"|"energy"|null
+let dtSim = 0;
+
 function clamp01(x){ return Math.max(0, Math.min(1, x)); }
 function wrap01(u){ u = u % 1; if (u < 0) u += 1; return u; }
-function wrapDelta(d){ if (d > 0.5) d -= 1; if (d < -0.5) d += 1; return d; }
+function idxS(x,y){ return y*SHAPE_N + x; }
+
 function torusVec(ax, ay, bx, by){
   const dx = wrapDelta(bx-ax), dy = wrapDelta(by-ay);
   return {dx, dy, d: Math.hypot(dx,dy)};
 }
+function wrapDelta(d){ if (d > 0.5) d -= 1; if (d < -0.5) d += 1; return d; }
 
-function idxS(x,y){ return y*SHAPE_N + x; }
 function cloneCells(c){ const o = new Int8Array(c.length); o.set(c); return o; }
-
-function shapeMass(c){
-  let m=0; for (let i=0;i<c.length;i++) m += c[i] ? 1 : 0;
-  return m;
-}
+function shapeMass(c){ let m=0; for (let i=0;i<c.length;i++) m += c[i] ? 1 : 0; return m; }
 function shapeOR(a,b){
   const o = new Int8Array(SHAPE_C);
   for (let i=0;i<SHAPE_C;i++) o[i] = (a[i] || b[i]) ? 1 : 0;
@@ -326,6 +338,7 @@ function ensureStorage(agent){
 
 function createAgent(x,y){
   const a = {
+    id: Math.random().toString(36).slice(2, 8),
     x, y, vx:0, vy:0,
     energy: 0.65 + 0.25*Math.random(),
     maxEnergy: 1.50,
@@ -333,11 +346,10 @@ function createAgent(x,y){
     memory: new Map(),      // voidId -> {obs:[]}
     pulse: 0,
 
-    // movement stabilizers
     mode: null,             // "solve" or "harvest"
     targetType: null,       // "void"|"energy"|null
     targetId: null,
-    lockUntil: 0,           // simTime until which target is “committed”
+    lockUntil: 0,
     lastScore: 0,
   };
 
@@ -350,7 +362,6 @@ function createAgent(x,y){
   a.keys.push(makeKey(sidR));
   ensureStorage(a);
 
-  // initial mode
   a.mode = (a.energy < parseFloat(UI.sELow.value)) ? "harvest" : "solve";
   return a;
 }
@@ -368,11 +379,15 @@ function resetAll(){
   signals = [];
   trails.clear();
 
+  selection = { type: null, id: null };
+
   initShapes();
 
   agents = [];
   const n = parseInt(UI.sAgents.value);
   for (let i=0;i<n;i++) agents.push(createAgent(Math.random(), Math.random()));
+
+  refreshInspector();
 }
 
 function spawnVoid(){
@@ -382,7 +397,7 @@ function spawnVoid(){
   const rarity = clamp01(Math.random()*Math.random());
   const complex = (rarity > 0.65 && Math.random() < 0.6) ? 2 : 1;
 
-  const subCount = complex + (Math.random()<0.25 ? 1 : 0); // 1..3
+  const subCount = complex + (Math.random()<0.25 ? 1 : 0);
   let merged = new Int8Array(SHAPE_C);
   const subs = [];
   for (let i=0;i<subCount;i++){
@@ -462,11 +477,9 @@ function applyKeyToVoid(v, key, dt, agentSpend){
   const areaB = shapeMass(v.cells);
   if (areaB <= 0) return {areaB, areaA: 0, m, spend:0};
 
-  // energy cost increases with mismatch and wrong overlap
   const spend = agentSpend * dt * (0.35 + 1.2*(1-m.good) + 0.9*m.bad);
   key.uses++;
 
-  // removal probability increases with match goodness and spend
   const p = clamp01((0.10 + 0.85*m.good) * spend * 2.8);
 
   const newCells = cloneCells(v.cells);
@@ -476,9 +489,6 @@ function applyKeyToVoid(v, key, dt, agentSpend){
     }
   }
 
-  // OPTIONAL “wrong key can worsen”:
-  // If the key spills a lot (hits non-void bits) and match is poor, it can add noise back in.
-  // This makes the metaphor closer to “bad tool creates new problems”.
   const worsenChance = clamp01(0.12*m.bad + 0.02*(m.spill/(m.mass+1e-6)));
   if (Math.random() < worsenChance * dt * 2.0){
     const sid = (Math.random()<0.5) ? COMMON[Math.floor(Math.random()*COMMON.length)] : Math.floor(Math.random()*SHAPES.length);
@@ -530,7 +540,7 @@ function maybeCompose(agent, v){
 
 function emitSignal(agent, v, key, areaB, areaA){
   if (!UI.chkSignals.checked) return;
-  const delta = areaB - areaA; // positive = improvement
+  const delta = areaB - areaA;
   signals.push({
     x: v.x, y: v.y,
     t: 0,
@@ -560,7 +570,6 @@ function absorbSignals(agent){
     const rec = agent.memory.get(p.voidId);
     rec.obs.push({keyId:p.keyId, shapeId:p.shapeId, areaB:p.areaB, areaA:p.areaA, delta:p.delta});
 
-    // Copy keys that are actually helpful more often.
     const helpful = p.delta > 0;
     const desire = helpful ? 0.85 : 0.20;
     if (!agentHasShape(agent, p.shapeId) && Math.random() < desire){
@@ -579,14 +588,9 @@ function absorbSignals(agent){
 
 // --- Targeting + movement stabilization ---
 
-function getVoidById(id){
-  for (const v of voids) if (v.id === id) return v;
-  return null;
-}
-function getEnergyById(id){
-  for (const e of energySources) if (e.id === id) return e;
-  return null;
-}
+function getVoidById(id){ for (const v of voids) if (v.id === id) return v; return null; }
+function getEnergyById(id){ for (const e of energySources) if (e.id === id) return e; return null; }
+function getAgentById(id){ for (const a of agents) if (a.id === id) return a; return null; }
 
 function scoreVoid(agent, v, sight){
   const tv = torusVec(agent.x, agent.y, v.x, v.y);
@@ -632,7 +636,6 @@ function updateAgentMode(agent){
   const low = parseFloat(UI.sELow.value);
   const high = parseFloat(UI.sEHigh.value);
 
-  // enforce ordering
   const lo = Math.min(low, high - 0.01);
   const hi = Math.max(high, low + 0.01);
 
@@ -654,7 +657,6 @@ function retargetIfNeeded(agent, sight){
   const commit = parseFloat(UI.sCommit.value);
   const margin = parseFloat(UI.sMargin.value);
 
-  // If current target is invalid -> drop it
   const curObj = validateTarget(agent);
   if (!curObj){
     agent.targetType = null;
@@ -663,7 +665,6 @@ function retargetIfNeeded(agent, sight){
     agent.lockUntil = 0;
   }
 
-  // If no target, pick one based on mode
   if (!agent.targetType){
     const desiredType = (agent.mode === "harvest") ? "energy" : "void";
     const best = chooseBestTarget(agent, desiredType, sight);
@@ -676,14 +677,11 @@ function retargetIfNeeded(agent, sight){
     return;
   }
 
-  // If committed, don't switch (unless energy is critical)
   const critical = agent.energy < 0.12;
   if (!critical && simTime < agent.lockUntil) return;
 
-  // Consider switching target *within same mode type* first
   const desiredType = (agent.mode === "harvest") ? "energy" : "void";
 
-  // If target type mismatches desired, allow switch more easily once commitment passed
   if (agent.targetType !== desiredType){
     const best = chooseBestTarget(agent, desiredType, sight);
     if (best){
@@ -695,7 +693,6 @@ function retargetIfNeeded(agent, sight){
     return;
   }
 
-  // Same type: only switch if new is meaningfully better
   const best = chooseBestTarget(agent, desiredType, sight);
   if (!best) return;
   const curScore = agent.lastScore || 0;
@@ -705,7 +702,6 @@ function retargetIfNeeded(agent, sight){
     agent.lastScore = best.score;
     agent.lockUntil = simTime + commit;
   } else {
-    // refresh score for current target occasionally to reduce stale values
     const cur = validateTarget(agent);
     if (cur){
       if (agent.targetType === "void"){
@@ -720,57 +716,263 @@ function retargetIfNeeded(agent, sight){
 }
 
 function steerAgent(agent, target){
-  // velocity-based steering on torus
-  const accel = 1.6;      // how hard it turns
-  const maxV  = 0.35;     // max speed in normalized coords per second
-  const damp  = 0.88;     // velocity damping each second-ish
+  const accel = 1.6;
+  const maxV  = 0.35;
+  const damp  = 0.88;
 
-  // wander if no target
   let dirx=0, diry=0;
   if (target){
     const tv = torusVec(agent.x, agent.y, target.x, target.y);
     const d = tv.d || 1e-6;
     dirx = tv.dx/d; diry = tv.dy/d;
 
-    // slow down when very close to target radius to avoid overshoot bounce
     const r = target.r || 0.03;
-    const close = clamp01((d - 0.15*r) / (0.85*r + 1e-6)); // 0..1
+    const close = clamp01((d - 0.15*r) / (0.85*r + 1e-6));
     dirx *= close; diry *= close;
   } else {
     const ang = Math.random()*Math.PI*2;
     dirx = Math.cos(ang); diry = Math.sin(ang);
   }
 
-  // mild noise so they don't get stuck in perfect cycles
   dirx += 0.12*randn();
   diry += 0.12*randn();
   const g = Math.hypot(dirx,diry) || 1e-6;
   dirx/=g; diry/=g;
 
-  // accelerate
   agent.vx += dirx * accel * dtSim;
   agent.vy += diry * accel * dtSim;
 
-  // damping
   const dd = Math.pow(damp, dtSim);
   agent.vx *= dd;
   agent.vy *= dd;
 
-  // clamp speed
   const sp = Math.hypot(agent.vx, agent.vy);
   if (sp > maxV){
     const s = maxV / sp;
     agent.vx *= s; agent.vy *= s;
   }
 
-  // move
   agent.x = wrap01(agent.x + agent.vx * dtSim);
   agent.y = wrap01(agent.y + agent.vy * dtSim);
 }
 
-// --- main sim ---
+// --- selection / inspection helpers ---
 
-let dtSim = 0;
+function setSelection(type, id){
+  selection.type = type;
+  selection.id = id;
+  refreshInspector();
+}
+
+function cellsToAscii(cells){
+  let out = "";
+  for (let y=0;y<SHAPE_N;y++){
+    for (let x=0;x<SHAPE_N;x++){
+      out += cells[idxS(x,y)] ? "█" : "·";
+    }
+    out += "\n";
+  }
+  return out;
+}
+
+function recentSignalsForVoid(voidId, maxN=6){
+  const xs = signals.filter(s => s.payload && s.payload.voidId === voidId);
+  xs.sort((a,b)=> (b.t - a.t)); // newest ~ lowest t? Actually t increases; invert to show most recent first:
+  // Better: sort by remaining ttl (smaller t means newer). So:
+  xs.sort((a,b)=> (a.t - b.t));
+  return xs.slice(0, maxN).map(s => s.payload);
+}
+
+function topAgentsForPattern(patternCells, topN=5){
+  const scored = agents.map(a => {
+    const kb = bestKey(a, patternCells);
+    return { a, kb };
+  }).filter(x => x.kb != null);
+  scored.sort((x,y)=> y.kb.m.score - x.kb.m.score);
+  return scored.slice(0, topN);
+}
+
+function refreshInspector(){
+  const el = document.getElementById("inspectContent");
+  if (!el) return;
+
+  if (!selection.type){
+    el.innerHTML = `<div class="tiny">Nothing selected.</div>`;
+    return;
+  }
+
+  if (selection.type === "agent"){
+    const a = getAgentById(selection.id);
+    if (!a){
+      el.innerHTML = `<div class="tiny warn">Selected agent no longer exists.</div>`;
+      selection.type = null; selection.id = null;
+      return;
+    }
+
+    const target = validateTarget(a);
+    const lockLeft = Math.max(0, a.lockUntil - simTime);
+
+    // if another object selected, we compute match scores; but here selection is agent, so optionally compute
+    // match scores to *current target*, if any:
+    let matchInfo = "";
+    if (target){
+      const pattern = (a.targetType === "void") ? target.cells : target.cells;
+      const kb = bestKey(a, pattern);
+      if (kb){
+        matchInfo = `
+          <div style="margin-top:8px">
+            <div class="pill">Best key vs current target</div>
+            <div class="kv" style="margin-top:6px">
+              <div>shapeId</div><div>${kb.k.shapeId} <span class="tiny">(${SHAPES[kb.k.shapeId]?.name ?? "?"})</span></div>
+              <div>score</div><div>${kb.m.score.toFixed(3)} | good=${kb.m.good.toFixed(2)} | spill=${kb.m.spill}</div>
+            </div>
+          </div>
+        `;
+      }
+    }
+
+    // keys list
+    const keysHtml = a.keys
+      .slice()
+      .sort((x,y)=> y.uses - x.uses)
+      .map(k => {
+        const nm = SHAPES[k.shapeId]?.name ?? "?";
+        return `<div class="tiny mono">keyId=${k.keyId} shapeId=${k.shapeId} (${nm}) uses=${k.uses}</div>`;
+      }).join("");
+
+    el.innerHTML = `
+      <div class="pill">Agent</div> <span class="mono">#${a.id}</span>
+      <div class="kv" style="margin-top:8px">
+        <div>mode</div><div><span class="pill">${a.mode ?? "?"}</span></div>
+        <div>energy</div><div>${a.energy.toFixed(2)} / ${a.maxEnergy.toFixed(2)}</div>
+        <div>target</div><div>${a.targetType ? `${a.targetType} #${a.targetId}` : "none"}</div>
+        <div>commit left</div><div>${lockLeft.toFixed(2)}s</div>
+        <div>lastScore</div><div>${(a.lastScore ?? 0).toFixed(3)}</div>
+        <div>keys</div><div>${a.keys.length} (cap ${parseInt(UI.sKCap.value)})</div>
+      </div>
+      ${matchInfo}
+      <details style="margin-top:10px" open>
+        <summary class="tiny">Keys (sorted by uses)</summary>
+        <div style="margin-top:8px">${keysHtml || `<div class="tiny warn">No keys.</div>`}</div>
+      </details>
+      <details style="margin-top:10px">
+        <summary class="tiny">Memory (void observations)</summary>
+        <div style="margin-top:8px" class="tiny">
+          ${a.memory.size ? `Known voids: ${a.memory.size}` : `No stored observations yet.`}
+        </div>
+      </details>
+    `;
+    return;
+  }
+
+  if (selection.type === "void"){
+    const v = getVoidById(selection.id);
+    if (!v){
+      el.innerHTML = `<div class="tiny warn">Selected void no longer exists (solved or removed).</div>`;
+      selection.type = null; selection.id = null;
+      return;
+    }
+
+    const area = shapeMass(v.cells);
+    const pct = 100 * area / (v.mass0 + 1e-6);
+
+    const subs = v.subs.map(s => {
+      const nm = SHAPES[s.shapeId]?.name ?? "?";
+      return `<div class="tiny mono">shapeId=${s.shapeId} (${nm})</div>`;
+    }).join("");
+
+    const top = topAgentsForPattern(v.cells, 6);
+    const topHtml = top.map(t => {
+      const nm = SHAPES[t.kb.k.shapeId]?.name ?? "?";
+      const score = t.kb.m.score;
+      const cls = score > 0.25 ? "good" : (score < -0.25 ? "bad" : "");
+      return `<div class="tiny mono ${cls}">agent #${t.a.id}: best shapeId=${t.kb.k.shapeId} (${nm}) score=${score.toFixed(3)} good=${t.kb.m.good.toFixed(2)}</div>`;
+    }).join("");
+
+    const sigs = recentSignalsForVoid(v.id, 6);
+    const sigHtml = sigs.map(p => {
+      const nm = SHAPES[p.shapeId]?.name ?? "?";
+      const cls = (p.delta > 0) ? "good" : (p.delta < 0 ? "bad" : "");
+      return `<div class="tiny mono ${cls}">shapeId=${p.shapeId} (${nm}) area: ${p.areaB} → ${p.areaA} (Δ=${p.delta})</div>`;
+    }).join("");
+
+    el.innerHTML = `
+      <div class="pill">Void (Lock)</div> <span class="mono">#${v.id}</span>
+      <div class="kv" style="margin-top:8px">
+        <div>rarity</div><div>${v.rarity.toFixed(2)} <span class="tiny">(higher = rarer lock type)</span></div>
+        <div>complex</div><div>${v.complex}</div>
+        <div>radius</div><div>${v.r.toFixed(3)}</div>
+        <div>age</div><div>${v.age.toFixed(1)}s</div>
+        <div>area</div><div>${area} / ${v.mass0} <span class="${pct<=20 ? "good" : ""}">(${pct.toFixed(1)}%)</span></div>
+      </div>
+
+      <details style="margin-top:10px" open>
+        <summary class="tiny">Pattern (7×7 remaining void cells)</summary>
+        <pre style="margin-top:8px">${cellsToAscii(v.cells)}</pre>
+      </details>
+
+      <details style="margin-top:10px">
+        <summary class="tiny">Sub-void components</summary>
+        <div style="margin-top:8px">${subs || `<div class="tiny warn">No subs.</div>`}</div>
+      </details>
+
+      <details style="margin-top:10px" open>
+        <summary class="tiny">Top matching agents (best key score)</summary>
+        <div style="margin-top:8px">${topHtml || `<div class="tiny warn">No agents.</div>`}</div>
+      </details>
+
+      <details style="margin-top:10px">
+        <summary class="tiny">Recent signals (attempts on this void)</summary>
+        <div style="margin-top:8px">${sigHtml || `<div class="tiny">No signals seen yet.</div>`}</div>
+      </details>
+    `;
+    return;
+  }
+
+  if (selection.type === "energy"){
+    const e = getEnergyById(selection.id);
+    if (!e){
+      el.innerHTML = `<div class="tiny warn">Selected energy source no longer exists (depleted).</div>`;
+      selection.type = null; selection.id = null;
+      return;
+    }
+    const nm = SHAPES[e.shapeId]?.name ?? "?";
+    const pct = 100 * e.amount / (e.amount0 + 1e-6);
+
+    const top = topAgentsForPattern(e.cells, 6);
+    const topHtml = top.map(t => {
+      const nm2 = SHAPES[t.kb.k.shapeId]?.name ?? "?";
+      const score = t.kb.m.score;
+      const cls = score > 0.25 ? "good" : (score < -0.25 ? "bad" : "");
+      return `<div class="tiny mono ${cls}">agent #${t.a.id}: best shapeId=${t.kb.k.shapeId} (${nm2}) score=${score.toFixed(3)} good=${t.kb.m.good.toFixed(2)}</div>`;
+    }).join("");
+
+    el.innerHTML = `
+      <div class="pill">Energy Source</div> <span class="mono">#${e.id}</span>
+      <div class="kv" style="margin-top:8px">
+        <div>shape</div><div>${e.shapeId} <span class="tiny">(${nm})</span></div>
+        <div>radius</div><div>${e.r.toFixed(3)}</div>
+        <div>amount</div><div>${e.amount.toFixed(2)} / ${e.amount0.toFixed(2)} <span class="${pct<25 ? "warn" : ""}">(${pct.toFixed(1)}%)</span></div>
+        <div>age</div><div>${e.age.toFixed(1)}s</div>
+      </div>
+
+      <details style="margin-top:10px" open>
+        <summary class="tiny">Pattern (7×7)</summary>
+        <pre style="margin-top:8px">${cellsToAscii(e.cells)}</pre>
+      </details>
+
+      <details style="margin-top:10px" open>
+        <summary class="tiny">Top matching agents (best key score)</summary>
+        <div style="margin-top:8px">${topHtml || `<div class="tiny warn">No agents.</div>`}</div>
+      </details>
+    `;
+    return;
+  }
+
+  el.innerHTML = `<div class="tiny">Unknown selection.</div>`;
+}
+
+// --- main sim ---
 
 function updateSim(dt){
   dtSim = dt;
@@ -797,14 +999,11 @@ function updateSim(dt){
   for (const a of agents){
     absorbSignals(a);
 
-    // (1) retarget with hysteresis + commit + margin
     retargetIfNeeded(a, sight);
 
-    // (2) steer smoothly toward target (or wander)
     const target = validateTarget(a);
     steerAgent(a, target);
 
-    // (3) interact if inside target radius
     if (target && a.targetType === "energy"){
       const tv = torusVec(a.x, a.y, target.x, target.y);
       if (tv.d < target.r){
@@ -822,22 +1021,16 @@ function updateSim(dt){
       if (tv.d < v.r && a.energy > 0.02){
         const kb = bestKey(a, v.cells);
         if (kb){
-          const before = shapeMass(v.cells);
           const agentSpend = Math.min(a.energy, spend);
           const res = applyKeyToVoid(v, kb.k, dt, agentSpend);
           a.energy = Math.max(0, a.energy - (res.spend ?? 0));
           emitSignal(a, v, kb.k, res.areaB, res.areaA);
 
-          // if no progress, maybe compose
           const improved = (res.areaB - res.areaA) >= 1;
           if (!improved && a.energy > 0.2) maybeCompose(a, v);
         }
       }
     }
-
-    // solve threshold
-    const thrPct = parseFloat(UI.sSolveThr.value)/100;
-    voids = voids.filter(v => (shapeMass(v.cells) / (v.mass0+1e-6)) > thrPct);
 
     // trails + pulse decay
     if (UI.chkTrails.checked){
@@ -846,6 +1039,21 @@ function updateSim(dt){
       trails.circle(a.x*W, a.y*H, 2.2);
     }
     a.pulse = Math.max(0, a.pulse - dt);
+  }
+
+  // solve threshold (done once per frame)
+  const thrPct = parseFloat(UI.sSolveThr.value)/100;
+  voids = voids.filter(v => (shapeMass(v.cells) / (v.mass0+1e-6)) > thrPct);
+
+  // selection validity check
+  if (selection.type === "void" && selection.id != null && !getVoidById(selection.id)){
+    selection.type = null; selection.id = null; refreshInspector();
+  }
+  if (selection.type === "energy" && selection.id != null && !getEnergyById(selection.id)){
+    selection.type = null; selection.id = null; refreshInspector();
+  }
+  if (selection.type === "agent" && selection.id != null && !getAgentById(selection.id)){
+    selection.type = null; selection.id = null; refreshInspector();
   }
 
   // gentle trail fade
@@ -857,7 +1065,7 @@ function updateSim(dt){
     trails.pop();
   }
 
-  // keep counts in check
+  // cap counts
   const maxV = parseInt(UI.sVoidMax.value);
   if (voids.length > maxV) voids.length = maxV;
   const maxE = parseInt(UI.sEMax.value);
@@ -883,6 +1091,13 @@ function drawPatternStamp(x, y, rPx, cells, rgb, alpha=140){
   }
 }
 
+function drawSelectionRing(px, py, rPx){
+  noFill();
+  stroke(255, 255, 255, 230);
+  strokeWeight(2);
+  circle(px, py, Math.max(18, rPx*2.4));
+}
+
 function draw(){
   background(12,14,18);
 
@@ -891,7 +1106,6 @@ function draw(){
 
   if (!paused) updateSim(dt);
 
-  // trails
   if (UI.chkTrails.checked) image(trails, 0,0);
 
   // energy sources
@@ -904,6 +1118,10 @@ function draw(){
     stroke(120,255,140,a);
     strokeWeight(2);
     circle(px,py, rPx*2.1);
+
+    if (selection.type === "energy" && selection.id === e.id){
+      drawSelectionRing(px, py, rPx);
+    }
   }
 
   // voids
@@ -925,9 +1143,13 @@ function draw(){
     textSize(11);
     textAlign(CENTER, CENTER);
     text("#"+v.id, px, py + rPx*1.35);
+
+    if (selection.type === "void" && selection.id === v.id){
+      drawSelectionRing(px, py, rPx);
+    }
   }
 
-  // signals (ripples) — color indicates improvement vs not
+  // signals
   if (UI.chkSignals.checked){
     for (const s of signals){
       const px = s.x*W, py = s.y*H;
@@ -936,7 +1158,6 @@ function draw(){
       const a = Math.max(0, 170*(1-wave));
 
       const delta = s.payload.delta || 0;
-      // delta > 0 means improved. Scale: max ~5 cells improvement = strong green.
       const t = clamp01(delta / 5);
       const R = Math.round(255*(1 - 0.55*t) + 80*(t));
       const G = Math.round(200*(t) + 150*(1-t));
@@ -953,7 +1174,6 @@ function draw(){
   for (const a of agents){
     const px = a.x*W, py = a.y*H;
 
-    // color by energy
     const t = clamp01(a.energy/(a.maxEnergy+1e-6));
     const rr = 80 + 175*t;
     const gg = 120 + 120*t;
@@ -963,7 +1183,6 @@ function draw(){
     fill(rr,gg,bb,245);
     circle(px,py, 7.5);
 
-    // pulse
     if (a.pulse > 0){
       noFill();
       stroke(255,230,120,220*a.pulse/0.25);
@@ -971,16 +1190,25 @@ function draw(){
       circle(px,py, 16 + 24*(1 - a.pulse/0.25));
     }
 
-    // mode label
     noStroke();
     fill(255,255,255,190);
     textSize(10);
     textAlign(CENTER, CENTER);
     const label = (a.mode === "harvest") ? "H" : "S";
     text(label, px, py - 11);
+
+    if (selection.type === "agent" && selection.id === a.id){
+      drawSelectionRing(px, py, 10);
+    }
   }
 
   renderMetrics();
+
+  // keep inspector live-updated when something selected
+  if (selection.type) {
+    // light update cadence to reduce DOM churn
+    if (frameCount % 8 === 0) refreshInspector();
+  }
 }
 
 function renderMetrics(){
@@ -996,6 +1224,46 @@ function renderMetrics(){
     <div class="tiny">Library size: ${SHAPES.length} | time: ${simTime.toFixed(1)} | fps: ${Math.round(frameRate())}</div>
   `;
 }
+
+// --- mouse selection: choose nearest visible object (agent / void / energy) ---
+
+function mousePressed(){
+  if (mouseX < 0 || mouseX > W || mouseY < 0 || mouseY > H) return;
+
+  let best = null; // {type,id,scorePx}
+  const consider = (type, id, scorePx) => {
+    if (scorePx == null || !isFinite(scorePx)) return;
+    if (!best || scorePx < best.scorePx) best = {type, id, scorePx};
+  };
+
+  // Agents: within ~14 px
+  for (const a of agents){
+    const px = a.x*W, py = a.y*H;
+    const d = dist(mouseX, mouseY, px, py);
+    if (d <= 14) consider("agent", a.id, d);
+  }
+
+  // Voids: within radius ring
+  for (const v of voids){
+    const px = v.x*W, py = v.y*H;
+    const rPx = v.r*Math.min(W,H) * 1.25;
+    const d = dist(mouseX, mouseY, px, py);
+    if (d <= Math.max(18, rPx)) consider("void", v.id, d);
+  }
+
+  // Energy: within radius ring
+  for (const e of energySources){
+    const px = e.x*W, py = e.y*H;
+    const rPx = e.r*Math.min(W,H) * 1.25;
+    const d = dist(mouseX, mouseY, px, py);
+    if (d <= Math.max(18, rPx)) consider("energy", e.id, d);
+  }
+
+  if (best) setSelection(best.type, best.id);
+  else setSelection(null, null);
+}
+
+// --- setup / UI ---
 
 function setup(){
   W = windowWidth - parseInt(getComputedStyle(document.documentElement).getPropertyValue("--uiw"));
@@ -1068,6 +1336,8 @@ function hookUI(){
 
     document.getElementById("lblCompose").textContent = UI.selCompose.value === "on" ? "On" : "Off";
     document.getElementById("lblComposeCost").textContent = parseFloat(UI.sComposeCost.value).toFixed(2);
+
+    refreshInspector();
   };
   refresh();
 
@@ -1094,13 +1364,14 @@ function hookUI(){
     agents = [];
     nextKeyId = 1;
     for (let i=0;i<n;i++) agents.push(createAgent(Math.random(), Math.random()));
+    refreshInspector();
   });
 
   window.addEventListener("keydown", (e)=>{
     if (e.code === "Space"){ paused = !paused; UI.btnPause.textContent = paused ? "Resume" : "Pause"; e.preventDefault(); }
     if (e.key.toLowerCase() === "r"){ resetAll(); }
-    if (e.key.toLowerCase() === "v"){ spawnVoid(); }
-    if (e.key.toLowerCase() === "e"){ spawnEnergy(); }
+    if (e.key.toLowerCase() === "v"){ spawnVoid(); refreshInspector(); }
+    if (e.key.toLowerCase() === "e"){ spawnEnergy(); refreshInspector(); }
   });
 }
 
