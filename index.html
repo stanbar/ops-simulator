@@ -2,11 +2,11 @@
 <html lang="en">
 <head>
   <meta charset="utf-8" />
-  <title>BCM v2 — Voids (Locks) + Energy (Harvest) + Keys (Compose/Transfer) + Inspector</title>
+  <title>BCM v3 — Dice Entropy + Internal Key Generation + Copying Keys + Inspector</title>
   <meta name="viewport" content="width=device-width, initial-scale=1" />
   <script src="https://cdnjs.cloudflare.com/ajax/libs/p5.js/1.9.0/p5.min.js"></script>
   <style>
-    :root { --uiw: 460px; }
+    :root { --uiw: 520px; }
     html, body { margin:0; height:100%; background:#0e0f12; color:#e8eaf1; font-family:system-ui,-apple-system,Segoe UI,Roboto,Arial; }
     #ui{
       position:fixed; top:0; right:0; width:var(--uiw); height:100%;
@@ -34,24 +34,25 @@
       position:fixed; left:10px; top:10px;
       background:rgba(8,10,14,.78); border:1px solid #1e2230; border-radius:8px;
       padding:8px 10px; backdrop-filter:blur(6px);
-      max-width:520px;
+      max-width:560px;
     }
     canvas{ display:block; }
     .tiny{ font-size:11px; opacity:.85; }
     .mono{ font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", monospace; }
-    .kv { display:grid; grid-template-columns: 110px 1fr; gap:4px 10px; font-size:12px; }
+    .kv { display:grid; grid-template-columns: 140px 1fr; gap:4px 10px; font-size:12px; }
     .kv div:nth-child(odd){ opacity:.85; }
     .pill { display:inline-block; padding:2px 8px; border-radius:999px; border:1px solid #2a3248; background:#141b28; font-size:11px; opacity:.95; }
     .warn { color:#ffd28a; }
     .good { color:#8bffb0; }
     .bad { color:#ff9a9a; }
+    .sep { height:1px; background:#1f2535; margin:10px 0; opacity:.8; }
   </style>
 </head>
 
 <body>
 
 <div id="ui">
-  <h2>BCM v2 — Harvest → Spend → Adapt</h2>
+  <h2>BCM v3 — Entropy (2d6) + Keys + Voids + Internal Generation</h2>
 
   <div class="group">
     <div class="row">
@@ -59,7 +60,8 @@
       <button id="btnReset">Reset</button>
     </div>
     <div class="tiny" style="margin-top:6px">
-      Shortcuts: <span class="mono">Space</span>=pause, <span class="mono">R</span>=reset, <span class="mono">V</span>=spawn void, <span class="mono">E</span>=spawn energy
+      Shortcuts: <span class="mono">Space</span>=pause, <span class="mono">R</span>=reset,
+      <span class="mono">V</span>=spawn void, <span class="mono">E</span>=spawn energy
     </div>
     <div class="tiny" style="margin-top:6px">
       Click to select: agent / void / energy (white ring highlight).
@@ -68,19 +70,26 @@
 
   <div class="group" id="inspector">
     <h3 style="margin:6px 0 6px; font-size:13px">Inspector</h3>
-    <div class="tiny">Select an agent, void, or energy source to see its internal state.</div>
+    <div class="tiny">Select an agent, void, or energy source to see its state.</div>
     <div id="inspectContent" style="margin-top:8px"></div>
   </div>
 
   <div class="group">
     <label>Sim speed: <span id="lblSpeed">1.00</span></label>
     <input id="sSpeed" type="range" min="0.2" max="5" step="0.01" value="1.00" />
-    <label>Agents: <span id="lblAgents">40</span></label>
-    <input id="sAgents" type="range" min="1" max="160" step="1" value="40" />
+
+    <label>Agents: <span id="lblAgents">50</span></label>
+    <input id="sAgents" type="range" min="1" max="200" step="1" value="50" />
+
+    <label>Internal agents (%): <span id="lblInternal">35</span></label>
+    <input id="sInternalPct" type="range" min="0" max="100" step="1" value="35" />
+
     <label>Key storage limit per agent: <span id="lblKCap">8</span></label>
     <input id="sKCap" type="range" min="2" max="18" step="1" value="8" />
+
     <label><input id="chkTrails" type="checkbox" checked /> Trails</label>
     <label><input id="chkSignals" type="checkbox" checked /> Signals (ripples)</label>
+    <label><input id="chkShards" type="checkbox" checked /> Key shards (copy tokens)</label>
   </div>
 
   <div class="group">
@@ -94,16 +103,16 @@
     <label>Switch margin (×): <span id="lblMargin">1.25</span></label>
     <input id="sMargin" type="range" min="1.00" max="2.50" step="0.01" value="1.25" />
     <div class="tiny">
-      The “bounce” happens when decisions re-flip every frame. These four controls stop that.
+      Stops “bounce”: agents don’t immediately re-flip their target each frame.
     </div>
   </div>
 
   <div class="group">
     <h3 style="margin:6px 0 6px; font-size:13px">Voids (Locks)</h3>
-    <label>Spawn rate / min: <span id="lblVoidRate">18</span></label>
-    <input id="sVoidRate" type="range" min="0" max="120" step="1" value="18" />
-    <label>Max active voids: <span id="lblVoidMax">36</span></label>
-    <input id="sVoidMax" type="range" min="0" max="140" step="1" value="36" />
+    <label>Spawn rate / min: <span id="lblVoidRate">16</span></label>
+    <input id="sVoidRate" type="range" min="0" max="120" step="1" value="16" />
+    <label>Max active voids: <span id="lblVoidMax">40</span></label>
+    <input id="sVoidMax" type="range" min="0" max="180" step="1" value="40" />
     <label>Growth rate: <span id="lblVoidGrow">0.05</span></label>
     <input id="sVoidGrow" type="range" min="0" max="0.25" step="0.005" value="0.05" />
     <label>Solve threshold (area %): <span id="lblSolveThr">20</span></label>
@@ -112,39 +121,53 @@
 
   <div class="group">
     <h3 style="margin:6px 0 6px; font-size:13px">Energy (Harvest)</h3>
-    <label>Spawn rate / min: <span id="lblERate">22</span></label>
-    <input id="sERate" type="range" min="0" max="180" step="1" value="22" />
-    <label>Max active sources: <span id="lblEMax">45</span></label>
-    <input id="sEMax" type="range" min="0" max="200" step="1" value="45" />
-    <label>Harvest rate: <span id="lblHarvest">0.35</span></label>
-    <input id="sHarvest" type="range" min="0" max="1.2" step="0.01" value="0.35" />
+    <label>Spawn rate / min: <span id="lblERate">40</span></label>
+    <input id="sERate" type="range" min="0" max="180" step="1" value="40" />
+    <label>Max active sources: <span id="lblEMax">55</span></label>
+    <input id="sEMax" type="range" min="0" max="220" step="1" value="55" />
+    <label>Harvest rate: <span id="lblHarvest">0.035</span></label>
+    <input id="sHarvest" type="range" min="0" max="1.2" step="0.01" value="0.035" />
     <label>Energy spend (solve): <span id="lblSpend">0.20</span></label>
     <input id="sSpend" type="range" min="0" max="1.0" step="0.01" value="0.20" />
+  </div>
+
+  <div class="group">
+    <h3 style="margin:6px 0 6px; font-size:13px">Internal Key Generation</h3>
+    <label>Generate if best “goodness” below: <span id="lblGenThr">0.45</span></label>
+    <input id="sGenThr" type="range" min="0.05" max="0.95" step="0.01" value="0.45" />
+    <label>Generation cost / sec: <span id="lblGenCost">0.08</span></label>
+    <input id="sGenCost" type="range" min="0" max="0.50" step="0.01" value="0.08" />
+    <label>Finish at progress (% of void area): <span id="lblGenFinish">60</span></label>
+    <input id="sGenFinish" type="range" min="20" max="95" step="1" value="60" />
     <div class="tiny">
-      Energy sources are patterns. Keys match them to harvest. Solving also costs energy.
+      Internal agents “sit” on a lock and slowly learn a new key pattern from it.
     </div>
   </div>
 
   <div class="group">
-    <h3 style="margin:6px 0 6px; font-size:13px">Key Evolution</h3>
-    <label>Try compose keys when stuck: <span id="lblCompose">On</span></label>
-    <select id="selCompose">
-      <option value="on" selected>On</option>
-      <option value="off">Off</option>
-    </select>
-    <label>Compose cost: <span id="lblComposeCost">0.55</span></label>
-    <input id="sComposeCost" type="range" min="0" max="2.0" step="0.01" value="0.55" />
+    <h3 style="margin:6px 0 6px; font-size:13px">Copying / Memes</h3>
+    <label>Drop key shard when helped (Δ area ≥): <span id="lblShardDelta">2</span></label>
+    <input id="sShardDelta" type="range" min="1" max="10" step="1" value="2" />
+    <label>Shard drop probability: <span id="lblShardP">0.55</span></label>
+    <input id="sShardP" type="range" min="0" max="1" step="0.01" value="0.55" />
+    <label>Shard pickup cost: <span id="lblShardCost">0.05</span></label>
+    <input id="sShardCost" type="range" min="0" max="0.50" step="0.01" value="0.05" />
     <div class="tiny">
-      Composition is geometric OR (A ∪ B). It creates a new “tool shape” in the library.
+      Shards are “copies of solutions” you can pick up and replicate.
     </div>
   </div>
 
-  <div class="group tiny">
-    <div><b>Legend</b></div>
-    <div>🟥 void (lock) — stamp shows remaining unsolved cells</div>
-    <div>🟩 energy source — stamp shows harvest pattern, ring shows remaining amount</div>
-    <div>● agent — color shifts with energy; tiny label shows mode: S/H</div>
-    <div>Ripples: greener = key helped, orange = did nothing / worsened</div>
+  <div class="group">
+    <details>
+      <summary class="tiny">Legend / Notes</summary>
+      <div class="tiny" style="margin-top:8px">
+        🟥 void (lock): stamp shows remaining unsolved cells; radius ~ amount of work<br/>
+        🟩 energy: stamp shows harvest pattern; ring shows remaining amount<br/>
+        🔷 key shard: free copy token for a key shape<br/>
+        Ripples: greener = key helped; orange = did nothing / worsened<br/>
+        Agent colors: T=blue, F=red, N=purple, S=yellow; internal = darker
+      </div>
+    </details>
   </div>
 </div>
 
@@ -152,18 +175,24 @@
 
 <script>
 /* =========================================================
-   BCM v2 + Inspector
+   BCM v3
+   - 2d6 rarity distribution (entropy)
+   - external vs internal agents
+   - internal key generation on locks
+   - key shards (copying)
+   - inspector for agent/void/energy
 ========================================================= */
 
 let W, H, trails;
 let paused = false;
 let simTime = 0;
+let dtSim = 0;
 
 const UI = {};
 const SHAPE_N = 7;
 const SHAPE_C = SHAPE_N * SHAPE_N;
 
-let SHAPES = [];           // {name, cells:Int8Array, mass}
+let SHAPES = [];           // {name, cells:Int8Array, mass, tier}
 let COMMON = [];           // indices in SHAPES
 let nextVoidId = 1;
 let nextKeyId = 1;
@@ -172,20 +201,21 @@ let nextEnergyId = 1;
 let agents = [];
 let voids = [];
 let energySources = [];
-let signals = [];          // {x,y,t,ttl, payload:{voidId, areaB, keyId, areaA, shapeId, delta}}
+let signals = [];          // {x,y,t,ttl,payload:{voidId,areaB,keyId,areaA,shapeId,delta}}
+let keyShards = [];        // {id,x,y,r,shapeId,ttl}
 
 let selection = { type: null, id: null }; // "agent"|"void"|"energy"|null
-let dtSim = 0;
 
+/* ---------- basic math helpers ---------- */
 function clamp01(x){ return Math.max(0, Math.min(1, x)); }
 function wrap01(u){ u = u % 1; if (u < 0) u += 1; return u; }
+function wrapDelta(d){ if (d > 0.5) d -= 1; if (d < -0.5) d += 1; return d; }
 function idxS(x,y){ return y*SHAPE_N + x; }
 
 function torusVec(ax, ay, bx, by){
   const dx = wrapDelta(bx-ax), dy = wrapDelta(by-ay);
   return {dx, dy, d: Math.hypot(dx,dy)};
 }
-function wrapDelta(d){ if (d > 0.5) d -= 1; if (d < -0.5) d += 1; return d; }
 
 function cloneCells(c){ const o = new Int8Array(c.length); o.set(c); return o; }
 function shapeMass(c){ let m=0; for (let i=0;i<c.length;i++) m += c[i] ? 1 : 0; return m; }
@@ -195,6 +225,20 @@ function shapeOR(a,b){
   return o;
 }
 
+function randChoice(arr){ return arr[Math.floor(Math.random()*arr.length)]; }
+
+/* ---------- 2d6 entropy ---------- */
+function dice2d6(){
+  const a = 1 + Math.floor(Math.random()*6);
+  const b = 1 + Math.floor(Math.random()*6);
+  return a + b; // 2..12
+}
+function rarityFromRoll(r){
+  // distance from 7 => rarity
+  return clamp01(Math.abs(r - 7) / 5);
+}
+
+/* ---------- shapes ---------- */
 function randomShape(density=0.22, smoothPasses=2){
   let c = new Int8Array(SHAPE_C);
   for (let y=0;y<SHAPE_N;y++){
@@ -234,88 +278,92 @@ function randomShape(density=0.22, smoothPasses=2){
   return c;
 }
 
-function matchKeyToPattern(keyCells, patternCells){
-  let fill=0, spill=0, mass=0;
-  for (let i=0;i<SHAPE_C;i++){
-    const p = patternCells[i];
-    const k = keyCells[i];
-    if (p) mass++;
-    if (k){
-      if (p) fill++;
-      else spill++;
-    }
-  }
-  const score = (fill - 1.25*spill) / (mass + 1e-6);
-  const good = clamp01((score + 1) / 2);
-  const bad  = clamp01((-score));
-  return {fill, spill, mass, score, good, bad};
-}
-
 function initShapes(){
   SHAPES = [];
   COMMON = [];
 
   const mid = Math.floor(SHAPE_N/2);
-  const blank = () => new Array(SHAPE_C).fill(0);
+  const blank = () => new Int8Array(SHAPE_C);
   const set = (c,x,y) => { if (x>=0&&x<SHAPE_N&&y>=0&&y<SHAPE_N) c[idxS(x,y)] = 1; };
 
-  // plus
+  // Common prototypes
+  const addShape = (name, cells, tier) => {
+    SHAPES.push({name, cells, mass: shapeMass(cells), tier});
+    return SHAPES.length - 1;
+  };
+
+  // plus (very common)
   {
     const c = blank();
     for (let x=1;x<SHAPE_N-1;x++) set(c,x,mid);
     for (let y=1;y<SHAPE_N-1;y++) set(c,mid,y);
-    const cells = new Int8Array(c);
-    const id = SHAPES.length;
-    SHAPES.push({name:"plus", cells, mass:shapeMass(cells)});
-    COMMON.push(id);
+    COMMON.push(addShape("plus", c, "common"));
   }
   // ring
   {
     const c = blank();
     for (let x=1;x<SHAPE_N-1;x++){ set(c,x,1); set(c,x,SHAPE_N-2); }
     for (let y=1;y<SHAPE_N-1;y++){ set(c,1,y); set(c,SHAPE_N-2,y); }
-    const cells = new Int8Array(c);
-    const id = SHAPES.length;
-    SHAPES.push({name:"ring", cells, mass:shapeMass(cells)});
-    COMMON.push(id);
+    COMMON.push(addShape("ring", c, "common"));
   }
   // diag
   {
     const c = blank();
     for (let i=1;i<SHAPE_N-1;i++) set(c,i,i);
     set(c,mid,mid-1); set(c,mid-1,mid);
-    const cells = new Int8Array(c);
-    const id = SHAPES.length;
-    SHAPES.push({name:"diag", cells, mass:shapeMass(cells)});
-    COMMON.push(id);
+    COMMON.push(addShape("diag", c, "common"));
   }
   // L
   {
     const c = blank();
     for (let y=1;y<SHAPE_N-1;y++) set(c,1,y);
     for (let x=1;x<SHAPE_N-1;x++) set(c,x,SHAPE_N-2);
-    const cells = new Int8Array(c);
-    const id = SHAPES.length;
-    SHAPES.push({name:"L", cells, mass:shapeMass(cells)});
-    COMMON.push(id);
+    COMMON.push(addShape("L", c, "common"));
   }
   // blob
   {
     const c = blank();
     for (let y=2;y<=4;y++) for (let x=2;x<=4;x++) set(c,x,y);
     set(c,1,3); set(c,5,3); set(c,3,1); set(c,3,5);
-    const cells = new Int8Array(c);
-    const id = SHAPES.length;
-    SHAPES.push({name:"blob", cells, mass:shapeMass(cells)});
-    COMMON.push(id);
+    COMMON.push(addShape("blob", c, "common"));
   }
 
-  for (let i=0;i<10;i++){
-    const rc = randomShape(0.20 + 0.10*Math.random(), 2);
-    SHAPES.push({name:"rand"+i, cells:rc, mass:shapeMass(rc)});
+  // Uncommon / rare random shapes
+  for (let i=0;i<14;i++){
+    const rc = randomShape(0.18 + 0.12*Math.random(), 2);
+    const tier = (i < 8) ? "uncommon" : "rare";
+    addShape("rand"+i, rc, tier);
   }
 }
 
+/* Choose a shape using dice entropy:
+   - 6-8 => common
+   - 5,9 => mostly common + some uncommon
+   - 4,10 => uncommon
+   - 3,11 => rare
+   - 2,12 => rare (or "exotic": random + later combos)
+*/
+function sampleShapeByDice(){
+  const roll = dice2d6();
+  if (roll === 7 || roll === 6 || roll === 8){
+    return {shapeId: randChoice(COMMON), roll};
+  }
+  if (roll === 5 || roll === 9){
+    if (Math.random() < 0.75) return {shapeId: randChoice(COMMON), roll};
+    // uncommon
+    const pool = SHAPES.map((s,idx)=>({s,idx})).filter(x=>x.s.tier==="uncommon").map(x=>x.idx);
+    return {shapeId: randChoice(pool), roll};
+  }
+  if (roll === 4 || roll === 10){
+    const pool = SHAPES.map((s,idx)=>({s,idx})).filter(x=>x.s.tier==="uncommon").map(x=>x.idx);
+    return {shapeId: randChoice(pool), roll};
+  }
+  // 3,11,2,12
+  const pool = SHAPES.map((s,idx)=>({s,idx})).filter(x=>x.s.tier==="rare").map(x=>x.idx);
+  return {shapeId: randChoice(pool), roll};
+}
+
+/* ---------- keys ---------- */
 function makeKey(shapeId){
   return {
     keyId: nextKeyId++,
@@ -336,131 +384,21 @@ function ensureStorage(agent){
   }
 }
 
-function createAgent(x,y){
-  const a = {
-    id: Math.random().toString(36).slice(2, 8),
-    x, y, vx:0, vy:0,
-    energy: 0.65 + 0.25*Math.random(),
-    maxEnergy: 1.50,
-    keys: [],
-    memory: new Map(),      // voidId -> {obs:[]}
-    pulse: 0,
-
-    mode: null,             // "solve" or "harvest"
-    targetType: null,       // "void"|"energy"|null
-    targetId: null,
-    lockUntil: 0,
-    lastScore: 0,
-  };
-
-  const kCommon = 3;
-  for (let i=0;i<kCommon;i++){
-    const sid = COMMON[Math.floor(Math.random()*COMMON.length)];
-    if (!agentHasShape(a, sid)) a.keys.push(makeKey(sid));
+function matchKeyToPattern(keyCells, patternCells){
+  let fill=0, spill=0, mass=0;
+  for (let i=0;i<SHAPE_C;i++){
+    const p = patternCells[i];
+    const k = keyCells[i];
+    if (p) mass++;
+    if (k){
+      if (p) fill++;
+      else spill++;
+    }
   }
-  const sidR = Math.floor(COMMON.length + Math.random()*(SHAPES.length-COMMON.length));
-  a.keys.push(makeKey(sidR));
-  ensureStorage(a);
-
-  a.mode = (a.energy < parseFloat(UI.sELow.value)) ? "harvest" : "solve";
-  return a;
-}
-
-function resetAll(){
-  paused = false;
-  simTime = 0;
-  UI.btnPause.textContent = "Pause";
-
-  nextVoidId = 1;
-  nextKeyId = 1;
-  nextEnergyId = 1;
-  voids = [];
-  energySources = [];
-  signals = [];
-  trails.clear();
-
-  selection = { type: null, id: null };
-
-  initShapes();
-
-  agents = [];
-  const n = parseInt(UI.sAgents.value);
-  for (let i=0;i<n;i++) agents.push(createAgent(Math.random(), Math.random()));
-
-  refreshInspector();
-}
-
-function spawnVoid(){
-  const maxV = parseInt(UI.sVoidMax.value);
-  if (voids.length >= maxV) return;
-
-  const rarity = clamp01(Math.random()*Math.random());
-  const complex = (rarity > 0.65 && Math.random() < 0.6) ? 2 : 1;
-
-  const subCount = complex + (Math.random()<0.25 ? 1 : 0);
-  let merged = new Int8Array(SHAPE_C);
-  const subs = [];
-  for (let i=0;i<subCount;i++){
-    const shapeId = (rarity < 0.45)
-      ? COMMON[Math.floor(Math.random()*COMMON.length)]
-      : Math.floor(Math.random()*SHAPES.length);
-    const cells = cloneCells(SHAPES[shapeId].cells);
-    subs.push({shapeId, cells});
-    merged = shapeOR(merged, cells);
-  }
-
-  const baseR = 0.030 + 0.018*complex;
-  const r = baseR * (0.8 + 0.8*Math.random());
-
-  const v = {
-    id: nextVoidId++,
-    x: Math.random(),
-    y: Math.random(),
-    r,
-    rarity,
-    complex,
-    subs,
-    cells: merged,
-    mass0: Math.max(1, shapeMass(merged)),
-    age: 0
-  };
-  voids.push(v);
-}
-
-function spawnEnergy(){
-  const maxE = parseInt(UI.sEMax.value);
-  if (energySources.length >= maxE) return;
-
-  const rare = Math.random() < 0.25;
-  const shapeId = rare
-    ? Math.floor(Math.random()*SHAPES.length)
-    : COMMON[Math.floor(Math.random()*COMMON.length)];
-
-  const amount = 0.55 + 0.65*Math.random();
-  const r = 0.028 + 0.020*(rare ? 1 : 0) + 0.010*Math.random();
-
-  energySources.push({
-    id: nextEnergyId++,
-    x: Math.random(),
-    y: Math.random(),
-    r,
-    shapeId,
-    cells: SHAPES[shapeId].cells,
-    amount0: amount,
-    amount: amount,
-    age: 0
-  });
-}
-
-function growVoid(v, dt){
-  const g = parseFloat(UI.sVoidGrow.value);
-  v.age += dt;
-  if (Math.random() < g*dt*(0.25 + 0.8*v.rarity)){
-    const sid = (Math.random()<0.7) ? v.subs[Math.floor(Math.random()*v.subs.length)].shapeId : Math.floor(Math.random()*SHAPES.length);
-    const src = SHAPES[sid].cells;
-    const i = Math.floor(Math.random()*SHAPE_C);
-    if (src[i]) v.cells[i] = 1;
-  }
+  const score = (fill - 1.25*spill) / (mass + 1e-6);
+  const good = clamp01((score + 1) / 2);
+  const bad  = clamp01((-score));
+  return {fill, spill, mass, score, good, bad};
 }
 
 function bestKey(agent, patternCells){
@@ -472,14 +410,192 @@ function bestKey(agent, patternCells){
   return best;
 }
 
+/* ---------- function colors (T/F/N/S) ---------- */
+const FUNC = ["T","F","N","S"];
+function funcColor(f){
+  // base RGB per Bin: Thinking=blue, Feeling=red, Intuition=purple, Sensing=yellow
+  if (f === "T") return [80, 140, 255];
+  if (f === "F") return [255, 90, 90];
+  if (f === "N") return [185, 105, 255];
+  return [255, 215, 90]; // S
+}
+function mixRGB(a,b,t){
+  return [
+    Math.round(a[0]*(1-t)+b[0]*t),
+    Math.round(a[1]*(1-t)+b[1]*t),
+    Math.round(a[2]*(1-t)+b[2]*t),
+  ];
+}
+function shade(rgb, factor){
+  return [
+    Math.round(rgb[0]*factor),
+    Math.round(rgb[1]*factor),
+    Math.round(rgb[2]*factor),
+  ];
+}
+
+/* ---------- agents ---------- */
+function createAgent(x,y, role){
+  const a = {
+    id: Math.random().toString(36).slice(2, 8),
+    x, y, vx:0, vy:0,
+    energy: 0.65 + 0.25*Math.random(),
+    maxEnergy: 1.50,
+
+    role,                 // "external" or "internal"
+    func: randChoice(FUNC),
+
+    keys: [],
+    memory: new Map(),    // voidId -> {obs:[]}
+    pulse: 0,
+
+    mode: null,           // "solve" or "harvest" (internal mostly solve)
+    targetType: null,     // "void"|"energy"|null
+    targetId: null,
+    lockUntil: 0,
+    lastScore: 0,
+
+    // internal generation state
+    gen: null,            // {voidId, cells:Int8Array, t:number, progress:number}
+  };
+
+  // External agents start with more common keys
+  // Internal agents start with fewer but may have a random rare key
+  if (a.role === "external"){
+    for (let i=0;i<4;i++){
+      const sid = randChoice(COMMON);
+      if (!agentHasShape(a, sid)) a.keys.push(makeKey(sid));
+    }
+    if (Math.random() < 0.35){
+      const {shapeId} = sampleShapeByDice();
+      if (!agentHasShape(a, shapeId)) a.keys.push(makeKey(shapeId));
+    }
+  } else {
+    for (let i=0;i<2;i++){
+      const sid = randChoice(COMMON);
+      if (!agentHasShape(a, sid)) a.keys.push(makeKey(sid));
+    }
+    // give internal one rarer seed more often
+    if (Math.random() < 0.75){
+      const {shapeId} = sampleShapeByDice();
+      if (!agentHasShape(a, shapeId)) a.keys.push(makeKey(shapeId));
+    }
+  }
+  ensureStorage(a);
+
+  const low = parseFloat(UI.sELow.value);
+  a.mode = (a.energy < low) ? "harvest" : "solve";
+  return a;
+}
+
+/* ---------- world objects ---------- */
+function spawnVoid(){
+  const maxV = parseInt(UI.sVoidMax.value);
+  if (voids.length >= maxV) return;
+
+  // dice selects rarity
+  const roll = dice2d6();
+  const rarity = rarityFromRoll(roll);
+
+  // number of sub-voids increases with rarity (harder)
+  const subCount = 1 + (rarity > 0.35 ? 1 : 0) + (rarity > 0.70 ? 1 : 0) + (Math.random()<0.25 ? 1 : 0);
+
+  let merged = new Int8Array(SHAPE_C);
+  const subs = [];
+  for (let i=0;i<subCount;i++){
+    const pick = sampleShapeByDice();
+    const shapeId = pick.shapeId;
+    const cells = cloneCells(SHAPES[shapeId].cells);
+    subs.push({shapeId, cells});
+    merged = shapeOR(merged, cells);
+  }
+
+  const mass0 = Math.max(1, shapeMass(merged));
+
+  // void radius tied to amount of work (mass0) + rarity
+  // sqrt makes growth smoother
+  const base = 0.025;
+  const work = 0.060 * Math.sqrt(mass0 / SHAPE_C);
+  const rareBoost = 0.020 * rarity;
+  const r = base + work + rareBoost + 0.005*Math.random();
+
+  voids.push({
+    id: nextVoidId++,
+    x: Math.random(),
+    y: Math.random(),
+    r,
+    roll,
+    rarity,
+    subs,
+    cells: merged,
+    mass0,
+    age: 0
+  });
+}
+
+function spawnEnergy(){
+  const maxE = parseInt(UI.sEMax.value);
+  if (energySources.length >= maxE) return;
+
+  // energy also follows entropy, but slightly biased toward common
+  // (more common energy patterns in environment)
+  let roll = dice2d6();
+  if (Math.random() < 0.35) roll = 7; // bias
+  const rarity = rarityFromRoll(roll);
+
+  const {shapeId} = sampleShapeByDice();
+  const amount = 0.55 + 0.65*Math.random();
+  const r = 0.026 + 0.018*(rarity) + 0.010*Math.random();
+
+  energySources.push({
+    id: nextEnergyId++,
+    x: Math.random(),
+    y: Math.random(),
+    r,
+    roll,
+    rarity,
+    shapeId,
+    cells: SHAPES[shapeId].cells,
+    amount0: amount,
+    amount: amount,
+    age: 0
+  });
+}
+
+function growVoid(v, dt){
+  const g = parseFloat(UI.sVoidGrow.value);
+  v.age += dt;
+  // rare voids grow slightly more often
+  const chance = g*dt*(0.25 + 0.8*v.rarity);
+  if (Math.random() < chance){
+    const sid = (Math.random()<0.65)
+      ? v.subs[Math.floor(Math.random()*v.subs.length)].shapeId
+      : sampleShapeByDice().shapeId;
+    const src = SHAPES[sid].cells;
+    const i = Math.floor(Math.random()*SHAPE_C);
+    if (src[i]) v.cells[i] = 1;
+  }
+}
+
+function harvestEnergy(e, key, dt){
+  const m = matchKeyToPattern(key.cells, e.cells);
+  const rate = parseFloat(UI.sHarvest.value);
+  const take = Math.min(e.amount, rate * dt * (0.10 + 1.1*m.good));
+  e.amount -= take;
+  key.uses++;
+  return {take, m};
+}
+
 function applyKeyToVoid(v, key, dt, agentSpend){
   const m = matchKeyToPattern(key.cells, v.cells);
   const areaB = shapeMass(v.cells);
   if (areaB <= 0) return {areaB, areaA: 0, m, spend:0};
 
+  // spend increases when mismatch/spill
   const spend = agentSpend * dt * (0.35 + 1.2*(1-m.good) + 0.9*m.bad);
   key.uses++;
 
+  // success chance scales with spend + goodness
   const p = clamp01((0.10 + 0.85*m.good) * spend * 2.8);
 
   const newCells = cloneCells(v.cells);
@@ -489,9 +605,10 @@ function applyKeyToVoid(v, key, dt, agentSpend){
     }
   }
 
+  // wrong key can sometimes worsen (adds a couple of cells)
   const worsenChance = clamp01(0.12*m.bad + 0.02*(m.spill/(m.mass+1e-6)));
   if (Math.random() < worsenChance * dt * 2.0){
-    const sid = (Math.random()<0.5) ? COMMON[Math.floor(Math.random()*COMMON.length)] : Math.floor(Math.random()*SHAPES.length);
+    const sid = sampleShapeByDice().shapeId;
     const src = SHAPES[sid].cells;
     for (let k2=0;k2<2;k2++){
       const i = Math.floor(Math.random()*SHAPE_C);
@@ -504,40 +621,7 @@ function applyKeyToVoid(v, key, dt, agentSpend){
   return {areaB, areaA, m, spend};
 }
 
-function harvestEnergy(e, key, dt){
-  const m = matchKeyToPattern(key.cells, e.cells);
-  const rate = parseFloat(UI.sHarvest.value);
-  const take = Math.min(e.amount, rate * dt * (0.10 + 1.1*m.good));
-  e.amount -= take;
-  key.uses++;
-  return {take, m};
-}
-
-function maybeCompose(agent, v){
-  if (UI.selCompose.value !== "on") return false;
-  if (agent.keys.length < 2) return false;
-
-  const composeCost = parseFloat(UI.sComposeCost.value);
-  if (agent.energy < composeCost) return false;
-
-  const scored = agent.keys.map(k => ({k, m: matchKeyToPattern(k.cells, v.cells)}));
-  scored.sort((a,b) => b.m.score - a.m.score);
-  const a = scored[0], b = scored[1];
-  if (!a || !b) return false;
-
-  if (a.m.good > 0.70) return false;
-
-  const combined = shapeOR(a.k.cells, b.k.cells);
-  const sid = SHAPES.length;
-  SHAPES.push({name:"combo("+a.k.shapeId+"|"+b.k.shapeId+")", cells: combined, mass: shapeMass(combined)});
-
-  agent.keys.push(makeKey(sid));
-  agent.energy = Math.max(0, agent.energy - composeCost);
-
-  ensureStorage(agent);
-  return true;
-}
-
+/* ---------- copying / signals / shards ---------- */
 function emitSignal(agent, v, key, areaB, areaA){
   if (!UI.chkSignals.checked) return;
   const delta = areaB - areaA;
@@ -557,7 +641,26 @@ function emitSignal(agent, v, key, areaB, areaA){
   agent.pulse = 0.25;
 }
 
+function maybeDropShard(v, shapeId, delta){
+  if (!UI.chkShards.checked) return;
+  const need = parseInt(UI.sShardDelta.value);
+  if (delta < need) return;
+  const p = parseFloat(UI.sShardP.value);
+  if (Math.random() > p) return;
+
+  keyShards.push({
+    id: Math.random().toString(36).slice(2, 9),
+    x: v.x + (Math.random()*0.04-0.02),
+    y: v.y + (Math.random()*0.04-0.02),
+    r: 0.018,
+    shapeId,
+    ttl: 14 + 10*Math.random()
+  });
+}
+
 function absorbSignals(agent){
+  // You already have a "broadcast" channel; keep it.
+  // Here, we just store observations and optionally copy shapes (costly, not shards).
   const hearR = 0.18;
   const copyCost = 0.22;
 
@@ -570,8 +673,10 @@ function absorbSignals(agent){
     const rec = agent.memory.get(p.voidId);
     rec.obs.push({keyId:p.keyId, shapeId:p.shapeId, areaB:p.areaB, areaA:p.areaA, delta:p.delta});
 
+    // external more likely to copy common solutions
     const helpful = p.delta > 0;
-    const desire = helpful ? 0.85 : 0.20;
+    const desire = helpful ? (agent.role==="external" ? 0.90 : 0.55) : 0.15;
+
     if (!agentHasShape(agent, p.shapeId) && Math.random() < desire){
       if (agent.energy >= copyCost){
         agent.keys.push(makeKey(p.shapeId));
@@ -586,8 +691,112 @@ function absorbSignals(agent){
   }
 }
 
-// --- Targeting + movement stabilization ---
+function pickupShards(agent){
+  const cost = parseFloat(UI.sShardCost.value);
+  for (let i=keyShards.length-1; i>=0; i--){
+    const sh = keyShards[i];
+    const tv = torusVec(agent.x, agent.y, sh.x, sh.y);
+    if (tv.d < sh.r){
+      // pickup
+      if (!agentHasShape(agent, sh.shapeId) && agent.energy >= cost){
+        agent.keys.push(makeKey(sh.shapeId));
+        agent.energy -= cost;
+        ensureStorage(agent);
 
+        // chain reaction chance: drop a weaker shard nearby
+        if (Math.random() < 0.18){
+          keyShards.push({
+            id: Math.random().toString(36).slice(2, 9),
+            x: wrap01(agent.x + (Math.random()*0.05-0.025)),
+            y: wrap01(agent.y + (Math.random()*0.05-0.025)),
+            r: 0.016,
+            shapeId: sh.shapeId,
+            ttl: 8 + 6*Math.random()
+          });
+        }
+      }
+      keyShards.splice(i,1);
+    }
+  }
+}
+
+/* ---------- internal key generation ---------- */
+function startGen(agent, voidObj){
+  agent.gen = {
+    voidId: voidObj.id,
+    cells: new Int8Array(SHAPE_C), // start empty
+    t: 0,
+    progress: 0,
+  };
+}
+
+function genStep(agent, voidObj, dt){
+  const genCost = parseFloat(UI.sGenCost.value);
+  const finishPct = parseFloat(UI.sGenFinish.value) / 100;
+  const areaNow = shapeMass(voidObj.cells);
+  if (areaNow <= 0) { agent.gen = null; return; }
+
+  if (!agent.gen || agent.gen.voidId !== voidObj.id){
+    startGen(agent, voidObj);
+  }
+
+  // spend energy steadily to learn
+  const spend = Math.min(agent.energy, genCost * dt);
+  agent.energy = Math.max(0, agent.energy - spend);
+  agent.gen.t += dt;
+
+  // learning rate scales with spend
+  // each step: copy some random "1" cells from void into candidate key
+  const attempts = 1 + Math.floor(12 * spend / (genCost*dt + 1e-6));
+  let copied = 0;
+  for (let k=0;k<attempts;k++){
+    const i = Math.floor(Math.random()*SHAPE_C);
+    if (voidObj.cells[i] && !agent.gen.cells[i]){
+      // copy with probability also influenced by how long they've focused
+      const p = clamp01(0.10 + 0.35*(spend/(genCost*dt+1e-6)) + 0.12*Math.tanh(agent.gen.t/3));
+      if (Math.random() < p){
+        agent.gen.cells[i] = 1;
+        copied++;
+      }
+    }
+  }
+
+  const genMass = shapeMass(agent.gen.cells);
+  agent.gen.progress = genMass / (areaNow + 1e-6);
+
+  // finish: create a new library shape, add key to agent, drop shards
+  if (agent.gen.progress >= finishPct && genMass >= 4){
+    const sid = SHAPES.length;
+    SHAPES.push({name:`gen(void#${voidObj.id})`, cells: agent.gen.cells, mass: genMass, tier: "rare"});
+    agent.keys.push(makeKey(sid));
+    ensureStorage(agent);
+
+    // drop a shard of this newly learned key (memetic copy)
+    keyShards.push({
+      id: Math.random().toString(36).slice(2, 9),
+      x: wrap01(voidObj.x + (Math.random()*0.04-0.02)),
+      y: wrap01(voidObj.y + (Math.random()*0.04-0.02)),
+      r: 0.018,
+      shapeId: sid,
+      ttl: 16 + 10*Math.random()
+    });
+
+    // optional: “announce” via signal
+    signals.push({
+      x: voidObj.x, y: voidObj.y,
+      t: 0, ttl: 8.0,
+      payload: { voidId: voidObj.id, areaB: areaNow, keyId: -1, shapeId: sid, areaA: areaNow, delta: 0 }
+    });
+
+    agent.pulse = 0.25;
+    agent.gen = null;
+    return true;
+  }
+
+  return false;
+}
+
+/* ---------- targeting & movement ---------- */
 function getVoidById(id){ for (const v of voids) if (v.id === id) return v; return null; }
 function getEnergyById(id){ for (const e of energySources) if (e.id === id) return e; return null; }
 function getAgentById(id){ for (const a of agents) if (a.id === id) return a; return null; }
@@ -598,7 +807,7 @@ function scoreVoid(agent, v, sight){
   const kb = bestKey(agent, v.cells);
   const area = shapeMass(v.cells);
   const good = kb ? kb.m.good : 0;
-  const score = (0.3 + area/v.mass0) * (0.25 + good) * (0.6 + 0.6*v.rarity) / (0.04 + tv.d);
+  const score = (0.3 + area/v.mass0) * (0.25 + good) * (0.6 + 0.7*v.rarity) / (0.04 + tv.d);
   return {score, tv, kb, area};
 }
 function scoreEnergy(agent, e, sight){
@@ -639,6 +848,15 @@ function updateAgentMode(agent){
   const lo = Math.min(low, high - 0.01);
   const hi = Math.max(high, low + 0.01);
 
+  // internal agents stay in "solve" unless *really* low
+  if (agent.role === "internal"){
+    if (agent.energy < lo*0.8) agent.mode = "harvest";
+    else if (agent.energy > hi*0.9) agent.mode = "solve";
+    else if (!agent.mode) agent.mode = (agent.energy < lo*0.8) ? "harvest" : "solve";
+    return;
+  }
+
+  // external hysteresis as usual
   if (agent.mode === "solve" && agent.energy < lo) agent.mode = "harvest";
   else if (agent.mode === "harvest" && agent.energy > hi) agent.mode = "solve";
   else if (!agent.mode) agent.mode = (agent.energy < lo) ? "harvest" : "solve";
@@ -663,6 +881,19 @@ function retargetIfNeeded(agent, sight){
     agent.targetId = null;
     agent.lastScore = 0;
     agent.lockUntil = 0;
+  }
+
+  // internal: if currently generating on a void, keep that target
+  if (agent.role === "internal" && agent.gen && agent.gen.voidId != null){
+    const v = getVoidById(agent.gen.voidId);
+    if (v){
+      agent.targetType = "void";
+      agent.targetId = v.id;
+      agent.lockUntil = simTime + Math.max(0.6, commit*0.5);
+      return;
+    } else {
+      agent.gen = null;
+    }
   }
 
   if (!agent.targetType){
@@ -716,8 +947,9 @@ function retargetIfNeeded(agent, sight){
 }
 
 function steerAgent(agent, target){
-  const accel = 1.6;
-  const maxV  = 0.35;
+  // internal agents move slower (they tend to park and work)
+  const accel = (agent.role==="internal") ? 1.10 : 1.60;
+  const maxV  = (agent.role==="internal") ? 0.26 : 0.36;
   const damp  = 0.88;
 
   let dirx=0, diry=0;
@@ -727,15 +959,17 @@ function steerAgent(agent, target){
     dirx = tv.dx/d; diry = tv.dy/d;
 
     const r = target.r || 0.03;
-    const close = clamp01((d - 0.15*r) / (0.85*r + 1e-6));
+    const close = clamp01((d - 0.18*r) / (0.82*r + 1e-6));
     dirx *= close; diry *= close;
   } else {
     const ang = Math.random()*Math.PI*2;
     dirx = Math.cos(ang); diry = Math.sin(ang);
   }
 
-  dirx += 0.12*randn();
-  diry += 0.12*randn();
+  // external agents explore more noise; internal less
+  const noise = (agent.role==="external") ? 0.12 : 0.07;
+  dirx += noise*randn();
+  diry += noise*randn();
   const g = Math.hypot(dirx,diry) || 1e-6;
   dirx/=g; diry/=g;
 
@@ -756,8 +990,7 @@ function steerAgent(agent, target){
   agent.y = wrap01(agent.y + agent.vy * dtSim);
 }
 
-// --- selection / inspection helpers ---
-
+/* ---------- selection / inspector ---------- */
 function setSelection(type, id){
   selection.type = type;
   selection.id = id;
@@ -777,13 +1010,11 @@ function cellsToAscii(cells){
 
 function recentSignalsForVoid(voidId, maxN=6){
   const xs = signals.filter(s => s.payload && s.payload.voidId === voidId);
-  xs.sort((a,b)=> (b.t - a.t)); // newest ~ lowest t? Actually t increases; invert to show most recent first:
-  // Better: sort by remaining ttl (smaller t means newer). So:
-  xs.sort((a,b)=> (a.t - b.t));
+  xs.sort((a,b)=> (a.t - b.t)); // smaller t => newer
   return xs.slice(0, maxN).map(s => s.payload);
 }
 
-function topAgentsForPattern(patternCells, topN=5){
+function topAgentsForPattern(patternCells, topN=6){
   const scored = agents.map(a => {
     const kb = bestKey(a, patternCells);
     return { a, kb };
@@ -812,12 +1043,9 @@ function refreshInspector(){
     const target = validateTarget(a);
     const lockLeft = Math.max(0, a.lockUntil - simTime);
 
-    // if another object selected, we compute match scores; but here selection is agent, so optionally compute
-    // match scores to *current target*, if any:
     let matchInfo = "";
     if (target){
-      const pattern = (a.targetType === "void") ? target.cells : target.cells;
-      const kb = bestKey(a, pattern);
+      const kb = bestKey(a, target.cells);
       if (kb){
         matchInfo = `
           <div style="margin-top:8px">
@@ -831,7 +1059,6 @@ function refreshInspector(){
       }
     }
 
-    // keys list
     const keysHtml = a.keys
       .slice()
       .sort((x,y)=> y.uses - x.uses)
@@ -840,26 +1067,46 @@ function refreshInspector(){
         return `<div class="tiny mono">keyId=${k.keyId} shapeId=${k.shapeId} (${nm}) uses=${k.uses}</div>`;
       }).join("");
 
+    const genHtml = (() => {
+      if (!a.gen) return `<div class="tiny">Not generating a key right now.</div>`;
+      const v = getVoidById(a.gen.voidId);
+      const area = v ? shapeMass(v.cells) : 0;
+      const genMass = shapeMass(a.gen.cells);
+      return `
+        <div class="kv">
+          <div>void</div><div>#${a.gen.voidId} ${v ? "" : `<span class="warn">(gone)</span>`}</div>
+          <div>progress</div><div>${(100*a.gen.progress).toFixed(1)}%</div>
+          <div>learned cells</div><div>${genMass} / ${area || "?"}</div>
+          <div>focus time</div><div>${a.gen.t.toFixed(1)}s</div>
+        </div>
+        <details style="margin-top:8px">
+          <summary class="tiny">Candidate key pattern (7×7)</summary>
+          <pre style="margin-top:8px">${cellsToAscii(a.gen.cells)}</pre>
+        </details>
+      `;
+    })();
+
     el.innerHTML = `
       <div class="pill">Agent</div> <span class="mono">#${a.id}</span>
       <div class="kv" style="margin-top:8px">
+        <div>role</div><div><span class="pill">${a.role}</span></div>
+        <div>function</div><div><span class="pill">${a.func}</span> <span class="tiny">(color-coded)</span></div>
         <div>mode</div><div><span class="pill">${a.mode ?? "?"}</span></div>
         <div>energy</div><div>${a.energy.toFixed(2)} / ${a.maxEnergy.toFixed(2)}</div>
         <div>target</div><div>${a.targetType ? `${a.targetType} #${a.targetId}` : "none"}</div>
         <div>commit left</div><div>${lockLeft.toFixed(2)}s</div>
-        <div>lastScore</div><div>${(a.lastScore ?? 0).toFixed(3)}</div>
         <div>keys</div><div>${a.keys.length} (cap ${parseInt(UI.sKCap.value)})</div>
       </div>
       ${matchInfo}
-      <details style="margin-top:10px" open>
+      <div class="sep"></div>
+      <details open>
         <summary class="tiny">Keys (sorted by uses)</summary>
         <div style="margin-top:8px">${keysHtml || `<div class="tiny warn">No keys.</div>`}</div>
       </details>
-      <details style="margin-top:10px">
-        <summary class="tiny">Memory (void observations)</summary>
-        <div style="margin-top:8px" class="tiny">
-          ${a.memory.size ? `Known voids: ${a.memory.size}` : `No stored observations yet.`}
-        </div>
+      <div class="sep"></div>
+      <details ${a.role==="internal" ? "open" : ""}>
+        <summary class="tiny">Internal generation</summary>
+        <div style="margin-top:8px">${genHtml}</div>
       </details>
     `;
     return;
@@ -886,7 +1133,7 @@ function refreshInspector(){
       const nm = SHAPES[t.kb.k.shapeId]?.name ?? "?";
       const score = t.kb.m.score;
       const cls = score > 0.25 ? "good" : (score < -0.25 ? "bad" : "");
-      return `<div class="tiny mono ${cls}">agent #${t.a.id}: best shapeId=${t.kb.k.shapeId} (${nm}) score=${score.toFixed(3)} good=${t.kb.m.good.toFixed(2)}</div>`;
+      return `<div class="tiny mono ${cls}">agent #${t.a.id} (${t.a.role}/${t.a.func}): best shapeId=${t.kb.k.shapeId} (${nm}) score=${score.toFixed(3)} good=${t.kb.m.good.toFixed(2)}</div>`;
     }).join("");
 
     const sigs = recentSignalsForVoid(v.id, 6);
@@ -899,9 +1146,9 @@ function refreshInspector(){
     el.innerHTML = `
       <div class="pill">Void (Lock)</div> <span class="mono">#${v.id}</span>
       <div class="kv" style="margin-top:8px">
-        <div>rarity</div><div>${v.rarity.toFixed(2)} <span class="tiny">(higher = rarer lock type)</span></div>
-        <div>complex</div><div>${v.complex}</div>
-        <div>radius</div><div>${v.r.toFixed(3)}</div>
+        <div>2d6 roll</div><div>${v.roll} <span class="tiny">(7 common, 2/12 rare)</span></div>
+        <div>rarity</div><div>${v.rarity.toFixed(2)}</div>
+        <div>radius</div><div>${v.r.toFixed(3)} <span class="tiny">(work size)</span></div>
         <div>age</div><div>${v.age.toFixed(1)}s</div>
         <div>area</div><div>${area} / ${v.mass0} <span class="${pct<=20 ? "good" : ""}">(${pct.toFixed(1)}%)</span></div>
       </div>
@@ -923,7 +1170,7 @@ function refreshInspector(){
 
       <details style="margin-top:10px">
         <summary class="tiny">Recent signals (attempts on this void)</summary>
-        <div style="margin-top:8px">${sigHtml || `<div class="tiny">No signals seen yet.</div>`}</div>
+        <div style="margin-top:8px">${sigHtml || `<div class="tiny">No signals yet.</div>`}</div>
       </details>
     `;
     return;
@@ -944,13 +1191,15 @@ function refreshInspector(){
       const nm2 = SHAPES[t.kb.k.shapeId]?.name ?? "?";
       const score = t.kb.m.score;
       const cls = score > 0.25 ? "good" : (score < -0.25 ? "bad" : "");
-      return `<div class="tiny mono ${cls}">agent #${t.a.id}: best shapeId=${t.kb.k.shapeId} (${nm2}) score=${score.toFixed(3)} good=${t.kb.m.good.toFixed(2)}</div>`;
+      return `<div class="tiny mono ${cls}">agent #${t.a.id} (${t.a.role}/${t.a.func}): best shapeId=${t.kb.k.shapeId} (${nm2}) score=${score.toFixed(3)} good=${t.kb.m.good.toFixed(2)}</div>`;
     }).join("");
 
     el.innerHTML = `
       <div class="pill">Energy Source</div> <span class="mono">#${e.id}</span>
       <div class="kv" style="margin-top:8px">
+        <div>2d6 roll</div><div>${e.roll} <span class="tiny">(7 common, 2/12 rare)</span></div>
         <div>shape</div><div>${e.shapeId} <span class="tiny">(${nm})</span></div>
+        <div>rarity</div><div>${e.rarity.toFixed(2)}</div>
         <div>radius</div><div>${e.r.toFixed(3)}</div>
         <div>amount</div><div>${e.amount.toFixed(2)} / ${e.amount0.toFixed(2)} <span class="${pct<25 ? "warn" : ""}">(${pct.toFixed(1)}%)</span></div>
         <div>age</div><div>${e.age.toFixed(1)}s</div>
@@ -972,8 +1221,38 @@ function refreshInspector(){
   el.innerHTML = `<div class="tiny">Unknown selection.</div>`;
 }
 
-// --- main sim ---
+/* ---------- simulation reset ---------- */
+function resetAll(){
+  paused = false;
+  simTime = 0;
+  UI.btnPause.textContent = "Pause";
 
+  nextVoidId = 1;
+  nextKeyId = 1;
+  nextEnergyId = 1;
+  voids = [];
+  energySources = [];
+  signals = [];
+  keyShards = [];
+  trails.clear();
+
+  selection = { type: null, id: null };
+
+  initShapes();
+
+  agents = [];
+  const n = parseInt(UI.sAgents.value);
+  const internalPct = parseInt(UI.sInternalPct.value)/100;
+
+  for (let i=0;i<n;i++){
+    const role = (Math.random() < internalPct) ? "internal" : "external";
+    agents.push(createAgent(Math.random(), Math.random(), role));
+  }
+
+  refreshInspector();
+}
+
+/* ---------- main update loop ---------- */
 function updateSim(dt){
   dtSim = dt;
   simTime += dt;
@@ -984,18 +1263,24 @@ function updateSim(dt){
   if (Math.random() < vRate*dt) spawnVoid();
   if (Math.random() < eRate*dt) spawnEnergy();
 
-  // update growth/aging
+  // growth/aging
   for (const v of voids) growVoid(v, dt);
   for (const e of energySources) e.age += dt;
   energySources = energySources.filter(e => e.amount > 0.01);
 
-  // update signals
+  // signals age
   for (const s of signals) s.t += dt;
   signals = signals.filter(s => s.t < s.ttl);
+
+  // shards age
+  for (const sh of keyShards) sh.ttl -= dt;
+  keyShards = keyShards.filter(sh => sh.ttl > 0);
 
   // agents
   const spend = parseFloat(UI.sSpend.value);
   const sight = 0.26;
+  const genThr = parseFloat(UI.sGenThr.value);
+
   for (const a of agents){
     absorbSignals(a);
 
@@ -1003,6 +1288,8 @@ function updateSim(dt){
 
     const target = validateTarget(a);
     steerAgent(a, target);
+
+    pickupShards(a);
 
     if (target && a.targetType === "energy"){
       const tv = torusVec(a.x, a.y, target.x, target.y);
@@ -1018,6 +1305,20 @@ function updateSim(dt){
     if (target && a.targetType === "void"){
       const v = target;
       const tv = torusVec(a.x, a.y, v.x, v.y);
+
+      // internal: if close to void and key fit is weak => generate key
+      if (a.role === "internal" && tv.d < v.r*1.05){
+        const kb = bestKey(a, v.cells);
+        const good = kb ? kb.m.good : 0;
+        if (good < genThr && a.energy > 0.02){
+          genStep(a, v, dt);
+        } else {
+          // if good enough, stop generating
+          if (a.gen && a.gen.voidId === v.id) a.gen = null;
+        }
+      }
+
+      // apply key to void (both roles)
       if (tv.d < v.r && a.energy > 0.02){
         const kb = bestKey(a, v.cells);
         if (kb){
@@ -1026,8 +1327,8 @@ function updateSim(dt){
           a.energy = Math.max(0, a.energy - (res.spend ?? 0));
           emitSignal(a, v, kb.k, res.areaB, res.areaA);
 
-          const improved = (res.areaB - res.areaA) >= 1;
-          if (!improved && a.energy > 0.2) maybeCompose(a, v);
+          const delta = (res.areaB - res.areaA) || 0;
+          maybeDropShard(v, kb.k.shapeId, delta);
         }
       }
     }
@@ -1041,7 +1342,7 @@ function updateSim(dt){
     a.pulse = Math.max(0, a.pulse - dt);
   }
 
-  // solve threshold (done once per frame)
+  // solve threshold
   const thrPct = parseFloat(UI.sSolveThr.value)/100;
   voids = voids.filter(v => (shapeMass(v.cells) / (v.mass0+1e-6)) > thrPct);
 
@@ -1072,8 +1373,7 @@ function updateSim(dt){
   if (energySources.length > maxE) energySources.length = maxE;
 }
 
-// --- Rendering ---
-
+/* ---------- rendering ---------- */
 function drawPatternStamp(x, y, rPx, cells, rgb, alpha=140){
   const stamp = rPx*2;
   const cell = stamp / SHAPE_N;
@@ -1119,6 +1419,12 @@ function draw(){
     strokeWeight(2);
     circle(px,py, rPx*2.1);
 
+    noStroke();
+    fill(240,240,255,170);
+    textSize(10);
+    textAlign(CENTER, CENTER);
+    text(e.roll, px, py - rPx*1.25);
+
     if (selection.type === "energy" && selection.id === e.id){
       drawSelectionRing(px, py, rPx);
     }
@@ -1142,14 +1448,49 @@ function draw(){
     fill(255,255,255,200);
     textSize(11);
     textAlign(CENTER, CENTER);
-    text("#"+v.id, px, py + rPx*1.35);
+    text("#"+v.id, px, py + rPx*1.38);
+
+    noStroke();
+    fill(240,240,255,170);
+    textSize(10);
+    text(v.roll, px, py - rPx*1.25);
 
     if (selection.type === "void" && selection.id === v.id){
       drawSelectionRing(px, py, rPx);
     }
   }
 
-  // signals
+  // key shards
+  if (UI.chkShards.checked){
+    for (const sh of keyShards){
+      const px = sh.x*W, py = sh.y*H;
+      const rPx = sh.r*Math.min(W,H);
+      const nm = SHAPES[sh.shapeId]?.name ?? "?";
+
+      // little diamond
+      push();
+      translate(px, py);
+      rotate(Math.PI/4);
+      noStroke();
+      fill(160, 210, 255, 220);
+      rectMode(CENTER);
+      rect(0,0, rPx*1.5, rPx*1.5, 3);
+      pop();
+
+      noFill();
+      stroke(160,210,255,140);
+      strokeWeight(1.5);
+      circle(px,py, rPx*3);
+
+      noStroke();
+      fill(230,235,255,160);
+      textSize(9);
+      textAlign(CENTER, CENTER);
+      text(nm.slice(0,4), px, py + rPx*2.2);
+    }
+  }
+
+  // signals (ripples)
   if (UI.chkSignals.checked){
     for (const s of signals){
       const px = s.x*W, py = s.y*H;
@@ -1158,10 +1499,11 @@ function draw(){
       const a = Math.max(0, 170*(1-wave));
 
       const delta = s.payload.delta || 0;
+      // green if helped, orange if not
       const t = clamp01(delta / 5);
-      const R = Math.round(255*(1 - 0.55*t) + 80*(t));
-      const G = Math.round(200*(t) + 150*(1-t));
-      const B = Math.round(120*(1 - t) + 110*(t));
+      const R = Math.round(255*(1 - 0.55*t) + 110*(t));
+      const G = Math.round(170*(t) + 130*(1-t));
+      const B = Math.round(90*(1 - t) + 120*(t));
 
       noFill();
       stroke(R,G,B,a);
@@ -1174,14 +1516,27 @@ function draw(){
   for (const a of agents){
     const px = a.x*W, py = a.y*H;
 
-    const t = clamp01(a.energy/(a.maxEnergy+1e-6));
-    const rr = 80 + 175*t;
-    const gg = 120 + 120*t;
-    const bb = 230 - 140*t;
+    const base = funcColor(a.func);
+
+    // external lighter, internal darker
+    const roleShade = (a.role === "external") ? 1.05 : 0.70;
+    let col = shade(base, roleShade);
+
+    // energy affects brightness
+    const eT = clamp01(a.energy/(a.maxEnergy+1e-6));
+    col = mixRGB(shade(col, 0.55), shade(col, 1.25), eT);
 
     noStroke();
-    fill(rr,gg,bb,245);
-    circle(px,py, 7.5);
+    fill(col[0], col[1], col[2], 245);
+    circle(px,py, 8.0);
+
+    // internal generation halo
+    if (a.gen){
+      noFill();
+      stroke(col[0], col[1], col[2], 180);
+      strokeWeight(2);
+      circle(px,py, 18 + 12*Math.sin(simTime*3));
+    }
 
     if (a.pulse > 0){
       noFill();
@@ -1195,7 +1550,12 @@ function draw(){
     textSize(10);
     textAlign(CENTER, CENTER);
     const label = (a.mode === "harvest") ? "H" : "S";
-    text(label, px, py - 11);
+    text(label, px, py - 12);
+
+    // tiny role label
+    fill(255,255,255,140);
+    textSize(9);
+    text(a.role==="external" ? "E" : "I", px, py + 12);
 
     if (selection.type === "agent" && selection.id === a.id){
       drawSelectionRing(px, py, 10);
@@ -1204,29 +1564,30 @@ function draw(){
 
   renderMetrics();
 
-  // keep inspector live-updated when something selected
-  if (selection.type) {
-    // light update cadence to reduce DOM churn
-    if (frameCount % 8 === 0) refreshInspector();
-  }
+  // keep inspector live-updated (light cadence)
+  if (selection.type && frameCount % 10 === 0) refreshInspector();
 }
 
 function renderMetrics(){
   let avgE=0, avgK=0;
-  for (const a of agents){ avgE += a.energy; avgK += a.keys.length; }
+  let nI=0, nE=0;
+  for (const a of agents){
+    avgE += a.energy;
+    avgK += a.keys.length;
+    if (a.role==="internal") nI++; else nE++;
+  }
   avgE = agents.length ? avgE/agents.length : 0;
   avgK = agents.length ? avgK/agents.length : 0;
 
   const el = document.getElementById("metrics");
   el.innerHTML = `
-    <div><b>Agents</b>: ${agents.length} | <b>Voids</b>: ${voids.length} | <b>Energy</b>: ${energySources.length} | <b>Signals</b>: ${signals.length}</div>
+    <div><b>Agents</b>: ${agents.length} (I:${nI} / E:${nE}) | <b>Voids</b>: ${voids.length} | <b>Energy</b>: ${energySources.length} | <b>Shards</b>: ${keyShards.length}</div>
     <div><b>Avg energy</b>: ${avgE.toFixed(2)} / 1.50 | <b>Avg keys</b>: ${avgK.toFixed(1)} (cap ${parseInt(UI.sKCap.value)})</div>
     <div class="tiny">Library size: ${SHAPES.length} | time: ${simTime.toFixed(1)} | fps: ${Math.round(frameRate())}</div>
   `;
 }
 
-// --- mouse selection: choose nearest visible object (agent / void / energy) ---
-
+/* ---------- mouse selection ---------- */
 function mousePressed(){
   if (mouseX < 0 || mouseX > W || mouseY < 0 || mouseY > H) return;
 
@@ -1236,14 +1597,14 @@ function mousePressed(){
     if (!best || scorePx < best.scorePx) best = {type, id, scorePx};
   };
 
-  // Agents: within ~14 px
+  // Agents
   for (const a of agents){
     const px = a.x*W, py = a.y*H;
     const d = dist(mouseX, mouseY, px, py);
     if (d <= 14) consider("agent", a.id, d);
   }
 
-  // Voids: within radius ring
+  // Voids
   for (const v of voids){
     const px = v.x*W, py = v.y*H;
     const rPx = v.r*Math.min(W,H) * 1.25;
@@ -1251,7 +1612,7 @@ function mousePressed(){
     if (d <= Math.max(18, rPx)) consider("void", v.id, d);
   }
 
-  // Energy: within radius ring
+  // Energy
   for (const e of energySources){
     const px = e.x*W, py = e.y*H;
     const rPx = e.r*Math.min(W,H) * 1.25;
@@ -1263,8 +1624,7 @@ function mousePressed(){
   else setSelection(null, null);
 }
 
-// --- setup / UI ---
-
+/* ---------- setup / UI ---------- */
 function setup(){
   W = windowWidth - parseInt(getComputedStyle(document.documentElement).getPropertyValue("--uiw"));
   H = windowHeight;
@@ -1292,9 +1652,11 @@ function hookUI(){
 
   UI.sSpeed  = document.getElementById("sSpeed");
   UI.sAgents = document.getElementById("sAgents");
+  UI.sInternalPct = document.getElementById("sInternalPct");
   UI.sKCap   = document.getElementById("sKCap");
   UI.chkTrails = document.getElementById("chkTrails");
   UI.chkSignals = document.getElementById("chkSignals");
+  UI.chkShards = document.getElementById("chkShards");
 
   UI.sELow  = document.getElementById("sELow");
   UI.sEHigh = document.getElementById("sEHigh");
@@ -1311,12 +1673,18 @@ function hookUI(){
   UI.sHarvest  = document.getElementById("sHarvest");
   UI.sSpend    = document.getElementById("sSpend");
 
-  UI.selCompose = document.getElementById("selCompose");
-  UI.sComposeCost = document.getElementById("sComposeCost");
+  UI.sGenThr = document.getElementById("sGenThr");
+  UI.sGenCost = document.getElementById("sGenCost");
+  UI.sGenFinish = document.getElementById("sGenFinish");
+
+  UI.sShardDelta = document.getElementById("sShardDelta");
+  UI.sShardP = document.getElementById("sShardP");
+  UI.sShardCost = document.getElementById("sShardCost");
 
   const refresh = ()=>{
     document.getElementById("lblSpeed").textContent = parseFloat(UI.sSpeed.value).toFixed(2);
     document.getElementById("lblAgents").textContent = parseInt(UI.sAgents.value);
+    document.getElementById("lblInternal").textContent = parseInt(UI.sInternalPct.value);
     document.getElementById("lblKCap").textContent = parseInt(UI.sKCap.value);
 
     document.getElementById("lblELow").textContent = parseFloat(UI.sELow.value).toFixed(2);
@@ -1334,8 +1702,13 @@ function hookUI(){
     document.getElementById("lblHarvest").textContent = parseFloat(UI.sHarvest.value).toFixed(2);
     document.getElementById("lblSpend").textContent = parseFloat(UI.sSpend.value).toFixed(2);
 
-    document.getElementById("lblCompose").textContent = UI.selCompose.value === "on" ? "On" : "Off";
-    document.getElementById("lblComposeCost").textContent = parseFloat(UI.sComposeCost.value).toFixed(2);
+    document.getElementById("lblGenThr").textContent = parseFloat(UI.sGenThr.value).toFixed(2);
+    document.getElementById("lblGenCost").textContent = parseFloat(UI.sGenCost.value).toFixed(2);
+    document.getElementById("lblGenFinish").textContent = parseInt(UI.sGenFinish.value);
+
+    document.getElementById("lblShardDelta").textContent = parseInt(UI.sShardDelta.value);
+    document.getElementById("lblShardP").textContent = parseFloat(UI.sShardP.value).toFixed(2);
+    document.getElementById("lblShardCost").textContent = parseFloat(UI.sShardCost.value).toFixed(2);
 
     refreshInspector();
   };
@@ -1343,11 +1716,12 @@ function hookUI(){
 
   ["input","change"].forEach(evt=>{
     [
-      UI.sSpeed, UI.sAgents, UI.sKCap,
+      UI.sSpeed, UI.sAgents, UI.sInternalPct, UI.sKCap,
       UI.sELow, UI.sEHigh, UI.sCommit, UI.sMargin,
       UI.sVoidRate, UI.sVoidMax, UI.sVoidGrow, UI.sSolveThr,
       UI.sERate, UI.sEMax, UI.sHarvest, UI.sSpend,
-      UI.selCompose, UI.sComposeCost
+      UI.sGenThr, UI.sGenCost, UI.sGenFinish,
+      UI.sShardDelta, UI.sShardP, UI.sShardCost
     ].forEach(el => el.addEventListener(evt, refresh));
   });
 
@@ -1355,16 +1729,13 @@ function hookUI(){
     paused = !paused;
     UI.btnPause.textContent = paused ? "Resume" : "Pause";
   });
-  UI.btnReset.addEventListener("click", ()=>{
-    resetAll();
-  });
+  UI.btnReset.addEventListener("click", ()=> resetAll());
 
   UI.sAgents.addEventListener("input", ()=>{
-    const n = parseInt(UI.sAgents.value);
-    agents = [];
-    nextKeyId = 1;
-    for (let i=0;i<n;i++) agents.push(createAgent(Math.random(), Math.random()));
-    refreshInspector();
+    resetAll();
+  });
+  UI.sInternalPct.addEventListener("input", ()=>{
+    resetAll();
   });
 
   window.addEventListener("keydown", (e)=>{
@@ -1375,7 +1746,7 @@ function hookUI(){
   });
 }
 
-// randn
+/* ---------- randn ---------- */
 let spare = null;
 function randn(){
   if (spare !== null){ const v = spare; spare = null; return v; }
