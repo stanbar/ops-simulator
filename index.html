@@ -1,1924 +1,1362 @@
-<!doctype html>
+<!DOCTYPE html>
 <html lang="en">
 <head>
-  <meta charset="utf-8" />
-  <title>BCM Void–Key Simulator v2 (memes/pruning + void awareness + play exchange)</title>
-  <meta name="viewport" content="width=device-width, initial-scale=1" />
-  <script src="https://cdnjs.cloudflare.com/ajax/libs/p5.js/1.9.0/p5.min.js"></script>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <title>BCM Spectrum Simulator (p5.js) + High-Signal Telemetry</title>
+  <script src="https://cdn.jsdelivr.net/npm/p5@1.9.2/lib/p5.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/p5@1.9.2/lib/addons/p5.dom.min.js"></script>
   <style>
-    :root { --uiw: 390px; }
-    html, body {
-      margin: 0; height: 100%;
-      background: #0b0d12; color: #e8eaf1;
-      font-family: system-ui, -apple-system, Segoe UI, Roboto, Ubuntu, Cantarell, "Helvetica Neue", Arial, "Noto Sans", sans-serif;
-    }
-    canvas { display: block; }
-    #ui {
-      position: fixed; top: 0; right: 0; width: var(--uiw); height: 100%;
-      box-sizing: border-box; padding: 14px 14px 140px;
-      background: #11141b; border-left: 1px solid #1f2535;
-      overflow-y: auto;
-    }
-    #ui h2 { margin: 8px 0 10px; font-size: 16px; font-weight: 800; letter-spacing: 0.2px; }
-    #ui h3 { margin: 8px 0 8px; font-size: 13px; font-weight: 750; opacity: 0.95; }
-    .group {
-      border: 1px solid #1f2535; border-radius: 12px;
-      padding: 10px; margin-bottom: 12px; background: #0f1218;
-    }
-    label { display: block; font-size: 12px; opacity: 0.88; margin: 6px 0 4px; }
-    input[type="range"] { width: 100%; }
-    .row { display: flex; gap: 8px; align-items: center; }
-    .row > * { flex: 1; }
-    button, select {
-      width: 100%;
-      border-radius: 10px;
-      border: 1px solid #2a3248;
-      padding: 8px 10px;
-      background: #16202d;
-      color: #e8eaf1;
-      cursor: pointer;
-    }
-    button:hover { background: #1b2a3b; }
-    .tiny { font-size: 11px; opacity: 0.82; line-height: 1.35; }
+    body { margin: 0; background:#0b0f14; color:#e8eef6; font-family: ui-sans-serif, system-ui, -apple-system, Segoe UI, Roboto, Arial; }
+    .panel { position: fixed; left: 10px; top: 10px; width: 380px; background: rgba(10,14,20,0.88); border: 1px solid rgba(255,255,255,0.08);
+             border-radius: 10px; padding: 12px 12px 10px; backdrop-filter: blur(6px); }
+    .row { display:flex; justify-content:space-between; gap:10px; align-items:center; margin: 6px 0; }
+    .row label { font-size: 12px; opacity: 0.9; }
+    .row .val { font-size: 12px; opacity: 0.85; min-width: 60px; text-align:right; }
+    .btns { display:flex; gap:8px; margin-top:8px; flex-wrap:wrap; }
+    button { background:#1b2432; color:#e8eef6; border:1px solid rgba(255,255,255,0.12); border-radius:8px; padding:7px 10px; cursor:pointer; }
+    button:hover { background:#243247; }
+    .hint { font-size: 12px; opacity: 0.8; line-height: 1.3; margin-top: 8px; }
     .mono { font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace; }
-    .badge {
-      display: inline-block; padding: 2px 7px; border-radius: 999px;
-      border: 1px solid #2a3248; background: #141c28; font-size: 11px;
-      margin-right: 6px;
-    }
-    .split { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; align-items: start; }
-    .previewBox {
-      border: 1px solid #2a3248; border-radius: 10px;
-      padding: 8px; background: #0d1118;
-    }
-    #hud {
-      position: fixed; left: 10px; top: 10px;
-      background: rgba(8, 10, 14, 0.78);
-      padding: 8px 10px; border-radius: 10px;
-      border: 1px solid #1e2230;
-      backdrop-filter: blur(6px);
-      font-size: 12px;
-      max-width: calc(100vw - var(--uiw) - 30px);
-    }
+    canvas { display:block; }
   </style>
 </head>
-
 <body>
-  <div id="ui">
-    <h2>BCM Simulator v2</h2>
-
-    <div class="group">
-      <div class="row">
-        <button id="pauseBtn">Pause</button>
-        <button id="resetBtn">Reset World</button>
-      </div>
-      <div class="tiny" style="margin-top: 8px">
-        Click an <b>agent</b> or a <b>void</b> to inspect. Shift-click deletes selected.
-      </div>
-    </div>
-
-    <div class="group">
-      <h3>Presets</h3>
-      <label>Scenario</label>
-      <select id="configPreset"></select>
-      <div class="row" style="margin-top: 8px">
-        <button id="btnApplyPreset">Apply Preset</button>
-      </div>
-      <div class="tiny" style="margin-top: 6px">
-        Applies counts + speed and resets the world.
-      </div>
-    </div>
-
-    <div class="group">
-      <h3>Simulation</h3>
-      <label>Speed: <span id="lblSpeed">1.00</span></label>
-      <input id="sSpeed" type="range" min="0.2" max="10.0" step="0.01" value="1.00" />
-
-      <label>Entropy pressure (global): <span id="lblEnt">0.55</span></label>
-      <input id="sEntropy" type="range" min="0.0" max="1.5" step="0.01" value="0.55" />
-      <label class="tiny">
-        Higher = unsolved voids drain more energy/health and mutate/grow more.
-      </label>
-
-      <label><input id="chkSignals" type="checkbox" checked /> Show ripples (signals)</label>
-      <label><input id="chkPatterns" type="checkbox" checked /> Show 7×7 patterns in-world</label>
-      <label><input id="chkLinks" type="checkbox" /> Show agent→target links</label>
-
-      <label style="margin-top: 10px"><input id="chkMemes" type="checkbox" checked /> Enable meme dynamics (key charges + decay + replication)</label>
-      <label><input id="chkPlay" type="checkbox" checked /> Enable Play (agent↔agent exchanges)</label>
-      <label><input id="chkRewards" type="checkbox" checked /> Enable void rewards (older/bigger → more payout)</label>
-    </div>
-
-    <div class="group">
-      <h3>World</h3>
-      <label>Voids: <span id="lblVoids">14</span></label>
-      <input id="sVoids" type="range" min="0" max="50" step="1" value="14" />
-
-      <label>Energy sources: <span id="lblEnergy">10</span></label>
-      <input id="sEnergy" type="range" min="0" max="35" step="1" value="10" />
-
-      <label>Void spawn rate: <span id="lblSpawn">0.25</span></label>
-      <input id="sSpawn" type="range" min="0.0" max="2.0" step="0.01" value="0.25" />
-
-      <label>Void growth rate: <span id="lblGrow">0.20</span></label>
-      <input id="sGrow" type="range" min="0.0" max="1.0" step="0.01" value="0.20" />
-
-      <div class="row" style="margin-top: 8px">
-        <button id="btnAddVoid">Spawn Void</button>
-        <button id="btnAddEnergy">Spawn Energy</button>
-      </div>
-    </div>
-
-    <div class="group">
-      <h3>Agents</h3>
-      <label>Agents: <span id="lblAgents">30</span></label>
-      <input id="sAgents" type="range" min="0" max="140" step="1" value="30" />
-
-      <label>Spawn preset</label>
-      <select id="spawnPreset"></select>
-
-      <label><input id="chkAddAgent" type="checkbox" checked /> Add agent by clicking world</label>
-
-      <div class="row" style="margin-top: 8px">
-        <button id="btnAdd10">Add 10 mixed</button>
-        <button id="btnClearSel">Clear selection</button>
-      </div>
-
-      <div class="tiny" style="margin-top: 8px">
-        <b>Double Observer</b> = efficient at <b>S + N</b> (yellow + purple).<br/>
-        <b>Double Decider</b> = efficient at <b>T + F</b> (blue + red).<br/>
-        v2 adds: keys have <b>charges</b> (fatigue) + <b>decay</b> (forgetting) + <b>replication</b> (useful memes spread).
-      </div>
-    </div>
-
-    <div class="group">
-      <h3>Selected</h3>
-      <div id="selHeader" class="tiny">None</div>
-
-      <div class="split" style="margin-top: 10px">
-        <div class="previewBox">
-          <div class="tiny" style="margin-bottom: 6px"><b>Void / Lock</b> pattern</div>
-          <canvas id="voidPreview" width="140" height="140"></canvas>
-          <div id="voidInfo" class="tiny" style="margin-top: 6px">—</div>
-        </div>
-
-        <div class="previewBox">
-          <div class="tiny" style="margin-bottom: 6px"><b>Key</b> (best for target)</div>
-          <canvas id="keyPreview" width="140" height="140"></canvas>
-          <div id="keyInfo" class="tiny" style="margin-top: 6px">—</div>
-        </div>
-      </div>
-
-      <div id="selDetails" class="tiny" style="margin-top: 10px">—</div>
-
-      <div class="row" style="margin-top: 8px">
-        <button id="btnDeleteSel">Delete selected</button>
-        <button id="btnGiveEnergy">+20 energy</button>
-      </div>
-    </div>
-
-    <div class="group tiny">
-      <div style="font-weight: 800; margin-bottom: 6px">Legend</div>
-      <div>
-        <span class="badge" style="border-color:#2a78ff">T (Thinking)</span>
-        <span class="badge" style="border-color:#ff4b4b">F (Feeling)</span>
-        <span class="badge" style="border-color:#ffd34a">S (Sensing)</span>
-        <span class="badge" style="border-color:#b055ff">N (Intuition)</span>
-      </div>
-      <div style="margin-top: 6px">
-        Ripples = broadcasts of <span class="mono">voidId, keyId, areaBefore→after</span>.
-        Color matches the void domain (yellow ripples = S void events).
-      </div>
-    </div>
-  </div>
-
-  <div id="hud" class="tiny"></div>
+  <div class="panel" id="ui"></div>
 
 <script>
-/* ============================================================
-   BCM Simulator v2
-   Adds what Bin asked for:
-   - Keys as memes: charges (fatigue), decay (forgetting), replication (useful → more copies)
-   - Agent awareness: void-memory catalog that can be exchanged
-   - Play: nearby agents exchange one key + one void-memory
-   - Rewards: solved void spawns energy payout, scaled by age & size (lottery-ish)
-   ============================================================ */
+/**
+ * BCM Spectrum Simulator v1.3 (p5.js)
+ * Patch set:
+ * 1) Fix key retention logic in addKey() (voidMem no longer has objRef).
+ * 2) Convert “stale void memory” from anomaly -> cleanup stats.
+ * 3) Add true anomaly: voidMapMismatch (world.voids vs world.voidMap).
+ * 4) Improve void respawn so targetVoids is maintained more reliably.
+ */
 
-let uiW = 390, canvasW, canvasH;
-let paused = false;
-let lastT = 0;
+/////////////////////////
+// 1) Config + helpers //
+/////////////////////////
 
-// ---------- UI refs ----------
-const UI = {};
-const PARAMS = {
-  speed: 1.0,
-  entropyPressure: 0.55,
-  showSignals: true,
-  showPatterns: true,
-  showLinks: false,
+const CFG = {
+  arenaSize: 1000,
+  initialAgents: 50,
+  targetVoids: 25,
+  maxPop: 200,
 
-  enableMemes: true,
-  enablePlay: true,
-  enableRewards: true,
+  visionRadius: 120,
+  interactRadius: 40,
+  blastRadius: 120,
 
-  desiredVoids: 14,
-  desiredEnergy: 10,
-  voidSpawnRate: 0.25,
-  voidGrowthRate: 0.20,
+  matchEps: 2,
+  orthoBonus: true,
 
-  desiredAgents: 30,
-  addAgentByClick: true,
-  spawnPreset: "Mixed"
+  voidHp: 40,
+  voidLifespanMin: 5,
+  voidLifespanMax: 15,
+  voidRespawnProb: 0.50,
+
+  dailyEnergy: 80,
+  energyMax: 160,
+  carryoverEnergy: true,
+  startEnergy: 100,
+  rewardPerHit: 0.5,
+  rewardOnSolve: 10,
+
+  maxAgeDays: 100,
+  minParentAgeDays: 25,
+
+  keyTTLMax: 12,
+  pReplicateInternal: 0.05,
+  pReplicateShare: 0.20,
+
+  boredomLimit: 300,
+
+  baseDeath: 0.01,
+  kDeath: 0.20,
+
+  ticksPerFrame: 6,
+  maxTicksPerDay: 5000,
+
+  maxMem: 60,
+
+  drawTrails: false,
+  backgroundFade: 28,
+
+  // telemetry controls
+  telemetryBins: 36,
+  telemetryMaxEvents: 2500
 };
 
-const CONFIG_PRESETS = {
-  "Single (1/1/1)": { speed: 5.0, voids: 1, energy: 1, agents: 1, spawn: 0 },
-  "Two (2/1/1)": { speed: 5.0, voids: 1, energy: 1, agents: 2, spawn: 0 },
-  "Four (4/1/1)": { speed: 5.0, voids: 1, energy: 1, agents: 4, spawn: 0 },
-  "5x5 (5/5/5 agents/voids/energy)": { speed: 5.0, voids: 5, energy: 5, agents: 5, spawn: 0 },
-};
-const CONFIG_PRESET_NAMES = Object.keys(CONFIG_PRESETS);
+function clamp(v, lo, hi){ return Math.max(lo, Math.min(hi, v)); }
+function wrap(v, max){ v = v % max; if (v < 0) v += max; return v; }
+function dist2(ax, ay, bx, by){ const dx=ax-bx, dy=ay-by; return dx*dx+dy*dy; }
 
-// ---------- Domains ----------
-const DOMAINS = ["T","F","S","N"];
-const DOMAIN_NAME = { T:"Thinking", F:"Feeling", S:"Sensing", N:"Intuition" };
-const DOMAIN_RGB = {
-  T: [42, 140, 255],
-  F: [255, 75, 75],
-  S: [255, 211, 74],
-  N: [176, 85, 255],
-};
-function domainColor(d, a=255) {
-  const c = DOMAIN_RGB[d] || [200,200,200];
-  return color(c[0], c[1], c[2], a);
+function circDist(a, b, mod=360){
+  let d = Math.abs(a - b) % mod;
+  return Math.min(d, mod - d);
 }
-function clamp(x,a,b){ return Math.max(a, Math.min(b, x)); }
-function randChoice(arr){ return arr[Math.floor(Math.random()*arr.length)]; }
+function matches(a, b, eps){ return circDist(a, b) <= eps; }
 
-// ---------- Pattern helpers ----------
-const P = 7, Pn = P*P;
-function bitsClone(bits){ const b = new Uint8Array(bits.length); b.set(bits); return b; }
-function bitsCount(bits){ let c=0; for(let i=0;i<bits.length;i++) c += bits[i]?1:0; return c; }
-function bitsOverlap(a,b){ let c=0; for(let i=0;i<a.length;i++) c += (a[i] && b[i])?1:0; return c; }
-function bitsExtraOnes(k,t){ let c=0; for(let i=0;i<k.length;i++) if(k[i] && !t[i]) c++; return c; }
-function bitsOrInPlace(dst, src){ for(let i=0;i<dst.length;i++) dst[i] = (dst[i] || src[i]) ? 1 : 0; }
+// signed shortest circular difference in [-180, 180]
+function circSignedDiff(a, b, mod=360){
+  let d = ((a - b) % mod + mod) % mod;
+  if (d > mod/2) d -= mod;
+  return d;
+}
 
-function makeBlob(k) {
-  const bits = new Uint8Array(Pn);
-  let x = Math.floor(Math.random()*P);
-  let y = Math.floor(Math.random()*P);
-  bits[y*P + x] = 1;
-  let placed = 1;
-  const dirs = [[1,0],[-1,0],[0,1],[0,-1]];
-  while(placed < k) {
-    const [dx,dy] = randChoice(dirs);
-    x = clamp(x+dx, 0, P-1);
-    y = clamp(y+dy, 0, P-1);
-    const idx = y*P + x;
-    if(!bits[idx]) { bits[idx]=1; placed++; }
-    if(Math.random() < 0.10) {
-      x = clamp(x + Math.floor((Math.random()*5)-2), 0, P-1);
-      y = clamp(y + Math.floor((Math.random()*5)-2), 0, P-1);
+function rollDice(n, d){
+  let s = 0;
+  for (let i=0;i<n;i++) s += 1 + Math.floor(Math.random()*d);
+  return s;
+}
+function symmetricNoise(n=6, d=5){
+  return rollDice(n,d) - rollDice(n,d);
+}
+function randInt(a,b){ return a + Math.floor(Math.random()*(b-a+1)); }
+
+function sampleVoidVal(){
+  const diceDivide = (maxVal, divisions) => {
+    if (divisions <= 0) return 0;
+    const step = maxVal / divisions;
+    const k = Math.floor(Math.random()*divisions);
+    return Math.floor(k * step);
+  };
+  const noise = (rollDice(4,5) - rollDice(1,5));
+  const val = (
+    diceDivide(360, 2) +
+    diceDivide(180, 2) +
+    diceDivide(90, 2) +
+    diceDivide(45, 3) +
+    diceDivide(15, 3) +
+    noise
+  );
+  return wrap(val, 360);
+}
+function sampleAgentValue(){
+  const step = 360/8;
+  const k = Math.floor(Math.random()*8);
+  return Math.floor(k * step);
+}
+
+function mean(arr){
+  if (!arr.length) return 0;
+  return arr.reduce((a,b)=>a+b,0) / arr.length;
+}
+
+/////////////////////////////
+// 2) Telemetry (high signal)
+/////////////////////////////
+
+let telemetry = null;
+let dayStats = null;
+let dayShareSampleTaken = false;
+
+function snapshotConfig(){
+  return {
+    arenaSize: CFG.arenaSize,
+    initialAgents: CFG.initialAgents,
+    targetVoids: CFG.targetVoids,
+    maxPop: CFG.maxPop,
+    visionRadius: CFG.visionRadius,
+    interactRadius: CFG.interactRadius,
+    blastRadius: CFG.blastRadius,
+    matchEps: CFG.matchEps,
+    orthoBonus: CFG.orthoBonus,
+    voidHp: CFG.voidHp,
+    voidLifespanMin: CFG.voidLifespanMin,
+    voidLifespanMax: CFG.voidLifespanMax,
+    voidRespawnProb: CFG.voidRespawnProb,
+    dailyEnergy: CFG.dailyEnergy,
+    energyMax: CFG.energyMax,
+    carryoverEnergy: CFG.carryoverEnergy,
+    startEnergy: CFG.startEnergy,
+    rewardPerHit: CFG.rewardPerHit,
+    rewardOnSolve: CFG.rewardOnSolve,
+    maxAgeDays: CFG.maxAgeDays,
+    minParentAgeDays: CFG.minParentAgeDays,
+    keyTTLMax: CFG.keyTTLMax,
+    pReplicateInternal: CFG.pReplicateInternal,
+    pReplicateShare: CFG.pReplicateShare,
+    boredomLimit: CFG.boredomLimit,
+    baseDeath: CFG.baseDeath,
+    kDeath: CFG.kDeath,
+    maxMem: CFG.maxMem,
+    telemetryBins: CFG.telemetryBins
+  };
+}
+
+function initTelemetry(){
+  telemetry = {
+    meta: {
+      version: "bcm-sim-p5-telemetry-v1.3-high-signal",
+      startedAtISO: new Date().toISOString()
+    },
+    configInitial: snapshotConfig(),
+    days: [],
+    events: []
+  };
+}
+
+function pushEvent(type, payload){
+  if (!telemetry) return;
+  telemetry.events.push({
+    day: world.day,
+    tick: world.tick,
+    type,
+    payload
+  });
+  if (telemetry.events.length > CFG.telemetryMaxEvents){
+    telemetry.events.splice(0, Math.floor(CFG.telemetryMaxEvents * 0.2));
+  }
+}
+
+function startDayStats(day){
+  dayShareSampleTaken = false;
+  dayStats = {
+    day,
+    ticks: 0,
+
+    popStart: world.agents.length,
+    popEnd: world.agents.length,
+    voidsStart: world.voids.filter(v=>v.state==="active").length,
+    voidsEnd: world.voids.filter(v=>v.state==="active").length,
+
+    actions: { scan:0, share:0, solve:0, gen_solve:0, stockpile:0, sleep:0 },
+
+    births: 0,
+    deaths: { explosion:0, age:0 },
+    voids: { spawned:0, solved:0, exploded:0, hits:0 },
+
+    keys: { added:0, evicted:0, pruned:0, used:0, replicatedInternal:0, replicatedShare:0 },
+
+    genSolve: { attempts:0, successes:0 },
+
+    share: { total:0, withKey:0, neighborsSum:0 },
+
+    // true anomalies only
+    anomalies: {
+      voidMapMismatch: 0,
+      shareHighSaturation: 0,
+      solveLowSaturation: 0,
+      genSolveWasteSuspected: false,
+      genNoiseBiasSuspected: false
+    },
+
+    // cleanup stats (NOT anomalies)
+    cleanup: {
+      voidMemRemovedMissing: 0, // missing > 1 day after lastSeen
+      voidMemRemovedRecent: 0   // missing but lastSeenDay was recent (normal)
+    },
+
+    coverage: null,
+    entropyProxy: null,
+    meanEnergy: null,
+    meanKeysPerAgent: null,
+
+    hist: {
+      voids: new Array(CFG.telemetryBins).fill(0),
+      keys: new Array(CFG.telemetryBins).fill(0),
+      tuning: new Array(CFG.telemetryBins).fill(0)
+    },
+
+    genNoise: { count:0, sumSigned:0, sumAbs:0 }
+  };
+}
+
+function computeCoverage(){
+  const activeVoids = world.voids.filter(v => v.state === "active");
+  if (activeVoids.length === 0) return 1.0;
+
+  let covered = 0;
+  for (const v of activeVoids){
+    let ok = false;
+    for (const a of world.agents){
+      for (const k of a.keys){
+        if (matches(k.val, v.val, CFG.matchEps)){ ok = true; break; }
+      }
+      if (ok) break;
+    }
+    if (ok) covered++;
+  }
+  return covered / activeVoids.length;
+}
+
+function computeEntropyProxy(){
+  let ent = 0;
+  for (const v of world.voids){
+    if (v.state !== "active") continue;
+    ent += v.hp * v.urgency();
+  }
+  return ent;
+}
+
+function fillHistograms(){
+  const bins = CFG.telemetryBins;
+  dayStats.hist.voids.fill(0);
+  dayStats.hist.keys.fill(0);
+  dayStats.hist.tuning.fill(0);
+
+  for (const v of world.voids){
+    if (v.state !== "active") continue;
+    const idx = clamp(Math.floor((v.val/360)*bins), 0, bins-1);
+    dayStats.hist.voids[idx] += 1;
+  }
+
+  for (const a of world.agents){
+    const tidx = clamp(Math.floor((a.agentValue/360)*bins), 0, bins-1);
+    dayStats.hist.tuning[tidx] += 1;
+    for (const k of a.keys){
+      const kidx = clamp(Math.floor((k.val/360)*bins), 0, bins-1);
+      dayStats.hist.keys[kidx] += 1;
     }
   }
-  return bits;
 }
 
-// 2d6 entropy weighting
-function roll2d6(){ return (1+Math.floor(Math.random()*6)) + (1+Math.floor(Math.random()*6)); }
-
-// ---------- Global shapes (keys) ----------
-let SHAPES = [];
-let shapeIdCounter = 1;
-function addShape(domain, bits, rarity, parents=null) {
-  const shape = { id:`K${shapeIdCounter++}`, domain, bits:bitsClone(bits), rarity, createdAt: performance.now(), parents };
-  SHAPES.push(shape);
-  return shape;
-}
-function shapesBy(domain, rarity=null){
-  return SHAPES.filter(s => s.domain===domain && (rarity? s.rarity===rarity : true));
-}
-function initBaseShapes() {
-  SHAPES = []; shapeIdCounter = 1;
-  for(const d of DOMAINS) {
-    for(let i=0;i<9;i++) addShape(d, makeBlob(9+Math.floor(Math.random()*6)), "common");
-    for(let i=0;i<5;i++) addShape(d, makeBlob(16+Math.floor(Math.random()*7)), "rare");
+function computeVoidMapMismatch(){
+  // count active voids missing from map + map entries not present as active voids
+  let missingFromMap = 0;
+  for (const v of world.voids){
+    if (v.state !== "active") continue;
+    const vm = world.voidMap.get(v.id);
+    if (!vm || vm !== v) missingFromMap++;
   }
-}
-function pickShapeByEntropy(domain) {
-  const r = roll2d6();
-  const rareChance = (r<=3 || r>=11) ? 0.9 : (r<=4 || r>=10) ? 0.35 : 0.10;
-  const wantRare = Math.random() < rareChance;
-  const pool = shapesBy(domain, wantRare ? "rare" : "common");
-  if(pool.length) return randChoice(pool);
-  const all = shapesBy(domain);
-  return randChoice(all);
-}
-function getShape(id){ return SHAPES.find(s => s.id===id) || null; }
 
-// ---------- World entities ----------
-let voids = [];
-let energies = [];
-let shards = [];
-let signals = [];
-let solveBursts = [];
-let agents = [];
+  // build a set of active IDs for quick lookup
+  const activeIds = new Set();
+  for (const v of world.voids) if (v.state === "active") activeIds.add(v.id);
 
-let voidIdCounter=1, energyIdCounter=1, shardIdCounter=1, signalIdCounter=1, burstIdCounter=1, agentIdCounter=1;
+  let extraInMap = 0;
+  for (const [id, v] of world.voidMap.entries()){
+    if (!activeIds.has(id)) extraInMap++;
+    else if (!v || v.state !== "active") extraInMap++;
+  }
 
-// Selection
-let selected = { kind:null, id:null };
-
-// Chaos
-let worldChaos = 0.0;
-
-// ---------- Presets ----------
-const PRESETS = {
-  "Double Observer (S+N)": { primary:["S","N"], secondary:["T","F"], extro:0.45, intro:0.55 },
-  "Double Decider (T+F)":  { primary:["T","F"], secondary:["S","N"], extro:0.45, intro:0.55 },
-  "Sensor (S)":            { primary:["S"], secondary:["N","T","F"], extro:0.55, intro:0.45 },
-  "Intuitive (N)":         { primary:["N"], secondary:["S","T","F"], extro:0.55, intro:0.45 },
-  "Thinker (T)":           { primary:["T"], secondary:["F","S","N"], extro:0.55, intro:0.45 },
-  "Feeler (F)":            { primary:["F"], secondary:["T","S","N"], extro:0.55, intro:0.45 },
-  "Extro Gatherer":        { primary:["T","F","S","N"], secondary:[], extro:0.85, intro:0.15 },
-  "Intro Refiner":         { primary:["T","F","S","N"], secondary:[], extro:0.20, intro:0.80 },
-  "Mixed":                 { primary:["T","F","S","N"], secondary:[], extro:0.50, intro:0.50 },
-};
-const SPAWN_PRESETS = Object.keys(PRESETS);
-
-// ---------- Agent “animals” (light mapping) ----------
-function deriveAnimals(agent) {
-  // simple bias: extro -> play/blast; intro -> sleep/consume
-  const play  = clamp(0.10 + 0.90*agent.extro, 0, 1);
-  const sleep = clamp(0.10 + 0.90*agent.intro, 0, 1);
-  const consume = clamp(0.25 + 0.65*agent.intro, 0, 1);
-  const blast   = clamp(0.25 + 0.65*agent.extro, 0, 1);
-  return { play, sleep, consume, blast };
+  return missingFromMap + extraInMap;
 }
 
-function domainCostMultiplier(agent, domain) {
-  if(agent.primary.includes(domain)) return 0.65;
-  if(agent.secondary.includes(domain)) return 1.05;
-  return 1.35;
+function finalizeDayStats(){
+  if (!dayStats) return;
+
+  dayStats.popEnd = world.agents.length;
+  dayStats.voidsEnd = world.voids.filter(v=>v.state==="active").length;
+
+  dayStats.coverage = computeCoverage();
+  dayStats.entropyProxy = computeEntropyProxy();
+  dayStats.meanEnergy = mean(world.agents.map(a => a.energy));
+  dayStats.meanKeysPerAgent = mean(world.agents.map(a => a.keys.length));
+
+  fillHistograms();
+
+  // true anomaly: map/list mismatch
+  dayStats.anomalies.voidMapMismatch = computeVoidMapMismatch();
+
+  if (dayStats.genSolve.attempts >= 200 && dayStats.genSolve.successes === 0){
+    dayStats.anomalies.genSolveWasteSuspected = true;
+  }
+
+  if (dayStats.genNoise.count >= 50){
+    const meanSigned = dayStats.genNoise.sumSigned / dayStats.genNoise.count;
+    const meanAbs = dayStats.genNoise.sumAbs / dayStats.genNoise.count;
+    if (Math.abs(meanSigned) > Math.max(5, meanAbs * 0.25)){
+      dayStats.anomalies.genNoiseBiasSuspected = true;
+    }
+  }
+
+  telemetry.days.push(dayStats);
+  dayStats = null;
 }
 
-// ---------- Meme dynamics (key inventory) ----------
-function keyTTLBase(shape) {
-  // rare keys stick around longer
-  return (shape && shape.rarity==="rare") ? 44 : 30;
-}
-function keyMaxCharges(shape) {
-  // rare keys replicate slower / fewer copies (keeps them rare-ish)
-  return (shape && shape.rarity==="rare") ? 4 : 6;
-}
+function downloadTelemetry(){
+  if (!telemetry) return;
+  telemetry.configCurrent = snapshotConfig();
+  telemetry.meta.downloadedAtISO = new Date().toISOString();
 
-// ---------- Agent model ----------
-function makeAgent(x,y,presetName) {
-  const p = PRESETS[presetName] || PRESETS["Mixed"];
-  const a = {
-    id:`A${agentIdCounter++}`,
-    x,y, vx:0, vy:0,
-    energy: 70 + Math.random()*20,
-    health: 100,
-    preset: presetName,
-    primary:[...p.primary],
-    secondary:[...p.secondary],
-    extro: p.extro,
-    intro: p.intro,
-
-    // behavior
-    state:"WANDER", // HARVEST | SOLVE | INVENT | SLEEP | WANDER
-    target:null,    // {kind,id}
-    boredom:0,
-    lastProgress:0,
-    lastPlayAt: 0,
-
-    // key memes: Map shapeId -> {charges, ttl, uses, lastUsed, source}
-    keys: new Map(),
-    storageLimit: 18,
-
-    // void awareness: Map voidId -> {id, domain, x,y, area, lastSeen, createdAt}
-    voidMem: new Map(),
-    voidMemLimit: 30,
-
-    inventing: null,
+  telemetry.meta.live = {
+    day: world.day,
+    tick: world.tick,
+    pop: world.agents.length,
+    voids: world.voids.filter(v=>v.state==="active").length,
+    coverage: computeCoverage(),
+    entropyProxy: computeEntropyProxy()
   };
 
-  // void memory capacity depends on consume-ish
-  const animals = deriveAnimals(a);
-  a.voidMemLimit = Math.floor(18 + animals.consume*42);
+  const json = JSON.stringify(telemetry, null, 2);
+  const blob = new Blob([json], { type: "application/json" });
+  const url = URL.createObjectURL(blob);
 
-  seedAgentKeys(a);
-  return a;
+  const a = document.createElement("a");
+  a.href = url;
+  a.download = `bcm_telemetry_${new Date().toISOString().replace(/[:.]/g,'-')}.json`;
+  document.body.appendChild(a);
+  a.click();
+  a.remove();
+  URL.revokeObjectURL(url);
 }
 
-function seedAgentKeys(agent) {
-  agent.keys.clear();
-  const animals = deriveAnimals(agent);
+/////////////////////
+// 3) World objects //
+/////////////////////
 
-  const commonCount = Math.floor(8 + agent.extro*12);
-  const rareCount   = Math.floor(2 + agent.intro*5);
+let nextAgentId = 0;
+let nextVoidId = 0;
 
-  const pri = agent.primary.length ? agent.primary : DOMAINS;
-  const sec = agent.secondary.length ? agent.secondary : DOMAINS;
+class VoidObj {
+  constructor(hp){
+    this.id = nextVoidId++;
+    this.x = Math.random()*CFG.arenaSize;
+    this.y = Math.random()*CFG.arenaSize;
+    this.val = sampleVoidVal();
+    this.hpMax = hp;
+    this.hp = hp;
+    this.lifespanMax = randInt(CFG.voidLifespanMin, CFG.voidLifespanMax);
+    this.lifespan = this.lifespanMax;
+    this.ageDays = 0;
+    this.state = "active";
+    this.rewardHit = CFG.rewardPerHit;
+    this.rewardSolve = CFG.rewardOnSolve;
+  }
+  urgency(){
+    return 300.0 / (this.lifespan + 0.1);
+  }
+}
 
-  function addKey(shape, source, charges=1) {
-    if(!shape) return;
-    const old = agent.keys.get(shape.id);
-    if(old) {
-      old.charges = Math.min(keyMaxCharges(shape), old.charges + charges);
-      old.ttl = keyTTLBase(shape);
+class KeyObj {
+  constructor(val, creatorId){
+    this.val = wrap(Math.round(val), 360);
+    this.creatorId = creatorId;
+    this.ttlMax = CFG.keyTTLMax;
+    this.ttl = this.ttlMax;
+    this.uses = 0;
+  }
+}
+
+class Agent {
+  constructor(totalMem, x=null, y=null, parent=null){
+    this.id = nextAgentId++;
+
+    this.x = (x === null) ? Math.random()*CFG.arenaSize : x;
+    this.y = (y === null) ? Math.random()*CFG.arenaSize : y;
+    this.vx = (Math.random()*2 - 1);
+    this.vy = (Math.random()*2 - 1);
+
+    this.alive = true;
+    this.sleeping = false;
+    this.ageDays = 0;
+
+    this.energyMax = CFG.energyMax;
+    this.energy = CFG.startEnergy;
+
+    this.boredom = 0;
+
+    this.totalMem = totalMem;
+    this.keys = [];
+    this.voidMem = []; // {voidId,x,y,val,urgency,lastSeenDay}
+    this.consecutiveFailedScouts = 0;
+
+    if (parent){
+      this.agentValue = wrap(parent.agentValue + randInt(-5,5), 360);
+      this.costs = parent.costs.map(c => Math.max(0.1, c + (Math.random()*0.2 - 0.1)));
+      this.memSplit = clamp(parent.memSplit + (Math.random()*0.10 - 0.05), 0.1, 0.9);
+      this.weights = {};
+      for (const k of Object.keys(parent.weights)){
+        this.weights[k] = parent.weights[k] + (Math.random()*0.4 - 0.2);
+      }
+    } else {
+      this.agentValue = sampleAgentValue();
+      this.costs = [Math.random(), Math.random(), Math.random(), Math.random()];
+      this.memSplit = 0.5;
+      this.weights = {
+        wUrgency: 1.0,
+        wCost: -2.0,
+        wSatShare: -50.0,
+        wSatSolve: 20.0,
+        wHaveKey: 150.0,
+        wScanFail: -5.0
+      };
+    }
+
+    let s = this.costs.reduce((a,b)=>a+b,0);
+    this.costs = this.costs.map(x => x * (8.0 / s));
+    this.costScan = this.costs[0];
+    this.costGen  = this.costs[1];
+    this.costShare= this.costs[2];
+    this.costSolve= this.costs[3];
+
+    this.recomputeCaps();
+
+    for (let i=0;i<5;i++) this.stockpileGenerate(true);
+  }
+
+  recomputeCaps(){
+    this.maxKeys = Math.floor(this.totalMem * this.memSplit);
+    this.maxVoidMem = this.totalMem - this.maxKeys;
+    if (this.maxKeys < 1) this.maxKeys = 1;
+    if (this.maxVoidMem < 1) this.maxVoidMem = 1;
+  }
+
+  memorizeVoid(v, day){
+    const urg = v.urgency();
+
+    for (const m of this.voidMem){
+      if (m.voidId === v.id){
+        m.x = v.x; m.y = v.y;
+        m.val = v.val;
+        m.urgency = urg;
+        m.lastSeenDay = day;
+        return true;
+      }
+    }
+
+    const entry = { voidId: v.id, x:v.x, y:v.y, val:v.val, urgency:urg, lastSeenDay:day };
+
+    if (this.voidMem.length < this.maxVoidMem){
+      this.voidMem.push(entry);
+      return true;
+    }
+
+    this.voidMem.sort((a,b)=>a.urgency - b.urgency);
+    if (urg > this.voidMem[0].urgency){
+      this.voidMem.shift();
+      this.voidMem.push(entry);
+      return true;
+    }
+    return false;
+  }
+
+  addKey(key){
+    if (this.keys.length < this.maxKeys){
+      this.keys.push(key);
+      if (dayStats) dayStats.keys.added++;
       return;
     }
-    if(agent.keys.size >= agent.storageLimit) dropWorstKey(agent);
-    agent.keys.set(shape.id, {
-      charges: Math.min(keyMaxCharges(shape), charges),
-      ttl: keyTTLBase(shape),
-      uses: 0,
-      lastUsed: performance.now(),
-      source: source || "seed"
+
+    // FIX: use world.voidMap + vm.voidId (voidMem has no objRef anymore)
+    let bestIdx = -1;
+    let lowestRetention = Infinity;
+
+    for (let i=0;i<this.keys.length;i++){
+      const k = this.keys[i];
+      let retention = 0;
+      let matchesKnown = false;
+
+      for (const vm of this.voidMem){
+        const v = world.voidMap.get(vm.voidId);
+        if (!v || v.state !== "active") continue;
+
+        const urg = v.urgency();
+
+        if (matches(k.val, v.val, CFG.matchEps)){
+          retention += urg + 1000;
+          matchesKnown = true;
+        } else if (CFG.orthoBonus && k.creatorId === this.id){
+          const v1 = wrap(k.val + 90, 360);
+          const v2 = wrap(k.val - 90, 360);
+          if (matches(v1, v.val, CFG.matchEps) || matches(v2, v.val, CFG.matchEps)){
+            retention += (urg/2) + 500;
+            matchesKnown = true;
+          }
+        }
+      }
+
+      if (!matchesKnown) retention = Math.random()*10;
+      if (retention < lowestRetention){
+        lowestRetention = retention;
+        bestIdx = i;
+      }
+    }
+
+    this.keys.splice(bestIdx, 1);
+    this.keys.push(key);
+
+    if (dayStats){
+      dayStats.keys.added++;
+      dayStats.keys.evicted++;
+    }
+  }
+
+  refreshKey(index){
+    if (index < 0 || index >= this.keys.length) return;
+    const k = this.keys.splice(index, 1)[0];
+    this.keys.push(k);
+  }
+
+  decayKeys(){
+    for (const k of this.keys) k.ttl -= 1;
+    const before = this.keys.length;
+    this.keys = this.keys.filter(k => k.ttl > 0);
+    const pruned = before - this.keys.length;
+    if (dayStats) dayStats.keys.pruned += pruned;
+  }
+
+  stockpileGenerate(free=false){
+    const val = wrap(this.agentValue + symmetricNoise(6,5), 360);
+    this.addKey(new KeyObj(val, this.id));
+
+    if (!free){
+      if (dayStats){
+        const d = circSignedDiff(val, this.agentValue);
+        dayStats.genNoise.count++;
+        dayStats.genNoise.sumSigned += d;
+        dayStats.genNoise.sumAbs += Math.abs(d);
+      }
+      this.energy -= this.costGen;
+      this.boredom = 0;
+    }
+  }
+
+  attemptTargetedGenerate(targetVal, urgency){
+    const attempt = this.annealAttempt(targetVal, urgency);
+    const ok = matches(attempt, targetVal, CFG.matchEps);
+    return { ok, val: ok ? targetVal : attempt };
+  }
+
+  annealAttempt(targetVal, urgency){
+    const fail = this.consecutiveFailedScouts;
+
+    const p = clamp(
+      0.35 * (urgency / 60) + 0.08 * (fail / 10),
+      0, 1
+    );
+
+    let base = this.agentValue;
+    if (this.keys.length > 0 && p > 0.45 && Math.random() < p){
+      base = this.keys[Math.floor(Math.random()*this.keys.length)].val;
+    }
+
+    const k = Math.floor(clamp(p * 3.5, 0, 3));
+    const noise = symmetricNoise(6 + 4*k, 5);
+
+    let attempt = wrap(base + noise, 360);
+    if (CFG.orthoBonus && p > 0.65 && Math.random() < (p - 0.55)){
+      attempt = wrap(attempt + (Math.random() < 0.5 ? 90 : -90), 360);
+    }
+    return attempt;
+  }
+
+  move(){
+    if (this.sleeping || !this.alive) return;
+
+    this.boredom += 1;
+    if (this.boredom > CFG.boredomLimit){
+      this.sleeping = true;
+      if (dayStats) dayStats.actions.sleep++;
+      return;
+    }
+
+    // Clean missing voidIds (stats, not anomaly)
+    this.voidMem = this.voidMem.filter(m => {
+      const v = world.voidMap.get(m.voidId);
+      if (!v || v.state !== "active") {
+        if (dayStats){
+          if ((world.day - m.lastSeenDay) > 1) dayStats.cleanup.voidMemRemovedMissing++;
+          else dayStats.cleanup.voidMemRemovedRecent++;
+        }
+        return false;
+      }
+      return true;
     });
-  }
 
-  // common keys: more copies (they're everywhere)
-  for(let i=0;i<commonCount;i++){
-    const d = (Math.random()<0.70) ? randChoice(pri) : randChoice(sec);
-    const pool = shapesBy(d,"common");
-    addKey(randChoice(pool), "seed-common", 1 + (Math.random()<0.25?1:0));
-  }
+    let target = null;
+    let bestPriority = -Infinity;
 
-  // rare keys: fewer copies
-  for(let i=0;i<rareCount;i++){
-    const d = (Math.random()<0.85) ? randChoice(pri) : randChoice(sec);
-    const pool = shapesBy(d,"rare");
-    addKey(randChoice(pool), "seed-rare", 1);
-  }
-}
+    for (const m of this.voidMem){
+      const v = world.voidMap.get(m.voidId);
+      if (!v || v.state !== "active") continue;
 
-function dropWorstKey(agent) {
-  // remove lowest (uses, charges, recency)
-  let worstId=null, worstScore=1e18;
-  for(const [id,m] of agent.keys.entries()){
-    const sh = getShape(id);
-    const score =
-      (m.uses*2) +
-      (m.charges*1.5) +
-      ((m.lastUsed||0)/1e9);
-    if(score < worstScore) { worstScore=score; worstId=id; }
-  }
-  if(worstId) agent.keys.delete(worstId);
-}
+      m.urgency = v.urgency();
 
-function agentHasUsableKey(agent, shapeId) {
-  const m = agent.keys.get(shapeId);
-  return m && m.charges > 0;
-}
+      let hasKeyBonus = 1.0;
+      for (const k of this.keys){
+        if (matches(k.val, v.val, CFG.matchEps)){ hasKeyBonus = 2.0; break; }
+      }
 
-function agentCopyKey(agent, shapeId, source, costMult=1.0) {
-  const shape = getShape(shapeId);
-  if(!shape) return false;
-
-  const cost = 6.0 * costMult * domainCostMultiplier(agent, shape.domain);
-  if(agent.energy < cost) return false;
-
-  agent.energy -= cost;
-  let m = agent.keys.get(shapeId);
-  if(!m) {
-    if(agent.keys.size >= agent.storageLimit) dropWorstKey(agent);
-    agent.keys.set(shapeId, {
-      charges: 1,
-      ttl: keyTTLBase(shape),
-      uses: 0,
-      lastUsed: performance.now(),
-      source: source || "copy",
-    });
-  } else {
-    // receiving a meme reinforces it
-    m.charges = Math.min(keyMaxCharges(shape), m.charges + 1);
-    m.ttl = keyTTLBase(shape);
-    m.lastUsed = performance.now();
-  }
-  return true;
-}
-
-// ---------- Voids ----------
-function makeVoid(x,y,domain) {
-  const layers = 1 + (Math.random()<0.35?1:0) + (Math.random()<0.15?1:0);
-  const bits = new Uint8Array(Pn);
-
-  for(let i=0;i<layers;i++){
-    const s = pickShapeByEntropy(domain);
-    bitsOrInPlace(bits, s.bits);
-  }
-
-  if(Math.random()<0.30){
-    for(let k=0;k<2+Math.floor(Math.random()*4);k++){
-      bits[Math.floor(Math.random()*Pn)] = 1;
-    }
-  }
-
-  const area = bitsCount(bits);
-  const v = {
-    id:`V${voidIdCounter++}`,
-    x,y, domain,
-    bits,
-    area,
-    area0: area,
-    createdAt: performance.now(),
-    lastTouchedAt: 0,
-    solved: false,
-    severity: 1.0 + Math.random()*0.6,
-  };
-  return v;
-}
-function voidRadiusPx(v) {
-  const base=18, k=3.2;
-  return base + k*Math.sqrt(Math.max(1,v.area));
-}
-
-// ---------- Energy sources ----------
-function makeEnergy(x,y,domain=null) {
-  const d = domain || randChoice(DOMAINS);
-  const s = randChoice(shapesBy(d,"common"));
-  return {
-    id:`E${energyIdCounter++}`,
-    x,y, domain:d,
-    bits: bitsClone(s.bits),
-    amount: 140 + Math.random()*120,
-    radiusPx: 26 + Math.random()*10,
-    createdAt: performance.now(),
-  };
-}
-
-// ---------- Shards ----------
-function makeShard(x,y,shapeId) {
-  const shape = getShape(shapeId);
-  return {
-    id:`S${shardIdCounter++}`,
-    x,y,
-    shapeId,
-    domain: shape ? shape.domain : "T",
-    ttl: 18 + Math.random()*10,
-    createdAt: performance.now(),
-  };
-}
-
-// ---------- Signals (ripples) ----------
-function makeSignal(x,y,domain,payload) {
-  return { id:`R${signalIdCounter++}`, x,y, domain, t:0, ttl:2.2, payload };
-}
-function makeSolveBurst(x,y,domain) {
-  return {
-    id:`B${burstIdCounter++}`,
-    x,y, domain,
-    t:0,
-    ttl:1.4,
-    spin: Math.random()*Math.PI*2,
-  };
-}
-
-// ---------- Matching ----------
-function matchScore(keyBits, targetBits) {
-  const overlap = bitsOverlap(keyBits, targetBits);
-  const area = Math.max(1, bitsCount(targetBits));
-  const extra = bitsExtraOnes(keyBits, targetBits);
-  const penalty = 0.25;
-  return clamp((overlap - penalty*extra)/area, 0, 1);
-}
-
-function agentBestKeyFor(agent, domain, targetBits) {
-  let best=null;
-  for(const [id,m] of agent.keys.entries()){
-    if(m.charges <= 0 && PARAMS.enableMemes) continue;
-    const shape = getShape(id);
-    if(!shape) continue;
-    if(shape.domain !== domain) continue;
-    const s = matchScore(shape.bits, targetBits);
-    if(!best || s > best.score) best = { shape, meta: m, score: s };
-  }
-  return best;
-}
-
-// ---------- Torus movement ----------
-function wrap01(u){ u = u % 1; if(u<0) u += 1; return u; }
-function wrapDelta(d){ if(d>0.5) d -= 1; if(d<-0.5) d += 1; return d; }
-function torusVec(ax,ay,bx,by){
-  const dx = wrapDelta(bx-ax);
-  const dy = wrapDelta(by-ay);
-  return { dx, dy, dist: Math.hypot(dx,dy) };
-}
-
-// ---------- Agent awareness ----------
-function agentRememberVoid(agent, v) {
-  // keep a memory record updated when nearby
-  const entry = agent.voidMem.get(v.id) || {
-    id:v.id, domain:v.domain, x:v.x, y:v.y, area:v.area,
-    createdAt: v.createdAt, lastSeen: performance.now()
-  };
-  entry.domain = v.domain;
-  entry.x = v.x; entry.y = v.y;
-  entry.area = v.area;
-  entry.lastSeen = performance.now();
-  agent.voidMem.set(v.id, entry);
-
-  // prune memory if too big
-  if(agent.voidMem.size > agent.voidMemLimit) {
-    // drop oldest lastSeen
-    let worstId=null, worst=1e18;
-    for(const [id,e] of agent.voidMem.entries()){
-      if(e.lastSeen < worst) { worst = e.lastSeen; worstId = id; }
-    }
-    if(worstId) agent.voidMem.delete(worstId);
-  }
-}
-function agentDecayVoidMemory(agent) {
-  // forget entries not seen recently
-  const now = performance.now();
-  for(const [id,e] of agent.voidMem.entries()){
-    if(now - e.lastSeen > 120_000) agent.voidMem.delete(id);
-  }
-}
-
-// ---------- Play exchange ----------
-function agentTryPlayExchange(a, dt) {
-  if(!PARAMS.enablePlay) return;
-  const animalsA = deriveAnimals(a);
-  const now = performance.now();
-  if(now - a.lastPlayAt < 900) return; // simple cooldown
-
-  // meet radius
-  const meetR = 0.02;
-  // chance scales with play
-  const p = animalsA.play * 0.22;
-
-  if(Math.random() > p * dt * 60) return;
-
-  // find nearest neighbor within meetR
-  let best=null;
-  for(const b of agents) {
-    if(b.id === a.id) continue;
-    const v = torusVec(a.x,a.y,b.x,b.y);
-    if(v.dist < meetR && (!best || v.dist < best.dist)) best = { b, dist:v.dist };
-  }
-  if(!best) return;
-
-  const b = best.b;
-
-  // exchange one void memory (largest area known) and one key (highest uses)
-  function pickMem(agent) {
-    let bestE=null;
-    for(const e of agent.voidMem.values()){
-      // prefer big & not too old
-      const age = (now - e.lastSeen);
-      const score = e.area - 0.00004*age;
-      if(!bestE || score > bestE.score) bestE = { e, score };
-    }
-    return bestE ? bestE.e : null;
-  }
-  function pickKey(agent) {
-    let bestK=null;
-    for(const [id,m] of agent.keys.entries()){
-      const sh = getShape(id);
-      if(!sh) continue;
-      const score = (m.uses*2) + (m.charges*1.2) + (sh.rarity==="rare"? 1.5 : 0);
-      if(!bestK || score > bestK.score) bestK = { id, m, score, sh };
-    }
-    return bestK ? bestK : null;
-  }
-
-  const memA = pickMem(a), memB = pickMem(b);
-  const keyA = pickKey(a), keyB = pickKey(b);
-
-  // swap void awareness (free)
-  if(memA) b.voidMem.set(memA.id, {...memA, lastSeen: performance.now()});
-  if(memB) a.voidMem.set(memB.id, {...memB, lastSeen: performance.now()});
-
-  // swap a key meme (cost energy to copy, but only if receiver doesn’t have it)
-  if(keyA && !b.keys.has(keyA.id)) agentCopyKey(b, keyA.id, "play", 1.0);
-  if(keyB && !a.keys.has(keyB.id)) agentCopyKey(a, keyB.id, "play", 1.0);
-
-  // ripple
-  if(UI.chkSignals.checked) {
-    signals.push(makeSignal(a.x, a.y, "T", { play:true, a:a.id, b:b.id }));
-  }
-  a.lastPlayAt = now;
-  b.lastPlayAt = now;
-}
-
-// ---------- Meme decay + replication ----------
-function agentMemeStep(agent, dt) {
-  if(!PARAMS.enableMemes) return;
-  for(const [id,m] of agent.keys.entries()){
-    const sh = getShape(id);
-    if(!sh) { agent.keys.delete(id); continue; }
-    m.ttl -= dt;
-    if(m.ttl <= 0) {
-      // decay event: lose a charge; reset ttl if still alive
-      m.charges -= 1;
-      if(m.charges <= 0) {
-        agent.keys.delete(id);
-      } else {
-        m.ttl = keyTTLBase(sh);
+      const d = Math.sqrt(dist2(this.x,this.y,v.x,v.y));
+      const priority = (m.urgency * hasKeyBonus) + (500 / (d + 5));
+      if (priority > bestPriority){
+        bestPriority = priority;
+        target = v;
       }
     }
-  }
-}
 
-// ---------- Agent target selection ----------
-function pickAgentTarget(agent) {
-  const low = agent.energy < 22;
-
-  // If low energy: go harvest
-  if(low && energies.length) {
-    let best=null;
-    for(const e of energies){
-      if(e.amount <= 1) continue;
-      const v = torusVec(agent.x,agent.y,e.x,e.y);
-      const bias = agent.primary.includes(e.domain) ? 0.85 : 1.0;
-      const score = v.dist * bias;
-      if(!best || score < best.score) best = { kind:"energy", id:e.id, score };
+    let ax = 0, ay = 0;
+    if (target){
+      const ang = Math.atan2(target.y - this.y, target.x - this.x);
+      ax = Math.cos(ang) * 0.9;
+      ay = Math.sin(ang) * 0.9;
+    } else {
+      ax = (Math.random()*0.6 - 0.3);
+      ay = (Math.random()*0.6 - 0.3);
     }
-    if(best) return { kind:best.kind, id:best.id };
+
+    this.vx = (this.vx + ax) * 0.90;
+    this.vy = (this.vy + ay) * 0.90;
+
+    this.x = wrap(this.x + this.vx, CFG.arenaSize);
+    this.y = wrap(this.y + this.vy, CFG.arenaSize);
   }
 
-  // If boredom high and sleep strong: go SLEEP (internal)
-  const animals = deriveAnimals(agent);
-  if(agent.boredom > 2.2 && animals.sleep > 0.55 && agent.energy > 35) {
-    return { kind:"sleep", id:"SLEEP" };
-  }
+  interact(){
+    if (this.sleeping || !this.alive) return;
 
-  // Prefer voids from memory if consume high (awareness-driven)
-  const preferMem = animals.consume > 0.55 && agent.voidMem.size > 0;
+    const neighbors = [];
+    for (const other of world.agents){
+      if (other.id === this.id || !other.alive || other.sleeping) continue;
+      if (dist2(this.x,this.y,other.x,other.y) <= CFG.interactRadius*CFG.interactRadius) neighbors.push(other);
+    }
 
-  // keep current void target unless very bored
-  if(agent.target && agent.target.kind==="void") {
-    const v = voids.find(x => x.id===agent.target.id && !x.solved);
-    if(v && agent.boredom < 1.4) return agent.target;
-  }
+    for (const m of this.voidMem){
+      const v = world.voidMap.get(m.voidId);
+      if (v && v.state === "active") m.urgency = v.urgency();
+    }
 
-  let best=null;
-  const domainOrder = [
-    ...agent.primary,
-    ...agent.secondary,
-    ...DOMAINS.filter(d => !agent.primary.includes(d) && !agent.secondary.includes(d))
-  ];
+    const candidates = [];
 
-  function scoreVoid(v0) {
-    const vec = torusVec(agent.x,agent.y,v0.x,v0.y);
-    const urgency = 1.0 + 0.06*v0.area*v0.severity;
-    const costBias = domainCostMultiplier(agent, v0.domain);
-    // solvability bonus: do I have any usable key?
-    const bestKey = agentBestKeyFor(agent, v0.domain, v0.bits);
-    const solv = bestKey ? (0.6 + 0.8*bestKey.score) : 0.2;
-    return (vec.dist*0.9 + 0.08) * costBias / (urgency * solv);
-  }
+    for (const m of this.voidMem){
+      const v = world.voidMap.get(m.voidId);
+      if (!v || v.state !== "active") continue;
 
-  if(preferMem) {
-    // choose a remembered void that still exists
-    for(const d of domainOrder) {
-      for(const e of agent.voidMem.values()) {
-        if(e.domain !== d) continue;
-        const v0 = voids.find(v => v.id===e.id && !v.solved);
-        if(!v0) continue;
-        const score = scoreVoid(v0);
-        if(!best || score < best.score) best = { kind:"void", id:v0.id, score };
+      let knownCount = 0;
+      for (const n of neighbors){
+        if (n.voidMem.some(vm => vm.voidId === v.id)) knownCount++;
       }
-      if(best && agent.primary.includes(d)) break;
-    }
-    if(best) return { kind:"void", id:best.id };
-  }
+      const saturation = neighbors.length ? (knownCount / neighbors.length) : 0;
 
-  // otherwise scan actual void list
-  if(voids.length) {
-    for(const d of domainOrder) {
-      for(const v0 of voids) {
-        if(v0.solved) continue;
-        if(v0.domain !== d) continue;
-        const score = scoreVoid(v0);
-        if(!best || score < best.score) best = { kind:"void", id:v0.id, score };
+      let keyIdx = -1;
+      let isOrtho = false;
+      for (let i=0;i<this.keys.length;i++){
+        const k = this.keys[i];
+        if (matches(k.val, v.val, CFG.matchEps)){ keyIdx = i; break; }
+        if (CFG.orthoBonus && k.creatorId === this.id){
+          const v1 = wrap(k.val + 90, 360);
+          const v2 = wrap(k.val - 90, 360);
+          if (matches(v1, v.val, CFG.matchEps) || matches(v2, v.val, CFG.matchEps)){
+            keyIdx = i; isOrtho = true; break;
+          }
+        }
       }
-      if(best && agent.primary.includes(d)) break;
-    }
-    if(best) return { kind:"void", id:best.id };
-  }
+      const hasKey = keyIdx !== -1;
 
-  return null;
-}
+      if (neighbors.length){
+        let shareUtil =
+          (m.urgency * this.weights.wUrgency) +
+          (saturation * this.weights.wSatShare) +
+          (hasKey ? (this.weights.wHaveKey/2) : 0) +
+          (this.costShare * this.weights.wCost);
 
-// ---------- Agent actions ----------
-function removeRandomOverlappingCells(voidBits, keyBits, count) {
-  const overlap = [];
-  for(let i=0;i<Pn;i++) if(voidBits[i] && keyBits[i]) overlap.push(i);
-  if(!overlap.length) return 0;
-  let removed=0;
-  for(let k=0;k<count;k++){
-    if(!overlap.length) break;
-    const idx = Math.floor(Math.random()*overlap.length);
-    const cell = overlap[idx];
-    if(voidBits[cell]) { voidBits[cell]=0; removed++; }
-    overlap.splice(idx,1);
-  }
-  return removed;
-}
+        candidates.push({
+          type:"share",
+          utility:shareUtil,
+          cost:this.costShare,
+          target:neighbors,
+          payload:{ voidObj:v, keyObj: hasKey ? this.keys[keyIdx] : null, saturation }
+        });
+      }
 
-function agentHarvest(agent, e, dt) {
-  const best = agentBestKeyFor(agent, e.domain, e.bits);
-  const score = best ? best.score : 0.0;
-  const base = 18.0;
-  const gain = base * (0.25 + 0.75*score);
-  const take = Math.min(e.amount, gain*dt);
+      const d = Math.sqrt(dist2(this.x,this.y,v.x,v.y));
+      if (d < CFG.interactRadius){
+        if (hasKey){
+          const extra = isOrtho ? 50 : 0;
+          const cost = this.costSolve + extra;
+          let workUtil =
+            (m.urgency * this.weights.wUrgency) +
+            (saturation * this.weights.wSatSolve) +
+            this.weights.wHaveKey +
+            (cost * this.weights.wCost);
 
-  agent.energy = Math.min(100, agent.energy + take*0.55);
-  e.amount -= take;
+          candidates.push({
+            type:"solve",
+            utility:workUtil,
+            cost:cost,
+            target:v,
+            payload:{ keyIdx, saturation }
+          });
+        } else {
+          const cost = this.costGen + this.costSolve;
+          let util =
+            (m.urgency * this.weights.wUrgency) +
+            (saturation * this.weights.wSatSolve) +
+            (cost * this.weights.wCost);
 
-  // harvesting reduces boredom
-  agent.boredom = Math.max(0, agent.boredom - 0.6*dt);
-
-  // reinforce the meme used to harvest (optional)
-  if(best) {
-    best.meta.uses++;
-    best.meta.lastUsed = performance.now();
-    if(PARAMS.enableMemes) {
-      // small chance to recharge a charge by “practice”
-      if(Math.random() < 0.06*dt*60) {
-        const cap = keyMaxCharges(best.shape);
-        best.meta.charges = Math.min(cap, best.meta.charges + 1);
-        best.meta.ttl = keyTTLBase(best.shape);
+          candidates.push({
+            type:"gen_solve",
+            utility:util,
+            cost:cost,
+            target:v,
+            payload:{ saturation }
+          });
+        }
       }
     }
-  }
-}
 
-function agentSleep(agent, dt) {
-  agent.state = "SLEEP";
-  // spend a little energy to internally refresh/prune/recharge key memes
-  const cost = 6.5 * dt;
-  if(agent.energy < cost) { agent.boredom += 0.15*dt; return; }
-  agent.energy -= cost;
-
-  // pick top 2 keys by uses and recharge them
-  const keysArr = [];
-  for(const [id,m] of agent.keys.entries()){
-    const sh = getShape(id);
-    if(!sh) continue;
-    keysArr.push({id,m,sh,score:(m.uses*2)+(m.charges*1.2)+(sh.rarity==="rare"?1.2:0)});
-  }
-  keysArr.sort((a,b)=>b.score-a.score);
-  const top = keysArr.slice(0,2);
-  for(const k of top) {
-    const cap = keyMaxCharges(k.sh);
-    if(PARAMS.enableMemes) {
-      k.m.charges = Math.min(cap, k.m.charges + 1);
-      k.m.ttl = keyTTLBase(k.sh);
+    const visible = world.voids.filter(v => v.state==="active" && dist2(this.x,this.y,v.x,v.y) <= CFG.visionRadius*CFG.visionRadius);
+    const unknown = visible.find(v => !this.voidMem.some(m => m.voidId === v.id));
+    if (unknown){
+      const scanBase = 20 + (this.consecutiveFailedScouts * this.weights.wScanFail);
+      const scanUtil = scanBase + (this.costScan * this.weights.wCost);
+      candidates.push({ type:"scan", utility:scanUtil, cost:this.costScan, target:unknown, payload:{} });
     }
-  }
 
-  // prune if too many
-  while(agent.keys.size > agent.storageLimit) dropWorstKey(agent);
+    if (this.keys.length < this.maxKeys){
+      const stockUtil = 5 + (this.costGen * this.weights.wCost);
+      candidates.push({ type:"stockpile", utility:stockUtil, cost:this.costGen, target:null, payload:{} });
+    }
 
-  agent.boredom = Math.max(0, agent.boredom - 1.0*dt);
-}
+    candidates.sort((a,b)=>b.utility - a.utility);
+    const best = candidates[0];
 
-function agentInvent(agent, v, dt) {
-  // Build candidate key by copying void cells
-  if(!agent.inventing || agent.inventing.voidId !== v.id) {
-    agent.inventing = {
-      voidId: v.id, domain: v.domain,
-      candidateBits: new Uint8Array(Pn),
-      steps: 0,
-      startedAt: performance.now(),
-    };
-  }
+    if (!best || best.utility <= 0){
+      if (this.energy < 10 && !this.sleeping){
+        this.sleeping = true;
+        if (dayStats) dayStats.actions.sleep++;
+      }
+      return;
+    }
+    if (this.energy < best.cost){
+      if (this.energy < 10 && !this.sleeping){
+        this.sleeping = true;
+        if (dayStats) dayStats.actions.sleep++;
+      }
+      return;
+    }
 
-  const inv = agent.inventing;
-  const costMult = domainCostMultiplier(agent, v.domain);
-  const cost = 14.0*costMult;
-  if(agent.energy < cost*dt) { agent.boredom += 0.25*dt; return; }
-  agent.energy -= cost*dt;
+    if (dayStats && dayStats.actions[best.type] !== undefined) dayStats.actions[best.type]++;
 
-  const wantPerSec = 6.5;
-  const adds = Math.max(1, Math.floor(wantPerSec*dt));
-  let added = 0;
-  for(let k=0;k<adds;k++){
-    let tries=0;
-    while(tries++<40) {
-      const idx = Math.floor(Math.random()*Pn);
-      if(v.bits[idx] && !inv.candidateBits[idx]) {
-        inv.candidateBits[idx] = 1;
-        added++;
+    if (dayStats && (best.type === "share" || best.type === "solve")){
+      const sat = best.payload.saturation ?? null;
+      const nei = (best.type === "share") ? (best.target?.length ?? 0) : neighbors.length;
+      const MIN_NEI = 3;
+      if (sat !== null && nei >= MIN_NEI){
+        if (best.type === "share" && sat >= 0.75) dayStats.anomalies.shareHighSaturation++;
+        if (best.type === "solve" && sat <= 0.15) dayStats.anomalies.solveLowSaturation++;
+      }
+    }
+
+    this.energy -= best.cost;
+    this.boredom = 0;
+
+    switch(best.type){
+      case "share":
+        this.doShare(best.target, best.payload.voidObj, best.payload.keyObj, best.payload.saturation);
         break;
-      }
+      case "solve":
+        this.doSolve(best.target, best.payload.keyIdx);
+        break;
+      case "gen_solve":
+        this.doGenSolve(best.target);
+        break;
+      case "scan":
+        this.doScan(best.target);
+        break;
+      case "stockpile":
+        this.stockpileGenerate(false);
+        break;
     }
   }
-  inv.steps += added;
 
-  const score = matchScore(inv.candidateBits, v.bits);
-  agent.boredom = Math.max(0, agent.boredom - 0.35*dt);
+  doScan(v){
+    this.memorizeVoid(v, world.day);
+    this.consecutiveFailedScouts = 0;
+  }
 
-  if(score >= 0.62 && bitsCount(inv.candidateBits) >= 10) {
-    const newShape = addShape(v.domain, inv.candidateBits, "rare", { fromVoid:v.id });
-    agentCopyKey(agent, newShape.id, "invent", 0.4);
-
-    shards.push(makeShard(v.x + random(-0.012,0.012), v.y + random(-0.012,0.012), newShape.id));
-    if(Math.random()<0.55) shards.push(makeShard(v.x + random(-0.012,0.012), v.y + random(-0.012,0.012), newShape.id));
-
-    if(UI.chkSignals.checked) {
-      signals.push(makeSignal(v.x, v.y, v.domain, {
-        voidId: v.id, keyId: newShape.id,
-        before: v.area, after: v.area, delta: 0,
-        domain: v.domain, invented: true
-      }));
+  doShare(neighbors, v, keyObj, saturation){
+    if (dayStats){
+      dayStats.share.total++;
+      dayStats.share.neighborsSum += neighbors.length;
+      if (keyObj) dayStats.share.withKey++;
     }
 
-    agent.inventing = null;
-    agent.boredom = Math.max(0, agent.boredom - 0.8);
-  }
-}
+    if (!dayShareSampleTaken && dayStats){
+      dayShareSampleTaken = true;
+      pushEvent("share_sample", { senderId:this.id, voidId:v.id, voidVal:v.val, neighbors:neighbors.length, withKey:!!keyObj, saturation });
+    }
 
-function agentWorkOnVoid(agent, v, dt) {
-  const best = agentBestKeyFor(agent, v.domain, v.bits);
-  const score = best ? best.score : 0.0;
-
-  const animals = deriveAnimals(agent);
-  const canInvent = animals.consume > 0.55 && agent.energy > 18;
-  const stuck = !best || score < 0.10;
-
-  if(stuck && canInvent) {
-    agent.state = "INVENT";
-    agentInvent(agent, v, dt);
-    return;
-  }
-
-  agent.state = "SOLVE";
-
-  // Energy cost
-  const costMult = domainCostMultiplier(agent, v.domain);
-  const baseCost = 10.0;
-  const cost = baseCost * (1.15 - 0.6*score) * costMult;
-  if(agent.energy < cost*dt) { agent.boredom += 0.25*dt; return; }
-  agent.energy -= cost*dt;
-
-  // Meme fatigue: using a key consumes a charge
-  if(PARAMS.enableMemes && best) {
-    best.meta.charges -= 1;
-    if(best.meta.charges < 0) best.meta.charges = 0;
-  }
-
-  // Progress
-  const workRate = 14.0;
-  const eff = (0.25 + 0.75*score);
-  // Allow fractional work at normal frame rates.
-  const workBudget = workRate*eff*dt;
-  let removedTarget = Math.floor(workBudget);
-  if(Math.random() < (workBudget - removedTarget)) removedTarget += 1;
-
-  const before = v.area;
-  const removed = best ? removeRandomOverlappingCells(v.bits, best.shape.bits, removedTarget) : 0;
-  v.area = bitsCount(v.bits);
-  const after = v.area;
-  const delta = before - after;
-
-  // Immediate satisfaction energy, but still net-negative overall
-  agent.energy = Math.min(100, agent.energy + delta*0.18);
-
-  if(delta > 0) {
-    agent.boredom = Math.max(0, agent.boredom - 0.9*dt);
-    agent.lastProgress = delta;
-  } else {
-    agent.boredom += 0.35*dt;
-    agent.lastProgress = 0;
-  }
-
-  v.lastTouchedAt = performance.now();
-
-  // key usage stats + meme replication if successful
-  if(best) {
-    best.meta.uses++;
-    best.meta.lastUsed = performance.now();
-    best.meta.ttl = keyTTLBase(best.shape);
-
-    if(PARAMS.enableMemes && delta > 0) {
-      // replication chance grows with impact, but capped
-      const cap = keyMaxCharges(best.shape);
-      const repChance = clamp(0.10 + 0.02*delta + 0.10*score, 0.0, 0.55);
-      if(Math.random() < repChance) {
-        best.meta.charges = Math.min(cap, best.meta.charges + 1);
+    for (const n of neighbors){
+      n.memorizeVoid(v, world.day);
+      if (keyObj && Math.random() < CFG.pReplicateShare){
+        const k2 = new KeyObj(keyObj.val, keyObj.creatorId);
+        n.addKey(k2);
+        if (dayStats) dayStats.keys.replicatedShare++;
       }
     }
   }
 
-  // Ripple broadcast
-  if(UI.chkSignals.checked && best) {
-    signals.push(makeSignal(v.x, v.y, v.domain, {
-      voidId: v.id, keyId: best.shape.id,
-      before, after, delta, domain: v.domain
-    }));
-  }
+  doSolve(v, keyIdx){
+    if (v.state !== "active") return;
 
-  // Shard drop
-  if(delta > 0 && best && Math.random() < 0.10) {
-    shards.push(makeShard(v.x + random(-0.01,0.01), v.y + random(-0.01,0.01), best.shape.id));
-  }
+    v.hp -= 1;
+    if (dayStats) dayStats.voids.hits++;
 
-  // Solve condition
-  const solveThresh = 5;
-  const solveMatch = 0.90;
-  
-  if(v.area <= solveThresh || (best && best.score >= solveMatch && removed > 0)) {
-    v.solved = true;
-    solveBursts.push(makeSolveBurst(v.x, v.y, v.domain));
+    this.energy = clamp(this.energy + v.rewardHit, 0, this.energyMax);
 
-    // reward: energy payout scales with age & initial area (lottery-ish)
-    if(PARAMS.enableRewards) {
-      const ageSec = (performance.now() - v.createdAt)/1000;
-      const reward = clamp(60 + 1.2*ageSec + 3.0*v.area0, 80, 520);
-      const e = makeEnergy(v.x, v.y, v.domain);
-      e.amount = reward;
-      energies.push(e);
-    }
+    const key = this.keys[keyIdx];
+    if (key){
+      key.ttl = key.ttlMax;
+      key.uses += 1;
+      this.refreshKey(keyIdx);
+      if (dayStats) dayStats.keys.used++;
 
-    // also shard(s)
-    if(best && Math.random() < 0.8) shards.push(makeShard(v.x, v.y, best.shape.id));
-    if(Math.random() < 0.35) agent.energy = Math.min(100, agent.energy + 8);
-  }
-}
-
-// ---------- Listening & shards ----------
-function agentListenToSignals(agent, dt) {
-  if(!UI.chkSignals.checked) return;
-  const animals = deriveAnimals(agent);
-  const listenRadius = 0.12 + 0.10*animals.consume;
-  const copyChance = 0.06 + 0.16*animals.play;
-
-  for(const s of signals) {
-    if(!s.payload || !s.payload.keyId) continue;
-    const v = torusVec(agent.x,agent.y,s.x,s.y);
-    if(v.dist > listenRadius) continue;
-
-    const helped = (s.payload.delta || 0) > 0 || s.payload.invented;
-    if(!helped) continue;
-
-    if(Math.random() < copyChance * dt * 30) {
-      agentCopyKey(agent, s.payload.keyId, "signal", 1.0);
-    }
-  }
-}
-
-function agentPickupShards(agent) {
-  const pickR = 0.02;
-  for(let i=shards.length-1;i>=0;i--){
-    const sh = shards[i];
-    const v = torusVec(agent.x,agent.y,sh.x,sh.y);
-    if(v.dist < pickR) {
-      const ok = agentCopyKey(agent, sh.shapeId, "shard", 0.35);
-      shards.splice(i,1);
-      if(ok) agent.energy = Math.min(100, agent.energy + 2);
-    }
-  }
-}
-
-// ---------- World dynamics ----------
-function maintainCounts() {
-  while(voids.filter(v=>!v.solved).length < PARAMS.desiredVoids) {
-    voids.push(makeVoid(Math.random(), Math.random(), randChoice(DOMAINS)));
-  }
-  while(energies.length < PARAMS.desiredEnergy) {
-    energies.push(makeEnergy(Math.random(), Math.random(), randChoice(DOMAINS)));
-  }
-}
-
-function worldStep(dt) {
-  energies = energies.filter(e => e.amount > 1);
-
-  for(let i=shards.length-1;i>=0;i--){
-    shards[i].ttl -= dt;
-    if(shards[i].ttl <= 0) shards.splice(i,1);
-  }
-
-  for(let i=signals.length-1;i>=0;i--){
-    signals[i].t += dt;
-    if(signals[i].t >= signals[i].ttl) signals.splice(i,1);
-  }
-  for(let i=solveBursts.length-1;i>=0;i--){
-    solveBursts[i].t += dt;
-    if(solveBursts[i].t >= solveBursts[i].ttl) solveBursts.splice(i,1);
-  }
-
-  // compute total area for chaos
-  let totalArea=0, activeVoids=0;
-  for(const v of voids){ if(!v.solved){ activeVoids++; totalArea += v.area; } }
-
-  const pressure = PARAMS.entropyPressure;
-  worldChaos += dt * (0.015 * pressure * (totalArea/120.0) - 0.010);
-  worldChaos = Math.max(0, worldChaos);
-
-  // growth + mutation
-  const gRate = PARAMS.voidGrowthRate * (1.0 + 0.45*worldChaos);
-  const mutateChance = 0.02 * pressure * (0.6 + worldChaos); // rare
-
-  for(const v of voids) {
-    if(v.solved) continue;
-
-    // basic regrowth
-    if(Math.random() < gRate*dt) {
-      for(let k=0;k<1+(Math.random()<0.25?1:0);k++){
-        v.bits[Math.floor(Math.random()*Pn)] = 1;
+      if (Math.random() < CFG.pReplicateInternal){
+        this.addKey(new KeyObj(key.val, key.creatorId));
+        if (dayStats) dayStats.keys.replicatedInternal++;
       }
-      v.area = bitsCount(v.bits);
     }
 
-    // occasional mutation: add a small blob of same domain (harder over time)
-    if(Math.random() < mutateChance*dt) {
-      const blob = makeBlob(4 + Math.floor(Math.random()*4));
-      bitsOrInPlace(v.bits, blob);
-      v.area = bitsCount(v.bits);
+    if (v.hp <= 0){
+      v.state = "solved";
+      this.energy = clamp(this.energy + v.rewardSolve, 0, this.energyMax);
+      if (dayStats) dayStats.voids.solved++;
+      pushEvent("void_solved", { voidId:v.id, voidVal:v.val, solverId:this.id });
     }
   }
 
-  // spawn new void
-  const spawn = PARAMS.voidSpawnRate * (1.0 + 0.8*worldChaos);
-  if(Math.random() < spawn*dt) {
-    voids.push(makeVoid(Math.random(), Math.random(), randChoice(DOMAINS)));
-  }
+  doGenSolve(v){
+    if (v.state !== "active") return;
 
-  maintainCounts();
-}
+    if (dayStats) dayStats.genSolve.attempts++;
 
-// ---------- Agents step ----------
-function agentsStep(dt) {
-  const chaosDrain = 0.35 * PARAMS.entropyPressure * worldChaos;
-  const chaosHealth = 0.18 * PARAMS.entropyPressure * worldChaos;
+    const urg = v.urgency();
+    const attempt = this.attemptTargetedGenerate(v.val, urg);
+    if (attempt.ok){
+      if (dayStats) dayStats.genSolve.successes++;
 
-  for(let i=agents.length-1;i>=0;i--){
-    const a = agents[i];
+      v.hp -= 1;
+      if (dayStats) dayStats.voids.hits++;
 
-    // chaos drains
-    a.energy -= chaosDrain*dt;
-    a.energy = clamp(a.energy, 0, 100);
-    if(a.energy <= 0.2) a.health -= chaosHealth*dt*18;
+      this.addKey(new KeyObj(attempt.val, this.id));
+      this.energy = clamp(this.energy + v.rewardHit, 0, this.energyMax);
 
-    if(a.health <= 0) {
-      agents.splice(i,1);
-      if(selected.kind==="agent" && selected.id===a.id) selected = {kind:null,id:null};
-      continue;
-    }
-
-    // meme decay
-    agentMemeStep(a, dt);
-
-    // awareness update: remember nearby voids
-    const senseR = 0.06;
-    for(const v of voids){
-      if(v.solved) continue;
-      const dv = torusVec(a.x,a.y,v.x,v.y);
-      if(dv.dist < senseR) agentRememberVoid(a, v);
-    }
-    agentDecayVoidMemory(a);
-
-    // listen/pickup/play
-    agentListenToSignals(a, dt);
-    agentPickupShards(a);
-    agentTryPlayExchange(a, dt);
-
-    // pick target
-    if(!a.target || a.boredom > 2.5 || a.state==="WANDER") {
-      a.target = pickAgentTarget(a);
-    }
-
-    // movement / action
-    let tx=null, ty=null, targetObj=null;
-
-    if(a.target && a.target.kind==="void") {
-      targetObj = voids.find(v => v.id===a.target.id && !v.solved) || null;
-      if(targetObj) { tx=targetObj.x; ty=targetObj.y; }
-      else a.target=null;
-    } else if(a.target && a.target.kind==="energy") {
-      targetObj = energies.find(e => e.id===a.target.id) || null;
-      if(targetObj) { tx=targetObj.x; ty=targetObj.y; }
-      else a.target=null;
-    } else if(a.target && a.target.kind==="sleep") {
-      // sleep is internal, no movement target
-      tx=null; ty=null;
-      agentSleep(a, dt);
-    }
-
-    if(a.target && a.target.kind==="sleep") {
-      // already handled
-    } else if(tx === null) {
-      a.state="WANDER";
-      const jitter = 0.35;
-      a.vx += random(-jitter,jitter)*dt;
-      a.vy += random(-jitter,jitter)*dt;
-      a.boredom += 0.04*dt;
+      if (v.hp <= 0){
+        v.state = "solved";
+        this.energy = clamp(this.energy + v.rewardSolve, 0, this.energyMax);
+        if (dayStats) dayStats.voids.solved++;
+        pushEvent("void_solved", { voidId:v.id, voidVal:v.val, solverId:this.id, via:"gen_solve" });
+      }
     } else {
-      const v = torusVec(a.x,a.y,tx,ty);
-      const steer = 1.7;
-      a.vx += (v.dx/(v.dist+1e-6))*steer*dt;
-      a.vy += (v.dy/(v.dist+1e-6))*steer*dt;
+      this.consecutiveFailedScouts = Math.min(30, this.consecutiveFailedScouts + 2);
+    }
+  }
 
-      const arrive = 0.03;
-      if(v.dist < arrive) {
-        if(a.target.kind==="energy" && targetObj) { a.state="HARVEST"; agentHarvest(a, targetObj, dt); }
-        if(a.target.kind==="void" && targetObj)   { agentWorkOnVoid(a, targetObj, dt); }
-      } else {
-        a.boredom += 0.05*dt;
+  startNewDay(){
+    this.sleeping = false;
+    this.boredom = 0;
+    this.ageDays += 1;
+    this.consecutiveFailedScouts = Math.max(0, this.consecutiveFailedScouts - 1);
+
+    if (CFG.carryoverEnergy){
+      this.energy = clamp(this.energy + CFG.dailyEnergy, 0, this.energyMax);
+    } else {
+      this.energy = CFG.dailyEnergy;
+    }
+
+    if (this.ageDays >= CFG.maxAgeDays){
+      this.alive = false;
+      if (dayStats) dayStats.deaths.age++;
+      pushEvent("agent_died", { agentId:this.id, cause:"age", ageDays:this.ageDays });
+    }
+  }
+}
+
+//////////////////////////////
+// 4) World state + stepping //
+//////////////////////////////
+
+const world = {
+  day: 0,
+  tick: 0,
+  agents: [],
+  voids: [],
+  voidMap: new Map(),
+  explosions: [],
+  paused: false
+};
+
+function initWorld(){
+  world.day = 0;
+  world.tick = 0;
+  world.agents = [];
+  world.voids = [];
+  world.voidMap = new Map();
+  world.explosions = [];
+  nextAgentId = 0;
+  nextVoidId = 0;
+
+  initTelemetry();
+
+  for (let i=0;i<CFG.initialAgents;i++){
+    world.agents.push(new Agent(CFG.maxMem));
+  }
+  for (let i=0;i<CFG.targetVoids;i++){
+    const v = new VoidObj(CFG.voidHp);
+    world.voids.push(v);
+    world.voidMap.set(v.id, v);
+  }
+
+  pushEvent("init_world", { agents: world.agents.length, voids: world.agents.length });
+
+  startDayStats(0);
+}
+
+function stepTick(){
+  world.tick++;
+  if (dayStats) { dayStats.ticks++; }
+
+  let activeCount = 0;
+  for (const a of world.agents){
+    if (!a.alive || a.sleeping) continue;
+    a.move();
+    a.interact();
+    activeCount++;
+  }
+
+  if (activeCount === 0 || world.tick >= CFG.maxTicksPerDay){
+    endDay();
+  }
+}
+
+function endDay(){
+  const exploded = [];
+  for (const v of world.voids){
+    if (v.state !== "active") continue;
+    v.lifespan -= 1;
+    v.ageDays += 1;
+    if (v.lifespan <= 0){
+      v.state = "exploded";
+      exploded.push(v);
+      world.explosions.push({ x:v.x, y:v.y, age: 0 });
+
+      if (dayStats) dayStats.voids.exploded++;
+      pushEvent("void_exploded", { voidId:v.id, voidVal:v.val, x:v.x, y:v.y });
+    }
+  }
+
+  if (exploded.length){
+    for (const v of exploded){
+      for (const a of world.agents){
+        if (!a.alive) continue;
+        const d = Math.sqrt(dist2(a.x,a.y,v.x,v.y));
+        if (d > CFG.blastRadius) continue;
+        const t = 1.0 - (d / CFG.blastRadius);
+        const pDeath = clamp(CFG.baseDeath + CFG.kDeath * t, 0, 1);
+        if (Math.random() < pDeath){
+          a.alive = false;
+          if (dayStats) dayStats.deaths.explosion++;
+          pushEvent("agent_died", { agentId:a.id, cause:"explosion", voidId:v.id, dist:d, pDeath });
+        }
       }
     }
-
-    // speed/friction
-    const maxSpd = 0.18;
-    const spd = Math.hypot(a.vx,a.vy);
-    if(spd > maxSpd) { a.vx *= maxSpd/spd; a.vy *= maxSpd/spd; }
-    a.vx *= Math.pow(0.50, dt);
-    a.vy *= Math.pow(0.50, dt);
-
-    a.x = wrap01(a.x + a.vx*dt);
-    a.y = wrap01(a.y + a.vy*dt);
-
-    a.boredom = clamp(a.boredom, 0, 5);
   }
-}
 
-// ---------- Rendering ----------
-function drawPatternStamp(bits, x, y, sizePx, domain, alpha=200) {
-  const cell = sizePx / P;
-  noStroke();
-  fill(domainColor(domain, alpha));
-  for(let j=0;j<P;j++){
-    for(let i=0;i<P;i++){
-      if(!bits[j*P+i]) continue;
-      rect(x + i*cell, y + j*cell, cell*0.92, cell*0.92, 2);
+  // remove non-active voids (and keep map in sync)
+  if (world.voids.length){
+    for (const v of world.voids){
+      if (v.state !== "active") world.voidMap.delete(v.id);
     }
   }
-}
+  world.voids = world.voids.filter(v => v.state === "active");
 
-function drawVoid(v) {
-  if(v.solved) return;
-  const px = v.x*canvasW, py = v.y*canvasH;
-  const r = voidRadiusPx(v);
-  const col = domainColor(v.domain,255);
-
-  noStroke();
-  fill(red(col), green(col), blue(col), 40);
-  circle(px, py, r*2.1);
-
-  stroke(red(col), green(col), blue(col), 200);
-  strokeWeight(2.2);
-  fill(0,0,0,60);
-  circle(px, py, r*2);
-
-  noStroke();
-  fill(red(col), green(col), blue(col), 18);
-  circle(px, py, r*1.6);
-
-  if(UI.chkPatterns.checked) {
-    const stamp = Math.min(70, r*1.15);
-    drawPatternStamp(v.bits, px-stamp/2, py-stamp/2, stamp, v.domain, 185);
+  for (const a of world.agents){
+    if (!a.alive) continue;
+    a.decayKeys();
   }
 
-  noStroke();
-  fill(240,240,255,210);
-  textSize(11);
-  textAlign(CENTER,CENTER);
-  const ageSec = ((performance.now()-v.createdAt)/1000).toFixed(0);
-  text(`${v.id} ${v.domain}  a:${v.area}  age:${ageSec}s`, px, py + r + 12);
+  world.agents = world.agents.filter(a => a.alive);
 
-  if(selected.kind==="void" && selected.id===v.id) {
-    noFill();
-    stroke(255,230,120,240);
+  for (const a of world.agents){
+    a.startNewDay();
+  }
+  world.agents = world.agents.filter(a => a.alive);
+
+  if (world.agents.length < CFG.maxPop){
+    const parents = world.agents.filter(a => a.ageDays >= CFG.minParentAgeDays);
+    if (parents.length && Math.random() < 0.60){
+      const p = parents[Math.floor(Math.random()*parents.length)];
+      const child = new Agent(CFG.maxMem, p.x, p.y, p);
+      world.agents.push(child);
+      if (dayStats) dayStats.births++;
+      pushEvent("agent_born", { childId: child.id, parentId: p.id });
+    } else if (world.agents.length < 5){
+      const child = new Agent(CFG.maxMem);
+      world.agents.push(child);
+      if (dayStats) dayStats.births++;
+      pushEvent("agent_born", { childId: child.id, parentId: null });
+    }
+  }
+
+  // Improved respawn: keep trying until target, bounded attempts
+  // (prevents “stuck at 5 voids” but keeps randomness)
+  const needed = Math.max(0, CFG.targetVoids - world.voids.length);
+  const maxAttempts = Math.max(needed * 6, 30);
+  let attempts = 0;
+
+  while (world.voids.length < CFG.targetVoids && attempts < maxAttempts){
+    attempts++;
+    if (Math.random() < CFG.voidRespawnProb){
+      const v = new VoidObj(CFG.voidHp);
+      world.voids.push(v);
+      world.voidMap.set(v.id, v);
+      if (dayStats) dayStats.voids.spawned++;
+    }
+  }
+
+  finalizeDayStats();
+
+  world.day += 1;
+  world.tick = 0;
+  startDayStats(world.day);
+}
+
+/////////////////////////
+// 5) p5.js rendering   //
+/////////////////////////
+
+let ui;
+let sliders = {};
+let btnPause, btnReset, btnHud, btnDownload;
+let showHud = true;
+
+function setup(){
+  createCanvas(window.innerWidth, window.innerHeight);
+  colorMode(HSB, 360, 100, 100, 1);
+  noStroke();
+  initUI();
+  initWorld();
+  background(220, 35, 8);
+}
+
+function windowResized(){
+  resizeCanvas(window.innerWidth, window.innerHeight);
+}
+
+function draw(){
+  if (!CFG.drawTrails){
+    fill(220, 35, 8, CFG.backgroundFade/255);
+    rect(0,0,width,height);
+  }
+
+  if (!world.paused){
+    for (let i=0;i<CFG.ticksPerFrame;i++){
+      stepTick();
+    }
+  }
+
+  for (const e of world.explosions) e.age += 1;
+  world.explosions = world.explosions.filter(e => e.age < 25);
+
+  for (const v of world.voids){
+    const px = map(v.x, 0, CFG.arenaSize, 0, width);
+    const py = map(v.y, 0, CFG.arenaSize, 0, height);
+    const hue = v.val;
+    const urg = v.urgency();
+    const bright = clamp(30 + urg/2, 30, 100);
+    stroke(hue, 80, bright, 0.9);
     strokeWeight(2);
-    circle(px, py, r*2.4);
-  }
-}
-
-function drawEnergy(e) {
-  const px=e.x*canvasW, py=e.y*canvasH;
-  const t = (performance.now()-e.createdAt)/1000;
-  const pulse = 0.75 + 0.25*Math.sin(t*2.1);
-  const r = e.radiusPx*pulse;
-
-  noStroke();
-  fill(80,255,140,20);
-  circle(px,py,r*2.4);
-  fill(80,255,140,55);
-  circle(px,py,r*2.0);
-
-  stroke(80,255,140,190);
-  strokeWeight(1.8);
-  fill(0,0,0,35);
-  circle(px,py,r*1.5);
-
-  if(UI.chkPatterns.checked) {
-    const stamp = Math.min(58, r*1.0);
-    drawPatternStamp(e.bits, px-stamp/2, py-stamp/2, stamp, e.domain, 140);
-  }
-
-  const frac = clamp(e.amount/220.0, 0, 1);
-  noStroke();
-  fill(12,14,18,170);
-  rect(px-22, py+r+8, 44, 6, 3);
-  fill(80,255,140,220);
-  rect(px-22, py+r+8, 44*frac, 6, 3);
-}
-
-function drawShard(sh) {
-  const px=sh.x*canvasW, py=sh.y*canvasH;
-  const col = domainColor(sh.domain,255);
-  push();
-  translate(px,py);
-  rotate(Math.PI/4);
-  noStroke();
-  fill(red(col), green(col), blue(col), 210);
-  rectMode(CENTER);
-  rect(0,0,10,10,2);
-  pop();
-}
-
-function drawSignal(sig) {
-  // if play marker, use white-ish
-  const play = sig.payload && sig.payload.play;
-  const col = play ? color(230,230,255,255) : domainColor(sig.domain,255);
-  const a = 1 - (sig.t/sig.ttl);
-  const px=sig.x*canvasW, py=sig.y*canvasH;
-  const r = (sig.t/sig.ttl)*160;
-
-  noFill();
-  stroke(red(col), green(col), blue(col), 160*a);
-  strokeWeight(2);
-  circle(px,py,r);
-
-  if(sig.payload && sig.payload.invented) {
-    stroke(red(col), green(col), blue(col), 220*a);
-    strokeWeight(3.2);
-    circle(px,py,r*0.55);
-  }
-}
-
-function drawSolveBurst(b) {
-  const px=b.x*canvasW, py=b.y*canvasH;
-  const p = clamp(b.t / b.ttl, 0, 1);
-  const ease = 1 - Math.pow(1 - p, 2);
-  const col = domainColor(b.domain,255);
-  const a = 1 - p;
-  const r = 18 + 90*ease;
-
-  push();
-  blendMode(ADD);
-
-  noFill();
-  stroke(red(col), green(col), blue(col), 210*a);
-  strokeWeight(2.2);
-  circle(px,py,r*2.0);
-  strokeWeight(1.2);
-  circle(px,py,r*1.45);
-
-  const rayCount = 12;
-  const rayLen = 10 + 50*ease;
-  stroke(red(col), green(col), blue(col), 170*a);
-  strokeWeight(1.4);
-  for(let i=0;i<rayCount;i++){
-    const ang = b.spin + i*(TWO_PI/rayCount);
-    const inner = r*0.4;
-    const outer = r*0.4 + rayLen;
-    line(px + Math.cos(ang)*inner, py + Math.sin(ang)*inner,
-         px + Math.cos(ang)*outer, py + Math.sin(ang)*outer);
-  }
-
-  noStroke();
-  fill(red(col), green(col), blue(col), 150*a);
-  circle(px,py,14 + 18*(1-p));
-
-  pop();
-}
-
-function agentBodyColors(a) {
-  const d0 = a.primary.length ? a.primary[0] : "T";
-  const d1 = a.primary.length>1 ? a.primary[1] : null;
-  return { d0, d1 };
-}
-
-function drawAgent(a) {
-  const px=a.x*canvasW, py=a.y*canvasH;
-  const {d0,d1} = agentBodyColors(a);
-
-  noStroke();
-  fill(230,232,242,180);
-  circle(px,py,12);
-
-  stroke(domainColor(d0,255));
-  strokeWeight(2.4);
-  noFill();
-  circle(px,py,14);
-
-  if(d1) {
+    line(px-6, py-6, px+6, py+6);
+    line(px-6, py+6, px+6, py-6);
     noStroke();
-    fill(domainColor(d1,235));
-    circle(px+6, py-6, 5.5);
   }
 
-  const ef = clamp(a.energy/100, 0, 1);
+  noStroke();
+  for (const e of world.explosions){
+    const px = map(e.x, 0, CFG.arenaSize, 0, width);
+    const py = map(e.y, 0, CFG.arenaSize, 0, height);
+    const a = 0.35 * (1 - e.age/25);
+    fill(0, 90, 90, a);
+    const r = map(e.age, 0, 25, 10, map(CFG.blastRadius,0,CFG.arenaSize,0,Math.min(width,height)));
+    circle(px, py, r*2);
+  }
+
+  for (const a of world.agents){
+    const px = map(a.x, 0, CFG.arenaSize, 0, width);
+    const py = map(a.y, 0, CFG.arenaSize, 0, height);
+
+    let maxUrg = 0;
+    for (const m of a.voidMem) maxUrg = Math.max(maxUrg, m.urgency || 0);
+    const t = clamp(maxUrg / 100.0, 0, 1);
+    const hue = lerpHue(220, 0, t);
+    const alpha = a.sleeping ? 0.25 : 0.75;
+    const sat = a.sleeping ? 10 : 70;
+    const bri = a.sleeping ? 70 : 90;
+
+    fill(hue, sat, bri, alpha);
+    circle(px, py, a.sleeping ? 7 : 9);
+  }
+
+  if (showHud){
+    drawHUD();
+  }
+
+  applyUI();
+}
+
+function lerpHue(h1, h2, t){
+  return h1 + (h2 - h1)*t;
+}
+
+function drawHUD(){
+  const pop = world.agents.length;
+  const voids = world.voids.length;
+  const active = world.agents.filter(a => a.alive && !a.sleeping).length;
+
+  let ent = computeEntropyProxy();
+  let cov = computeCoverage();
+
+  fill(0, 0, 100, 0.85);
+  rect(width-360, 10, 350, 150, 10);
+
+  fill(220, 20, 10, 1);
+  textSize(12);
+  textAlign(LEFT, TOP);
+
+  const an = dayStats ? dayStats.anomalies : null;
+  const cl = dayStats ? dayStats.cleanup : null;
+
+  const anLine = an
+    ? `Anom: mapMis=${an.voidMapMismatch} shareHiSat=${an.shareHighSaturation} solveLoSat=${an.solveLowSaturation} genWaste=${an.genSolveWasteSuspected?1:0}`
+    : "Anom: (n/a)";
+
+  const clLine = cl
+    ? `Cleanup: memMissing=${cl.voidMemRemovedMissing} memRecent=${cl.voidMemRemovedRecent}`
+    : "Cleanup: (n/a)";
+
+  text(
+    `Day: ${world.day}   Tick: ${world.tick}\n` +
+    `Pop: ${pop}   Active: ${active}\n` +
+    `Voids: ${voids}   Entropy~: ${ent.toFixed(0)}\n` +
+    `Coverage: ${(cov*100).toFixed(1)}%\n` +
+    `${anLine}\n` +
+    `${clLine}\n` +
+    `Telemetry days: ${telemetry ? telemetry.days.length : 0}  events: ${telemetry ? telemetry.events.length : 0}`,
+    width-350, 18
+  );
+
+  const bins = CFG.telemetryBins;
+  const vb = new Array(bins).fill(0);
+  const kb = new Array(bins).fill(0);
+
+  for (const v of world.voids){
+    const idx = Math.floor((v.val/360)*bins);
+    vb[clamp(idx,0,bins-1)]++;
+  }
+  for (const a of world.agents){
+    for (const k of a.keys){
+      const idx = Math.floor((k.val/360)*bins);
+      kb[clamp(idx,0,bins-1)]++;
+    }
+  }
+
+  const x0 = width-350, y0 = 140, w = 330, h = 18;
+  const maxV = Math.max(1, ...vb);
+  const maxK = Math.max(1, ...kb);
+
+  for (let i=0;i<bins;i++){
+    const x = x0 + (i/bins)*w;
+    const bw = w/bins;
+    const hh = (vb[i]/maxV)*h;
+    fill(i*(360/bins), 70, 90, 0.55);
+    rect(x, y0 + (h-hh), bw, hh);
+  }
+  stroke(120, 10, 95, 0.8);
+  strokeWeight(1);
   noFill();
-  stroke(80,255,140,120);
-  strokeWeight(2);
-  arc(px,py,18,18,-HALF_PI, -HALF_PI + TWO_PI*ef);
-
-  if(UI.chkLinks.checked && a.target) {
-    let tx=null, ty=null;
-    if(a.target.kind==="void") {
-      const v = voids.find(v => v.id===a.target.id && !v.solved);
-      if(v) { tx=v.x*canvasW; ty=v.y*canvasH; }
-    } else if(a.target.kind==="energy") {
-      const e = energies.find(e => e.id===a.target.id);
-      if(e) { tx=e.x*canvasW; ty=e.y*canvasH; }
-    }
-    if(tx!==null) {
-      stroke(200,210,255,90);
-      strokeWeight(1.2);
-      line(px,py,tx,ty);
-    }
+  beginShape();
+  for (let i=0;i<bins;i++){
+    const x = x0 + (i+0.5)/bins*w;
+    const yy = y0 + h - (kb[i]/maxK)*h;
+    vertex(x, yy);
   }
-
-  if(selected.kind==="agent" && selected.id===a.id) {
-    noFill();
-    stroke(255,230,120,240);
-    strokeWeight(2);
-    circle(px,py,22);
-  }
+  endShape();
+  noStroke();
 }
 
-// ---------- Inspector preview drawing ----------
-function drawPreviewCanvas(canvasEl, bits, domain) {
-  const ctx = canvasEl.getContext("2d");
-  const w=canvasEl.width, h=canvasEl.height;
-  ctx.clearRect(0,0,w,h);
-  ctx.fillStyle="#0c1017";
-  ctx.fillRect(0,0,w,h);
+/////////////////////////
+// 6) UI controls       //
+/////////////////////////
 
-  const pad=10;
-  const size=Math.min(w,h)-pad*2;
-  const cell=size/P;
+function initUI(){
+  ui = select("#ui");
+  ui.html("");
 
-  const rgb = DOMAIN_RGB[domain] || [220,220,220];
+  const mkSlider = (name, label, min, max, value, step=1) => {
+    const row = createDiv("").addClass("row").parent(ui);
+    createElement("label", label).parent(row);
+    const s = createSlider(min, max, value, step).parent(row);
+    s.style("width", "200px");
+    const v = createSpan(String(value)).addClass("val mono").parent(row);
+    sliders[name] = { s, v, label };
+  };
 
-  ctx.strokeStyle="rgba(255,255,255,0.06)";
-  ctx.lineWidth=1;
-  for(let i=0;i<=P;i++){
-    const x=pad+i*cell;
-    ctx.beginPath(); ctx.moveTo(x,pad); ctx.lineTo(x,pad+size); ctx.stroke();
-    const y=pad+i*cell;
-    ctx.beginPath(); ctx.moveTo(pad,y); ctx.lineTo(pad+size,y); ctx.stroke();
-  }
+  mkSlider("ticksPerFrame", "Speed (ticks/frame)", 1, 40, CFG.ticksPerFrame, 1);
+  mkSlider("targetVoids", "Target voids", 5, 100, CFG.targetVoids, 1);
+  mkSlider("voidHp", "Void HP", 1, 120, CFG.voidHp, 1);
+  mkSlider("maxPop", "Max population", 10, 500, CFG.maxPop, 10);
+  mkSlider("maxMem", "Memory (keys+voids)", 10, 200, CFG.maxMem, 5);
+  mkSlider("keyTTLMax", "Key TTL (days)", 2, 40, CFG.keyTTLMax, 1);
+  mkSlider("matchEps", "Match ε (deg)", 0, 10, CFG.matchEps, 1);
+  mkSlider("blastRadius", "Blast radius", 40, 260, CFG.blastRadius, 5);
+  mkSlider("kDeath", "Blast lethality", 0.00, 0.60, CFG.kDeath, 0.01);
 
-  ctx.fillStyle=`rgba(${rgb[0]},${rgb[1]},${rgb[2]},0.85)`;
-  for(let j=0;j<P;j++){
-    for(let i=0;i<P;i++){
-      const idx=j*P+i;
-      if(!bits || !bits[idx]) continue;
-      ctx.fillRect(pad+i*cell+1, pad+j*cell+1, cell-2, cell-2);
-    }
-  }
-
-  ctx.strokeStyle=`rgba(${rgb[0]},${rgb[1]},${rgb[2]},0.9)`;
-  ctx.lineWidth=2;
-  ctx.strokeRect(pad-1, pad-1, size+2, size+2);
-}
-
-// ---------- Mouse selection ----------
-function findNearestAgent(u,v) {
-  let best=null;
-  for(const a of agents){
-    const vv=torusVec(u,v,a.x,a.y);
-    if(!best || vv.dist<best.dist) best={obj:a, dist:vv.dist};
-  }
-  return best;
-}
-function findNearestVoid(u,v) {
-  let best=null;
-  for(const vo of voids){
-    if(vo.solved) continue;
-    const vv=torusVec(u,v,vo.x,vo.y);
-    if(!best || vv.dist<best.dist) best={obj:vo, dist:vv.dist};
-  }
-  return best;
-}
-function deleteSelected() {
-  if(!selected.kind) return;
-  if(selected.kind==="agent") agents = agents.filter(a => a.id!==selected.id);
-  if(selected.kind==="void") voids = voids.filter(v => v.id!==selected.id);
-  selected = {kind:null,id:null};
-  refreshSelectionUI();
-}
-function mousePressed() {
-  if(mouseX<0 || mouseX>=canvasW || mouseY<0 || mouseY>=canvasH) return;
-  const u=mouseX/canvasW, v=mouseY/canvasH;
-  const nearA=findNearestAgent(u,v);
-  const nearV=findNearestVoid(u,v);
-
-  const pxThresh=14;
-  const dApx=nearA ? nearA.dist*Math.min(canvasW,canvasH) : 1e9;
-  const dVpx=nearV ? nearV.dist*Math.min(canvasW,canvasH) : 1e9;
-  const shift = keyIsDown(SHIFT);
-
-  if(nearA && dApx<pxThresh && (!nearV || dApx<=dVpx)) {
-    selected={kind:"agent",id:nearA.obj.id};
-    if(shift) deleteSelected();
-    refreshSelectionUI();
-    return;
-  }
-
-  if(nearV) {
-    const rpx=voidRadiusPx(nearV.obj);
-    if(dVpx<rpx) {
-      selected={kind:"void",id:nearV.obj.id};
-      if(shift) deleteSelected();
-      refreshSelectionUI();
-      return;
-    }
-  }
-
-  if(UI.chkAddAgent.checked) {
-    addAgentAt(u,v,UI.spawnPreset.value);
-    refreshSelectionUI();
-  } else {
-    selected={kind:null,id:null};
-    refreshSelectionUI();
-  }
-}
-
-// ---------- UI wiring ----------
-function hookUI() {
-  UI.pauseBtn=document.getElementById("pauseBtn");
-  UI.resetBtn=document.getElementById("resetBtn");
-  UI.configPreset=document.getElementById("configPreset");
-  UI.btnApplyPreset=document.getElementById("btnApplyPreset");
-
-  UI.sSpeed=document.getElementById("sSpeed");
-  UI.sEntropy=document.getElementById("sEntropy");
-  UI.chkSignals=document.getElementById("chkSignals");
-  UI.chkPatterns=document.getElementById("chkPatterns");
-  UI.chkLinks=document.getElementById("chkLinks");
-
-  UI.chkMemes=document.getElementById("chkMemes");
-  UI.chkPlay=document.getElementById("chkPlay");
-  UI.chkRewards=document.getElementById("chkRewards");
-
-  UI.sVoids=document.getElementById("sVoids");
-  UI.sEnergy=document.getElementById("sEnergy");
-  UI.sSpawn=document.getElementById("sSpawn");
-  UI.sGrow=document.getElementById("sGrow");
-  UI.btnAddVoid=document.getElementById("btnAddVoid");
-  UI.btnAddEnergy=document.getElementById("btnAddEnergy");
-
-  UI.sAgents=document.getElementById("sAgents");
-  UI.spawnPreset=document.getElementById("spawnPreset");
-  UI.chkAddAgent=document.getElementById("chkAddAgent");
-  UI.btnAdd10=document.getElementById("btnAdd10");
-  UI.btnClearSel=document.getElementById("btnClearSel");
-
-  UI.selHeader=document.getElementById("selHeader");
-  UI.voidPreview=document.getElementById("voidPreview");
-  UI.keyPreview=document.getElementById("keyPreview");
-  UI.voidInfo=document.getElementById("voidInfo");
-  UI.keyInfo=document.getElementById("keyInfo");
-  UI.selDetails=document.getElementById("selDetails");
-
-  UI.btnDeleteSel=document.getElementById("btnDeleteSel");
-  UI.btnGiveEnergy=document.getElementById("btnGiveEnergy");
-
-  UI.configPreset.innerHTML="";
-  for(const name of CONFIG_PRESET_NAMES){
-    const opt=document.createElement("option");
-    opt.value=name; opt.textContent=name;
-    UI.configPreset.appendChild(opt);
-  }
-  UI.configPreset.value=CONFIG_PRESET_NAMES[0];
-
-  UI.spawnPreset.innerHTML="";
-  for(const name of SPAWN_PRESETS){
-    const opt=document.createElement("option");
-    opt.value=name; opt.textContent=name;
-    UI.spawnPreset.appendChild(opt);
-  }
-  UI.spawnPreset.value="Mixed";
-
-  function refreshLabels() {
-    document.getElementById("lblSpeed").textContent=parseFloat(UI.sSpeed.value).toFixed(2);
-    document.getElementById("lblEnt").textContent=parseFloat(UI.sEntropy.value).toFixed(2);
-    document.getElementById("lblVoids").textContent=parseInt(UI.sVoids.value);
-    document.getElementById("lblEnergy").textContent=parseInt(UI.sEnergy.value);
-    document.getElementById("lblSpawn").textContent=parseFloat(UI.sSpawn.value).toFixed(2);
-    document.getElementById("lblGrow").textContent=parseFloat(UI.sGrow.value).toFixed(2);
-    document.getElementById("lblAgents").textContent=parseInt(UI.sAgents.value);
-  }
-  refreshLabels();
-
-  function syncParams() {
-    PARAMS.speed=parseFloat(UI.sSpeed.value);
-    PARAMS.entropyPressure=parseFloat(UI.sEntropy.value);
-    PARAMS.showSignals=UI.chkSignals.checked;
-    PARAMS.showPatterns=UI.chkPatterns.checked;
-    PARAMS.showLinks=UI.chkLinks.checked;
-
-    PARAMS.enableMemes=UI.chkMemes.checked;
-    PARAMS.enablePlay=UI.chkPlay.checked;
-    PARAMS.enableRewards=UI.chkRewards.checked;
-
-    PARAMS.desiredVoids=parseInt(UI.sVoids.value);
-    PARAMS.desiredEnergy=parseInt(UI.sEnergy.value);
-    PARAMS.voidSpawnRate=parseFloat(UI.sSpawn.value);
-    PARAMS.voidGrowthRate=parseFloat(UI.sGrow.value);
-
-    PARAMS.desiredAgents=parseInt(UI.sAgents.value);
-    PARAMS.addAgentByClick=UI.chkAddAgent.checked;
-    PARAMS.spawnPreset=UI.spawnPreset.value;
-  }
-
-  function applyConfigPreset(name) {
-    const p = CONFIG_PRESETS[name];
-    if(!p) return;
-    UI.sSpeed.value = String(p.speed);
-    UI.sVoids.value = p.voids;
-    UI.sEnergy.value = p.energy;
-    UI.sAgents.value = p.agents;
-    if(p.spawn !== undefined) UI.sSpawn.value = p.spawn;
-    if(p.grow !== undefined) UI.sGrow.value = p.grow;
-    refreshLabels();
-    syncParams();
-    resetWorld();
-  }
-
-  ["input","change"].forEach(evt => {
-    [
-      UI.sSpeed, UI.sEntropy, UI.chkSignals, UI.chkPatterns, UI.chkLinks,
-      UI.chkMemes, UI.chkPlay, UI.chkRewards,
-      UI.sVoids, UI.sEnergy, UI.sSpawn, UI.sGrow,
-      UI.sAgents, UI.spawnPreset, UI.chkAddAgent
-    ].forEach(el => el.addEventListener(evt, () => { refreshLabels(); syncParams(); }));
+  const btnRow = createDiv("").addClass("btns").parent(ui);
+  btnPause = createButton("Pause").parent(btnRow).mousePressed(() => {
+    world.paused = !world.paused;
+    btnPause.html(world.paused ? "Resume" : "Pause");
+  });
+  btnReset = createButton("Reset").parent(btnRow).mousePressed(() => {
+    initWorld();
+  });
+  btnHud = createButton("Toggle HUD").parent(btnRow).mousePressed(() => {
+    showHud = !showHud;
+  });
+  btnDownload = createButton("Download Telemetry").parent(btnRow).mousePressed(() => {
+    downloadTelemetry();
   });
 
-  UI.pauseBtn.addEventListener("click", () => togglePause());
-  UI.resetBtn.addEventListener("click", () => resetWorld());
-  UI.btnApplyPreset.addEventListener("click", () => applyConfigPreset(UI.configPreset.value));
-
-  UI.btnAddVoid.addEventListener("click", () => voids.push(makeVoid(Math.random(), Math.random(), randChoice(DOMAINS))));
-  UI.btnAddEnergy.addEventListener("click", () => energies.push(makeEnergy(Math.random(), Math.random(), randChoice(DOMAINS))));
-
-  UI.btnAdd10.addEventListener("click", () => {
-    for(let i=0;i<10;i++){
-      const preset = randChoice(SPAWN_PRESETS.filter(p=>p!=="Mixed")) || "Mixed";
-      addAgentAt(Math.random(), Math.random(), preset);
-    }
-    UI.sAgents.value = agents.length;
-    refreshLabels(); syncParams();
-  });
-
-  UI.btnClearSel.addEventListener("click", () => { selected={kind:null,id:null}; refreshSelectionUI(); });
-  UI.btnDeleteSel.addEventListener("click", () => deleteSelected());
-  UI.btnGiveEnergy.addEventListener("click", () => {
-    if(selected.kind==="agent") {
-      const a = agents.find(x=>x.id===selected.id);
-      if(a) a.energy = Math.min(100, a.energy+20);
-    }
-    refreshSelectionUI();
-  });
-
-  window.addEventListener("keydown", (e) => {
-    if(e.code==="Space") { togglePause(); e.preventDefault(); }
-    if(e.key.toLowerCase()==="d") deleteSelected();
-    if(e.key.toLowerCase()==="r") resetWorld();
-  });
-
-  syncParams();
+  createDiv(`<div class="hint">
+    <b>Telemetry (high-signal)</b><br/>
+    • Per-day: coverage, entropy proxy, action counts, void/keys lifecycle, gen-solve success, histograms.<br/>
+    • Sparse events only: solves/explosions/births/deaths + 1 share sample/day.<br/>
+    • Cleanup: void memory pruning is tracked as cleanup (not anomaly).<br/>
+    <span class="mono">Download Telemetry</span> exports JSON for offline debugging.
+  </div>`).parent(ui);
 }
 
-function togglePause() {
-  paused = !paused;
-  UI.pauseBtn.textContent = paused ? "Resume" : "Pause";
-  lastT = performance.now();
-}
+function applyUI(){
+  const get = (k) => sliders[k].s.value();
 
-function addAgentAt(u,v,presetName){
-  const preset = presetName || "Mixed";
-  agents.push(makeAgent(u,v,preset));
-  selected = { kind:"agent", id: agents[agents.length-1].id };
-}
+  CFG.ticksPerFrame = Number(get("ticksPerFrame"));
+  CFG.targetVoids = Number(get("targetVoids"));
+  CFG.voidHp = Number(get("voidHp"));
+  CFG.maxPop = Number(get("maxPop"));
+  CFG.maxMem = Number(get("maxMem"));
+  CFG.keyTTLMax = Number(get("keyTTLMax"));
+  CFG.matchEps = Number(get("matchEps"));
+  CFG.blastRadius = Number(get("blastRadius"));
+  CFG.kDeath = Number(get("kDeath"));
 
-// ---------- Reset ----------
-function resetWorld() {
-  initBaseShapes();
-
-  voids=[]; energies=[]; shards=[]; signals=[]; solveBursts=[]; agents=[];
-  selected={kind:null,id:null};
-  worldChaos=0;
-
-  for(let i=0;i<PARAMS.desiredVoids;i++) voids.push(makeVoid(Math.random(), Math.random(), randChoice(DOMAINS)));
-  for(let i=0;i<PARAMS.desiredEnergy;i++) energies.push(makeEnergy(Math.random(), Math.random(), randChoice(DOMAINS)));
-
-  for(let i=0;i<PARAMS.desiredAgents;i++){
-    const preset = (PARAMS.spawnPreset==="Mixed")
-      ? randChoice(["Double Observer (S+N)","Double Decider (T+F)","Sensor (S)","Intuitive (N)","Thinker (T)","Feeler (F)","Extro Gatherer","Intro Refiner"])
-      : PARAMS.spawnPreset;
-    agents.push(makeAgent(Math.random(), Math.random(), preset));
+  for (const k of Object.keys(sliders)){
+    sliders[k].v.html(String(sliders[k].s.value()));
   }
 
-  UI.sAgents.value = agents.length;
-  UI.sVoids.value = PARAMS.desiredVoids;
-  UI.sEnergy.value = PARAMS.desiredEnergy;
-  refreshSelectionUI();
-  lastT = performance.now();
-}
-
-// ---------- Selection UI ----------
-function refreshSelectionUI() {
-  drawPreviewCanvas(UI.voidPreview, new Uint8Array(Pn), "T");
-  drawPreviewCanvas(UI.keyPreview, new Uint8Array(Pn), "T");
-  UI.voidInfo.textContent="—";
-  UI.keyInfo.textContent="—";
-
-  if(!selected.kind) {
-    UI.selHeader.textContent="None";
-    UI.selDetails.innerHTML="—";
-    return;
-  }
-
-  if(selected.kind==="agent") {
-    const a = agents.find(x=>x.id===selected.id);
-    if(!a) { selected={kind:null,id:null}; refreshSelectionUI(); return; }
-
-    UI.selHeader.innerHTML = `<b>Agent</b> <span class="mono">${a.id}</span> (${a.preset})`;
-
-    let tv=null;
-    if(a.target && a.target.kind==="void") tv = voids.find(v=>v.id===a.target.id && !v.solved) || null;
-
-    let best=null;
-    if(tv) best = agentBestKeyFor(a, tv.domain, tv.bits);
-
-    if(tv) {
-      drawPreviewCanvas(UI.voidPreview, tv.bits, tv.domain);
-      const ageSec = ((performance.now()-tv.createdAt)/1000).toFixed(0);
-      UI.voidInfo.innerHTML = `<b>${tv.id}</b> ${DOMAIN_NAME[tv.domain]} (${tv.domain})<br/>Area: <b>${tv.area}</b> | Age: ${ageSec}s | Sev: ${tv.severity.toFixed(2)}`;
-    } else {
-      UI.voidInfo.textContent="No current void target.";
+  for (const a of world.agents){
+    if (a.totalMem !== CFG.maxMem){
+      a.totalMem = CFG.maxMem;
+      a.recomputeCaps();
     }
-
-    if(best) {
-      drawPreviewCanvas(UI.keyPreview, best.shape.bits, best.shape.domain);
-      const charges = best.meta ? best.meta.charges : 0;
-      UI.keyInfo.innerHTML =
-        `<b>${best.shape.id}</b> ${DOMAIN_NAME[best.shape.domain]} (${best.shape.domain})<br/>Match: <b>${(best.score*100).toFixed(1)}%</b> | Rarity: ${best.shape.rarity} | Charges: <b>${charges}</b>`;
-    } else {
-      UI.keyInfo.textContent="No matching usable key for current target.";
+    for (const key of a.keys){
+      key.ttlMax = CFG.keyTTLMax;
+      key.ttl = Math.min(key.ttl, key.ttlMax);
     }
-
-    const animals = deriveAnimals(a);
-    const pri = a.primary.map(d=>`<span class="badge" style="border-color: rgba(${DOMAIN_RGB[d].join(",")},1)">${d}</span>`).join("");
-    const sec = a.secondary.length ? a.secondary.map(d=>`<span class="badge">${d}</span>`).join("") : `<span class="badge">—</span>`;
-
-    // keys top
-    const keysArr = [];
-    for(const [id,m] of a.keys.entries()) {
-      const sh = getShape(id);
-      if(!sh) continue;
-      keysArr.push({id,sh,m,score:(m.uses*2)+(m.charges*1.2)+(sh.rarity==="rare"?1.2:0)});
-    }
-    keysArr.sort((A,B)=>B.score-A.score);
-    const keyLines = keysArr.slice(0,8).map(k => {
-      const d=k.sh.domain;
-      return `• <span class="mono">${k.id}</span> <span class="badge" style="border-color: rgba(${DOMAIN_RGB[d].join(",")},1)">${d}</span> ${k.sh.rarity}
-              <span class="tiny">(chg:${k.m.charges}, ttl:${k.m.ttl.toFixed(0)}s, uses:${k.m.uses})</span>`;
-    }).join("<br/>") || "—";
-
-    // void memory top
-    const memArr = Array.from(a.voidMem.values());
-    memArr.sort((A,B)=>B.area-A.area);
-    const memLines = memArr.slice(0,8).map(e => {
-      const age = ((performance.now()-e.lastSeen)/1000).toFixed(0);
-      const c = DOMAIN_RGB[e.domain];
-      return `• <span class="mono">${e.id}</span> <span class="badge" style="border-color: rgba(${c[0]},${c[1]},${c[2]},1)">${e.domain}</span>
-              area:${e.area} <span class="tiny">(seen ${age}s ago)</span>`;
-    }).join("<br/>") || "—";
-
-    UI.selDetails.innerHTML = `
-      <div><b>Energy</b>: ${a.energy.toFixed(1)} | <b>Health</b>: ${a.health.toFixed(1)} | <b>State</b>: ${a.state}</div>
-      <div><b>Target</b>: ${a.target ? `${a.target.kind}:${a.target.id}` : "none"} | <b>Boredom</b>: ${a.boredom.toFixed(2)}</div>
-      <div style="margin-top:6px"><b>Primary</b>: ${pri}</div>
-      <div style="margin-top:6px"><b>Secondary</b>: ${sec}</div>
-      <div style="margin-top:6px"><b>Animals</b> (approx): Consume ${animals.consume.toFixed(2)} | Play ${animals.play.toFixed(2)} | Sleep ${animals.sleep.toFixed(2)} | Blast ${animals.blast.toFixed(2)}</div>
-      <div style="margin-top:6px"><b>Void memory</b> (${a.voidMem.size}/${a.voidMemLimit})</div>
-      <div class="mono tiny" style="margin-top:4px">${memLines}</div>
-      <div style="margin-top:8px"><b>Key memes</b> (${a.keys.size}/${a.storageLimit})</div>
-      <div class="mono tiny" style="margin-top:4px">${keyLines}</div>
-    `;
-    return;
-  }
-
-  if(selected.kind==="void") {
-    const v = voids.find(x=>x.id===selected.id);
-    if(!v) { selected={kind:null,id:null}; refreshSelectionUI(); return; }
-
-    UI.selHeader.innerHTML = `<b>Void</b> <span class="mono">${v.id}</span> (${DOMAIN_NAME[v.domain]} / ${v.domain})`;
-    drawPreviewCanvas(UI.voidPreview, v.bits, v.domain);
-
-    const ageSec = ((performance.now()-v.createdAt)/1000).toFixed(0);
-    UI.voidInfo.innerHTML = `<b>${v.id}</b> ${DOMAIN_NAME[v.domain]} (${v.domain})<br/>Area: <b>${v.area}</b> | Init: ${v.area0} | Age: ${ageSec}s | Sev: ${v.severity.toFixed(2)}`;
-
-    // best global fit
-    let bestGlobal=null;
-    for(const sh of shapesBy(v.domain)) {
-      const s = matchScore(sh.bits, v.bits);
-      if(!bestGlobal || s>bestGlobal.score) bestGlobal={shape:sh, score:s};
-    }
-    if(bestGlobal) {
-      drawPreviewCanvas(UI.keyPreview, bestGlobal.shape.bits, bestGlobal.shape.domain);
-      UI.keyInfo.innerHTML = `<b>${bestGlobal.shape.id}</b> (${bestGlobal.shape.domain}) | ${bestGlobal.shape.rarity}<br/>Best global fit: <b>${(bestGlobal.score*100).toFixed(1)}%</b>`;
-    } else {
-      UI.keyInfo.textContent="—";
-    }
-
-    UI.selDetails.innerHTML = `
-      <div class="tiny">
-        v2 mechanics: applying a key consumes a <b>charge</b>. Useful keys replicate (gain charges).
-        Unused keys decay (lose charges). Agents also store voids in memory and exchange them in Play.
-      </div>
-    `;
   }
 }
 
-// ---------- Setup/draw ----------
-function setup() {
-  canvasW = windowWidth - parseInt(getComputedStyle(document.documentElement).getPropertyValue("--uiw"));
-  canvasH = windowHeight;
-  createCanvas(canvasW, canvasH);
-  textFont("system-ui");
-  hookUI();
-  initBaseShapes();
-  resetWorld();
-  lastT = performance.now();
-}
-
-function windowResized() {
-  canvasW = windowWidth - parseInt(getComputedStyle(document.documentElement).getPropertyValue("--uiw"));
-  canvasH = windowHeight;
-  resizeCanvas(canvasW, canvasH);
-}
-
-function drawHUD(dt) {
-  const activeVoids = voids.filter(v=>!v.solved).length;
-  const totalArea = voids.reduce((s,v)=>s+(v.solved?0:v.area),0);
-  const avgEnergy = agents.length ? agents.reduce((s,a)=>s+a.energy,0)/agents.length : 0;
-
-  // collective awareness: fraction of active voids known by at least one agent
-  const known = new Set();
-  for(const a of agents) for(const id of a.voidMem.keys()) known.add(id);
-  const totalActiveIds = voids.filter(v=>!v.solved).map(v=>v.id);
-  let covered=0;
-  for(const id of totalActiveIds) if(known.has(id)) covered++;
-  const coverage = totalActiveIds.length ? (covered/totalActiveIds.length) : 1;
-
-  document.getElementById("hud").innerHTML = `
-    <div><b>Agents</b>: ${agents.length} | <b>Voids</b>: ${activeVoids} | <b>Energy</b>: ${energies.length}</div>
-    <div><b>Total void area</b>: ${totalArea} | <b>World chaos</b>: ${worldChaos.toFixed(2)} | <b>Avg energy</b>: ${avgEnergy.toFixed(1)}</div>
-    <div><b>Collective awareness</b>: ${(coverage*100).toFixed(1)}%</div>
-    <div class="tiny">dt: ${(dt*1000).toFixed(1)} ms | fps: ${Math.round(frameRate())}</div>
-  `;
-}
-
-function draw() {
-  const now = performance.now();
-  let dt = (now - lastT) / 1000;
-  lastT = now;
-  dt = Math.min(dt, 0.05);
-  if(paused) dt = 0;
-  dt *= PARAMS.speed;
-
-  if(dt > 0) {
-    // adjust agent count towards target
-    while(agents.length < PARAMS.desiredAgents) {
-      const preset = (PARAMS.spawnPreset==="Mixed")
-        ? randChoice(["Double Observer (S+N)","Double Decider (T+F)","Sensor (S)","Intuitive (N)","Thinker (T)","Feeler (F)","Extro Gatherer","Intro Refiner"])
-        : PARAMS.spawnPreset;
-      agents.push(makeAgent(Math.random(), Math.random(), preset));
-    }
-    while(agents.length > PARAMS.desiredAgents) {
-      const removed = agents.pop();
-      if(selected.kind==="agent" && removed && selected.id===removed.id) selected={kind:null,id:null};
-    }
-
-    worldStep(dt);
-    agentsStep(dt);
+function keyPressed(){
+  if (key === ' ') {
+    world.paused = !world.paused;
+    btnPause.html(world.paused ? "Resume" : "Pause");
   }
-
-  background(11,13,18);
-
-  if(UI.chkSignals.checked) for(const s of signals) drawSignal(s);
-  for(const e of energies) drawEnergy(e);
-  for(const sh of shards) drawShard(sh);
-  for(const v of voids) drawVoid(v);
-  for(const b of solveBursts) drawSolveBurst(b);
-  for(const a of agents) drawAgent(a);
-
-  if(frameCount % 6 === 0) refreshSelectionUI();
-  drawHUD(dt);
+  if (key === 'r' || key === 'R'){
+    initWorld();
+  }
 }
 </script>
 </body>
