@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width,initial-scale=1" />
-  <title>BCM Spectrum Simulator (p5.js) + High-Signal Telemetry</title>
+  <title>BCM Spectrum Simulator (p5.js) + High-Signal Telemetry + Inspector</title>
   <script src="https://cdn.jsdelivr.net/npm/p5@1.9.2/lib/p5.min.js"></script>
   <script src="https://cdn.jsdelivr.net/npm/p5@1.9.2/lib/addons/p5.dom.min.js"></script>
   <style>
@@ -26,12 +26,14 @@
 
 <script>
 /**
- * BCM Spectrum Simulator v1.3 (p5.js)
- * Patch set:
- * 1) Fix key retention logic in addKey() (voidMem no longer has objRef).
- * 2) Convert “stale void memory” from anomaly -> cleanup stats.
- * 3) Add true anomaly: voidMapMismatch (world.voids vs world.voidMap).
- * 4) Improve void respawn so targetVoids is maintained more reliably.
+ * BCM Spectrum Simulator v1.4 (p5.js)
+ * Applied patches:
+ * - Added Inspector: click an agent/void to view details in panel + highlight ring.
+ * - Fix init_world telemetry payload (void count).
+ * - (Optional but enabled) Count initial void spawn into dayStats.voids.spawned.
+ * - Add occasional voidMap mismatch ping event (every 200 ticks).
+ * - Use faster coverage computation in HUD.
+ * - Keep prior v1.3 changes (voidMap, cleanup vs anomaly, sparse telemetry, improved respawn).
  */
 
 /////////////////////////
@@ -189,7 +191,7 @@ function snapshotConfig(){
 function initTelemetry(){
   telemetry = {
     meta: {
-      version: "bcm-sim-p5-telemetry-v1.3-high-signal",
+      version: "bcm-sim-p5-telemetry-v1.4-high-signal+inspector",
       startedAtISO: new Date().toISOString()
     },
     configInitial: snapshotConfig(),
@@ -264,18 +266,23 @@ function startDayStats(day){
   };
 }
 
-function computeCoverage(){
+// Fast coverage: build a presence array for keys (360 bins), then match void vals +/- eps
+function computeCoverageFast(){
   const activeVoids = world.voids.filter(v => v.state === "active");
-  if (activeVoids.length === 0) return 1.0;
+  if (!activeVoids.length) return 1.0;
+
+  const present = new Uint8Array(360);
+  for (const a of world.agents){
+    for (const k of a.keys){
+      present[k.val] = 1;
+    }
+  }
 
   let covered = 0;
   for (const v of activeVoids){
     let ok = false;
-    for (const a of world.agents){
-      for (const k of a.keys){
-        if (matches(k.val, v.val, CFG.matchEps)){ ok = true; break; }
-      }
-      if (ok) break;
+    for (let d=-CFG.matchEps; d<=CFG.matchEps; d++){
+      if (present[wrap(v.val + d, 360)]) { ok = true; break; }
     }
     if (ok) covered++;
   }
@@ -322,7 +329,6 @@ function computeVoidMapMismatch(){
     if (!vm || vm !== v) missingFromMap++;
   }
 
-  // build a set of active IDs for quick lookup
   const activeIds = new Set();
   for (const v of world.voids) if (v.state === "active") activeIds.add(v.id);
 
@@ -341,7 +347,7 @@ function finalizeDayStats(){
   dayStats.popEnd = world.agents.length;
   dayStats.voidsEnd = world.voids.filter(v=>v.state==="active").length;
 
-  dayStats.coverage = computeCoverage();
+  dayStats.coverage = computeCoverageFast();
   dayStats.entropyProxy = computeEntropyProxy();
   dayStats.meanEnergy = mean(world.agents.map(a => a.energy));
   dayStats.meanKeysPerAgent = mean(world.agents.map(a => a.keys.length));
@@ -377,7 +383,7 @@ function downloadTelemetry(){
     tick: world.tick,
     pop: world.agents.length,
     voids: world.voids.filter(v=>v.state==="active").length,
-    coverage: computeCoverage(),
+    coverage: computeCoverageFast(),
     entropyProxy: computeEntropyProxy()
   };
 
@@ -531,7 +537,7 @@ class Agent {
       return;
     }
 
-    // FIX: use world.voidMap + vm.voidId (voidMem has no objRef anymore)
+    // retention uses world.voidMap + vm.voidId
     let bestIdx = -1;
     let lowestRetention = Infinity;
 
@@ -992,14 +998,29 @@ function initWorld(){
     world.voidMap.set(v.id, v);
   }
 
-  pushEvent("init_world", { agents: world.agents.length, voids: world.agents.length });
+  // FIX: correct init_world payload (void count)
+  pushEvent("init_world", { agents: world.agents.length, voids: world.voids.length });
 
   startDayStats(0);
+
+  // Optional: count initial spawns as "spawned" (helps day 0 debugging)
+  if (dayStats) dayStats.voids.spawned += world.voids.length;
+
+  // Reset inspector selection on world reset
+  inspector.selected = null;
+  inspector.lastPick = null;
+  renderInspector();
 }
 
 function stepTick(){
   world.tick++;
   if (dayStats) { dayStats.ticks++; }
+
+  // Occasional mismatch ping (so it's not only "day end")
+  if (dayStats && (world.tick % 200 === 0)){
+    const mm = computeVoidMapMismatch();
+    if (mm > 0) pushEvent("void_map_mismatch_tick", { tick: world.tick, mismatch: mm });
+  }
 
   let activeCount = 0;
   for (const a of world.agents){
@@ -1084,7 +1105,6 @@ function endDay(){
   }
 
   // Improved respawn: keep trying until target, bounded attempts
-  // (prevents “stuck at 5 voids” but keeps randomness)
   const needed = Math.max(0, CFG.targetVoids - world.voids.length);
   const maxAttempts = Math.max(needed * 6, 30);
   let attempts = 0;
@@ -1104,10 +1124,175 @@ function endDay(){
   world.day += 1;
   world.tick = 0;
   startDayStats(world.day);
+
+  // Inspector: if selection is now invalid, clear it
+  if (inspector.selected){
+    const sel = inspector.selected;
+    if (sel.type === "agent"){
+      const still = world.agents.find(a => a.id === sel.id);
+      if (!still) inspector.selected = null;
+      else inspector.selected.ref = still;
+    } else {
+      const still = world.voidMap.get(sel.id);
+      if (!still || still.state !== "active") inspector.selected = null;
+      else inspector.selected.ref = still;
+    }
+  }
 }
 
 /////////////////////////
-// 5) p5.js rendering   //
+// 5) Inspector (click) //
+/////////////////////////
+
+let inspectorDiv = null;
+
+let inspector = {
+  selected: null,   // { type: "agent"|"void", id: number, ref: object }
+  lastPick: null,   // {x,y,distPx,type,id}
+  pickRadiusPx: 14,
+  prefer: "agent"   // when equally close
+};
+
+function worldToScreenX(x){ return map(x, 0, CFG.arenaSize, 0, width); }
+function worldToScreenY(y){ return map(y, 0, CFG.arenaSize, 0, height); }
+
+function screenDistPx(wx, wy, sx, sy){
+  const px = worldToScreenX(wx);
+  const py = worldToScreenY(wy);
+  const dx = px - sx, dy = py - sy;
+  return Math.sqrt(dx*dx + dy*dy);
+}
+
+function isPointerOverUI(){
+  // Works because canvas is full-window at (0,0)
+  const el = document.elementFromPoint(mouseX, mouseY);
+  if (!el) return false;
+  return !!el.closest?.("#ui");
+}
+
+function pickEntityAt(sx, sy){
+  let best = null; // {type, id, ref, d}
+
+  for (const a of world.agents){
+    if (!a.alive) continue;
+    const d = screenDistPx(a.x, a.y, sx, sy);
+    if (d <= inspector.pickRadiusPx && (!best || d < best.d || (d === best.d && inspector.prefer === "agent"))){
+      best = { type:"agent", id:a.id, ref:a, d };
+    }
+  }
+
+  for (const v of world.voids){
+    if (v.state !== "active") continue;
+    const d = screenDistPx(v.x, v.y, sx, sy);
+    if (d <= inspector.pickRadiusPx && (!best || d < best.d || (d === best.d && inspector.prefer === "void"))){
+      best = { type:"void", id:v.id, ref:v, d };
+    }
+  }
+
+  return best;
+}
+
+function fmt(n, k=2){ return (typeof n === "number") ? n.toFixed(k) : String(n); }
+
+function renderInspector(){
+  if (!inspectorDiv) return;
+
+  const sel = inspector.selected;
+  if (!sel){
+    inspectorDiv.html(`<div class="hint"><b>Inspector</b><br/>Click an agent or void to inspect.</div>`);
+    return;
+  }
+
+  if (sel.type === "void"){
+    const v = sel.ref;
+    if (!v){
+      inspectorDiv.html(`<div class="hint"><b>Inspector</b><br/>Selection invalid.</div>`);
+      return;
+    }
+    const urg = v.urgency();
+    inspectorDiv.html(`
+      <div class="hint">
+        <b>Inspector: VOID</b><br/>
+        <span class="mono">id=${v.id}</span><br/>
+        pos: <span class="mono">${fmt(v.x,1)}, ${fmt(v.y,1)}</span><br/>
+        val: <span class="mono">${v.val}</span> (ε=${CFG.matchEps})<br/>
+        hp: <span class="mono">${v.hp}/${v.hpMax}</span><br/>
+        lifespan: <span class="mono">${v.lifespan}/${v.lifespanMax}</span><br/>
+        urgency: <span class="mono">${fmt(urg,2)}</span><br/>
+        reward: hit=<span class="mono">${v.rewardHit}</span>, solve=<span class="mono">${v.rewardSolve}</span><br/>
+      </div>
+    `);
+    return;
+  }
+
+  if (sel.type === "agent"){
+    const a = sel.ref;
+    if (!a){
+      inspectorDiv.html(`<div class="hint"><b>Inspector</b><br/>Selection invalid.</div>`);
+      return;
+    }
+
+    let bestVm = null;
+    for (const m of a.voidMem){
+      if (!bestVm || (m.urgency ?? 0) > (bestVm.urgency ?? 0)) bestVm = m;
+    }
+
+    const keysPreview = a.keys
+      .slice(-12)
+      .map(k => `${k.val}(ttl:${k.ttl},u:${k.uses})`)
+      .join(", ");
+
+    inspectorDiv.html(`
+      <div class="hint">
+        <b>Inspector: AGENT</b><br/>
+        <span class="mono">id=${a.id}</span> ${a.sleeping ? "(sleeping)" : ""}<br/>
+        pos: <span class="mono">${fmt(a.x,1)}, ${fmt(a.y,1)}</span><br/>
+        vel: <span class="mono">${fmt(a.vx,2)}, ${fmt(a.vy,2)}</span><br/>
+        alive: <span class="mono">${a.alive}</span><br/>
+        ageDays: <span class="mono">${a.ageDays}</span><br/>
+        energy: <span class="mono">${fmt(a.energy,1)}/${a.energyMax}</span><br/>
+        boredom: <span class="mono">${a.boredom}</span><br/>
+        tuning(agentValue): <span class="mono">${a.agentValue}</span><br/>
+        memSplit: <span class="mono">${fmt(a.memSplit,2)}</span>
+        caps: keys=<span class="mono">${a.maxKeys}</span>, voidMem=<span class="mono">${a.maxVoidMem}</span><br/>
+        costs: scan=<span class="mono">${fmt(a.costScan,2)}</span>, gen=<span class="mono">${fmt(a.costGen,2)}</span>, share=<span class="mono">${fmt(a.costShare,2)}</span>, solve=<span class="mono">${fmt(a.costSolve,2)}</span><br/>
+        weights: urg=<span class="mono">${fmt(a.weights.wUrgency,2)}</span>,
+        cost=<span class="mono">${fmt(a.weights.wCost,2)}</span>,
+        satShare=<span class="mono">${fmt(a.weights.wSatShare,2)}</span>,
+        satSolve=<span class="mono">${fmt(a.weights.wSatSolve,2)}</span>,
+        haveKey=<span class="mono">${fmt(a.weights.wHaveKey,2)}</span>,
+        scanFail=<span class="mono">${fmt(a.weights.wScanFail,2)}</span><br/>
+        keys: <span class="mono">${a.keys.length}</span> / ${a.maxKeys}<br/>
+        keysPreview(last12):<br/>
+        <span class="mono">${keysPreview || "(none)"}</span><br/>
+        voidMem: <span class="mono">${a.voidMem.length}</span> / ${a.maxVoidMem}<br/>
+        topUrgentVoidMem: ${
+          bestVm
+            ? `<span class="mono">voidId=${bestVm.voidId} val=${bestVm.val} urg=${fmt(bestVm.urgency,2)} lastSeenDay=${bestVm.lastSeenDay}</span>`
+            : `<span class="mono">(none)</span>`
+        }<br/>
+        failedScouts: <span class="mono">${a.consecutiveFailedScouts}</span><br/>
+      </div>
+    `);
+  }
+}
+
+function mousePressed(){
+  if (isPointerOverUI()) return;
+
+  const pick = pickEntityAt(mouseX, mouseY);
+  if (pick){
+    inspector.selected = { type: pick.type, id: pick.id, ref: pick.ref };
+    inspector.lastPick = { x: mouseX, y: mouseY, distPx: pick.d, type: pick.type, id: pick.id };
+  } else {
+    inspector.selected = null;
+    inspector.lastPick = null;
+  }
+  renderInspector();
+}
+
+/////////////////////////
+// 6) p5.js rendering   //
 /////////////////////////
 
 let ui;
@@ -1143,6 +1328,7 @@ function draw(){
   for (const e of world.explosions) e.age += 1;
   world.explosions = world.explosions.filter(e => e.age < 25);
 
+  // Voids
   for (const v of world.voids){
     const px = map(v.x, 0, CFG.arenaSize, 0, width);
     const py = map(v.y, 0, CFG.arenaSize, 0, height);
@@ -1156,6 +1342,7 @@ function draw(){
     noStroke();
   }
 
+  // Explosions
   noStroke();
   for (const e of world.explosions){
     const px = map(e.x, 0, CFG.arenaSize, 0, width);
@@ -1166,6 +1353,7 @@ function draw(){
     circle(px, py, r*2);
   }
 
+  // Agents
   for (const a of world.agents){
     const px = map(a.x, 0, CFG.arenaSize, 0, width);
     const py = map(a.y, 0, CFG.arenaSize, 0, height);
@@ -1182,11 +1370,29 @@ function draw(){
     circle(px, py, a.sleeping ? 7 : 9);
   }
 
+  // Highlight selected entity
+  if (inspector.selected){
+    const sel = inspector.selected;
+    noFill();
+    stroke(60, 10, 100, 0.9);
+    strokeWeight(2);
+
+    if (sel.type === "agent" && sel.ref){
+      const a = sel.ref;
+      circle(worldToScreenX(a.x), worldToScreenY(a.y), 22);
+    } else if (sel.type === "void" && sel.ref){
+      const v = sel.ref;
+      circle(worldToScreenX(v.x), worldToScreenY(v.y), 26);
+    }
+    noStroke();
+  }
+
   if (showHud){
     drawHUD();
   }
 
   applyUI();
+  renderInspector();
 }
 
 function lerpHue(h1, h2, t){
@@ -1199,7 +1405,7 @@ function drawHUD(){
   const active = world.agents.filter(a => a.alive && !a.sleeping).length;
 
   let ent = computeEntropyProxy();
-  let cov = computeCoverage();
+  let cov = computeCoverageFast();
 
   fill(0, 0, 100, 0.85);
   rect(width-360, 10, 350, 150, 10);
@@ -1270,7 +1476,7 @@ function drawHUD(){
 }
 
 /////////////////////////
-// 6) UI controls       //
+// 7) UI controls       //
 /////////////////////////
 
 function initUI(){
@@ -1318,6 +1524,11 @@ function initUI(){
     • Cleanup: void memory pruning is tracked as cleanup (not anomaly).<br/>
     <span class="mono">Download Telemetry</span> exports JSON for offline debugging.
   </div>`).parent(ui);
+
+  // Inspector box
+  inspectorDiv = createDiv("").parent(ui);
+  inspectorDiv.style("margin-top", "10px");
+  inspectorDiv.html(`<div class="hint"><b>Inspector</b><br/>Click an agent or void to inspect.</div>`);
 }
 
 function applyUI(){
