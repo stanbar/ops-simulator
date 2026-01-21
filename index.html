@@ -3,13 +3,13 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width,initial-scale=1" />
-  <title>BCM Spectrum Simulator (p5.js) + High-Signal Telemetry + Inspector</title>
+  <title>BCM Spectrum Simulator (p5.js) + Inspector + Vault/Router Modes</title>
   <script src="https://cdn.jsdelivr.net/npm/p5@1.9.2/lib/p5.min.js"></script>
   <script src="https://cdn.jsdelivr.net/npm/p5@1.9.2/lib/addons/p5.dom.min.js"></script>
   <style>
     body { margin: 0; background:#0b0f14; color:#e8eef6; font-family: ui-sans-serif, system-ui, -apple-system, Segoe UI, Roboto, Arial; }
-    .panel { position: fixed; left: 10px; top: 10px; width: 380px; background: rgba(10,14,20,0.88); border: 1px solid rgba(255,255,255,0.08);
-             border-radius: 10px; padding: 12px 12px 10px; backdrop-filter: blur(6px); }
+    .panel { position: fixed; left: 10px; top: 10px; width: 400px; background: rgba(10,14,20,0.88);
+             border: 1px solid rgba(255,255,255,0.08); border-radius: 10px; padding: 12px 12px 10px; backdrop-filter: blur(6px); }
     .row { display:flex; justify-content:space-between; gap:10px; align-items:center; margin: 6px 0; }
     .row label { font-size: 12px; opacity: 0.9; }
     .row .val { font-size: 12px; opacity: 0.85; min-width: 60px; text-align:right; }
@@ -18,6 +18,9 @@
     button:hover { background:#243247; }
     .hint { font-size: 12px; opacity: 0.8; line-height: 1.3; margin-top: 8px; }
     .mono { font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace; }
+    .inspector { margin-top: 10px; padding-top: 10px; border-top: 1px solid rgba(255,255,255,0.08); }
+    .inspector h3 { margin: 0 0 6px 0; font-size: 12px; opacity: 0.9; }
+    .inspector pre { margin: 0; font-size: 11px; line-height: 1.25; white-space: pre-wrap; background: rgba(0,0,0,0.25); padding: 8px; border-radius: 8px; border:1px solid rgba(255,255,255,0.06); }
     canvas { display:block; }
   </style>
 </head>
@@ -26,14 +29,12 @@
 
 <script>
 /**
- * BCM Spectrum Simulator v1.4 (p5.js)
- * Applied patches:
- * - Added Inspector: click an agent/void to view details in panel + highlight ring.
- * - Fix init_world telemetry payload (void count).
- * - (Optional but enabled) Count initial void spawn into dayStats.voids.spawned.
- * - Add occasional voidMap mismatch ping event (every 200 ticks).
- * - Use faster coverage computation in HUD.
- * - Keep prior v1.3 changes (voidMap, cleanup vs anomaly, sparse telemetry, improved respawn).
+ * BCM Spectrum Simulator v1.5 (p5.js)
+ * Patch set:
+ * - Adds click INSPECTOR for agents/voids (debug).
+ * - Adds agent MODE: "vault" vs "router" (two-tier memory ecology).
+ *   Vault: preserves rare keys (bigger key memory, longer TTL, slower decay, less sharing/scanning).
+ *   Router: spreads common keys (more scanning/sharing, faster decay, smaller key memory, higher share replication).
  */
 
 /////////////////////////
@@ -87,7 +88,38 @@ const CFG = {
 
   // telemetry controls
   telemetryBins: 36,
-  telemetryMaxEvents: 2500
+  telemetryMaxEvents: 2500,
+
+  // --- MODE SYSTEM (two-tier memory ecology) ---
+  // Initial distribution
+  pInitVault: 0.40, // 40% vaults, 60% routers
+
+  // Memory split biases (fraction of memory dedicated to keys)
+  vaultMemSplitRange: [0.65, 0.85],
+  routerMemSplitRange: [0.25, 0.45],
+
+  // Key persistence
+  vaultTTLFactor: 1.8,       // vault key TTL max multiplier
+  routerTTLFactor: 0.85,     // router key TTL max multiplier
+  vaultDecayRate: 0.60,      // keys lose ttl per day
+  routerDecayRate: 1.00,
+
+  // Behavior scaling
+  vaultShareScale: 0.55,
+  routerShareScale: 1.20,
+  vaultScanScale: 0.70,
+  routerScanScale: 1.25,
+
+  // Replication scaling
+  vaultInternalRepFactor: 2.0, // vaults replicate internally more
+  routerShareRepFactor: 2.0,   // routers replicate via share more
+
+  // Solve preference (optional mild tilt)
+  vaultSolveScale: 1.05,
+  routerSolveScale: 0.95,
+
+  // Mutation rate for mode trait
+  pFlipModeChild: 0.06
 };
 
 function clamp(v, lo, hi){ return Math.max(lo, Math.min(hi, v)); }
@@ -116,6 +148,7 @@ function symmetricNoise(n=6, d=5){
   return rollDice(n,d) - rollDice(n,d);
 }
 function randInt(a,b){ return a + Math.floor(Math.random()*(b-a+1)); }
+function randRange(a,b){ return a + Math.random()*(b-a); }
 
 function sampleVoidVal(){
   const diceDivide = (maxVal, divisions) => {
@@ -184,14 +217,32 @@ function snapshotConfig(){
     baseDeath: CFG.baseDeath,
     kDeath: CFG.kDeath,
     maxMem: CFG.maxMem,
-    telemetryBins: CFG.telemetryBins
+    telemetryBins: CFG.telemetryBins,
+
+    // mode config snapshot
+    pInitVault: CFG.pInitVault,
+    vaultMemSplitRange: CFG.vaultMemSplitRange,
+    routerMemSplitRange: CFG.routerMemSplitRange,
+    vaultTTLFactor: CFG.vaultTTLFactor,
+    routerTTLFactor: CFG.routerTTLFactor,
+    vaultDecayRate: CFG.vaultDecayRate,
+    routerDecayRate: CFG.routerDecayRate,
+    vaultShareScale: CFG.vaultShareScale,
+    routerShareScale: CFG.routerShareScale,
+    vaultScanScale: CFG.vaultScanScale,
+    routerScanScale: CFG.routerScanScale,
+    vaultInternalRepFactor: CFG.vaultInternalRepFactor,
+    routerShareRepFactor: CFG.routerShareRepFactor,
+    vaultSolveScale: CFG.vaultSolveScale,
+    routerSolveScale: CFG.routerSolveScale,
+    pFlipModeChild: CFG.pFlipModeChild
   };
 }
 
 function initTelemetry(){
   telemetry = {
     meta: {
-      version: "bcm-sim-p5-telemetry-v1.4-high-signal+inspector",
+      version: "bcm-sim-p5-telemetry-v1.5-mode+inspector",
       startedAtISO: new Date().toISOString()
     },
     configInitial: snapshotConfig(),
@@ -236,7 +287,6 @@ function startDayStats(day){
 
     share: { total:0, withKey:0, neighborsSum:0 },
 
-    // true anomalies only
     anomalies: {
       voidMapMismatch: 0,
       shareHighSaturation: 0,
@@ -245,11 +295,13 @@ function startDayStats(day){
       genNoiseBiasSuspected: false
     },
 
-    // cleanup stats (NOT anomalies)
     cleanup: {
-      voidMemRemovedMissing: 0, // missing > 1 day after lastSeen
-      voidMemRemovedRecent: 0   // missing but lastSeenDay was recent (normal)
+      voidMemRemovedMissing: 0,
+      voidMemRemovedRecent: 0
     },
+
+    // NEW: mode distribution
+    modes: { vault: 0, router: 0 },
 
     coverage: null,
     entropyProxy: null,
@@ -266,23 +318,18 @@ function startDayStats(day){
   };
 }
 
-// Fast coverage: build a presence array for keys (360 bins), then match void vals +/- eps
-function computeCoverageFast(){
+function computeCoverage(){
   const activeVoids = world.voids.filter(v => v.state === "active");
-  if (!activeVoids.length) return 1.0;
-
-  const present = new Uint8Array(360);
-  for (const a of world.agents){
-    for (const k of a.keys){
-      present[k.val] = 1;
-    }
-  }
+  if (activeVoids.length === 0) return 1.0;
 
   let covered = 0;
   for (const v of activeVoids){
     let ok = false;
-    for (let d=-CFG.matchEps; d<=CFG.matchEps; d++){
-      if (present[wrap(v.val + d, 360)]) { ok = true; break; }
+    for (const a of world.agents){
+      for (const k of a.keys){
+        if (matches(k.val, v.val, CFG.matchEps)){ ok = true; break; }
+      }
+      if (ok) break;
     }
     if (ok) covered++;
   }
@@ -321,7 +368,6 @@ function fillHistograms(){
 }
 
 function computeVoidMapMismatch(){
-  // count active voids missing from map + map entries not present as active voids
   let missingFromMap = 0;
   for (const v of world.voids){
     if (v.state !== "active") continue;
@@ -347,14 +393,19 @@ function finalizeDayStats(){
   dayStats.popEnd = world.agents.length;
   dayStats.voidsEnd = world.voids.filter(v=>v.state==="active").length;
 
-  dayStats.coverage = computeCoverageFast();
+  // mode counts
+  for (const a of world.agents){
+    if (a.mode === "vault") dayStats.modes.vault++;
+    else dayStats.modes.router++;
+  }
+
+  dayStats.coverage = computeCoverage();
   dayStats.entropyProxy = computeEntropyProxy();
   dayStats.meanEnergy = mean(world.agents.map(a => a.energy));
   dayStats.meanKeysPerAgent = mean(world.agents.map(a => a.keys.length));
 
   fillHistograms();
 
-  // true anomaly: map/list mismatch
   dayStats.anomalies.voidMapMismatch = computeVoidMapMismatch();
 
   if (dayStats.genSolve.attempts >= 200 && dayStats.genSolve.successes === 0){
@@ -383,7 +434,7 @@ function downloadTelemetry(){
     tick: world.tick,
     pop: world.agents.length,
     voids: world.voids.filter(v=>v.state==="active").length,
-    coverage: computeCoverageFast(),
+    coverage: computeCoverage(),
     entropyProxy: computeEntropyProxy()
   };
 
@@ -428,13 +479,20 @@ class VoidObj {
 }
 
 class KeyObj {
-  constructor(val, creatorId){
+  constructor(val, creatorId, ttlMaxOverride=null){
     this.val = wrap(Math.round(val), 360);
     this.creatorId = creatorId;
-    this.ttlMax = CFG.keyTTLMax;
-    this.ttl = this.ttlMax;
+    this.ttlMax = ttlMaxOverride ?? CFG.keyTTLMax;
+    this.ttl = this.ttlMax; // float OK
     this.uses = 0;
   }
+}
+
+function pickModeInitial(){
+  return (Math.random() < CFG.pInitVault) ? "vault" : "router";
+}
+function flipMode(m){
+  return (m === "vault") ? "router" : "vault";
 }
 
 class Agent {
@@ -460,10 +518,22 @@ class Agent {
     this.voidMem = []; // {voidId,x,y,val,urgency,lastSeenDay}
     this.consecutiveFailedScouts = 0;
 
+    // --- MODE: vault vs router ---
+    if (parent){
+      this.mode = parent.mode;
+      if (Math.random() < CFG.pFlipModeChild) this.mode = flipMode(this.mode);
+    } else {
+      this.mode = pickModeInitial();
+    }
+
     if (parent){
       this.agentValue = wrap(parent.agentValue + randInt(-5,5), 360);
       this.costs = parent.costs.map(c => Math.max(0.1, c + (Math.random()*0.2 - 0.1)));
-      this.memSplit = clamp(parent.memSplit + (Math.random()*0.10 - 0.05), 0.1, 0.9);
+
+      // Bias memSplit by mode (then mutate slightly)
+      let ms = parent.memSplit + (Math.random()*0.10 - 0.05);
+      this.memSplit = this.applyModeMemSplit(ms);
+
       this.weights = {};
       for (const k of Object.keys(parent.weights)){
         this.weights[k] = parent.weights[k] + (Math.random()*0.4 - 0.2);
@@ -471,7 +541,11 @@ class Agent {
     } else {
       this.agentValue = sampleAgentValue();
       this.costs = [Math.random(), Math.random(), Math.random(), Math.random()];
-      this.memSplit = 0.5;
+
+      // mode-biased memSplit
+      const base = 0.5;
+      this.memSplit = this.applyModeMemSplit(base);
+
       this.weights = {
         wUrgency: 1.0,
         wCost: -2.0,
@@ -494,7 +568,41 @@ class Agent {
     for (let i=0;i<5;i++) this.stockpileGenerate(true);
   }
 
+  modeTTLMax(){
+    const f = (this.mode === "vault") ? CFG.vaultTTLFactor : CFG.routerTTLFactor;
+    return Math.max(2, Math.round(CFG.keyTTLMax * f));
+  }
+  modeDecayRate(){
+    return (this.mode === "vault") ? CFG.vaultDecayRate : CFG.routerDecayRate;
+  }
+  modeShareScale(){
+    return (this.mode === "vault") ? CFG.vaultShareScale : CFG.routerShareScale;
+  }
+  modeScanScale(){
+    return (this.mode === "vault") ? CFG.vaultScanScale : CFG.routerScanScale;
+  }
+  modeSolveScale(){
+    return (this.mode === "vault") ? CFG.vaultSolveScale : CFG.routerSolveScale;
+  }
+  modeInternalRepFactor(){
+    return (this.mode === "vault") ? CFG.vaultInternalRepFactor : 1.0;
+  }
+  modeShareRepFactor(){
+    return (this.mode === "router") ? CFG.routerShareRepFactor : 1.0;
+  }
+
+  applyModeMemSplit(raw){
+    if (this.mode === "vault"){
+      return clamp(raw, CFG.vaultMemSplitRange[0], CFG.vaultMemSplitRange[1]);
+    } else {
+      return clamp(raw, CFG.routerMemSplitRange[0], CFG.routerMemSplitRange[1]);
+    }
+  }
+
   recomputeCaps(){
+    // enforce mode-biased memSplit whenever caps are recomputed
+    this.memSplit = this.applyModeMemSplit(this.memSplit);
+
     this.maxKeys = Math.floor(this.totalMem * this.memSplit);
     this.maxVoidMem = this.totalMem - this.maxKeys;
     if (this.maxKeys < 1) this.maxKeys = 1;
@@ -537,7 +645,6 @@ class Agent {
       return;
     }
 
-    // retention uses world.voidMap + vm.voidId
     let bestIdx = -1;
     let lowestRetention = Infinity;
 
@@ -588,7 +695,9 @@ class Agent {
   }
 
   decayKeys(){
-    for (const k of this.keys) k.ttl -= 1;
+    const rate = this.modeDecayRate();
+    for (const k of this.keys) k.ttl -= rate;
+
     const before = this.keys.length;
     this.keys = this.keys.filter(k => k.ttl > 0);
     const pruned = before - this.keys.length;
@@ -597,7 +706,8 @@ class Agent {
 
   stockpileGenerate(free=false){
     const val = wrap(this.agentValue + symmetricNoise(6,5), 360);
-    this.addKey(new KeyObj(val, this.id));
+    const ttlMax = this.modeTTLMax();
+    this.addKey(new KeyObj(val, this.id, ttlMax));
 
     if (!free){
       if (dayStats){
@@ -650,7 +760,7 @@ class Agent {
       return;
     }
 
-    // Clean missing voidIds (stats, not anomaly)
+    // Clean missing voidIds
     this.voidMem = this.voidMem.filter(m => {
       const v = world.voidMap.get(m.voidId);
       if (!v || v.state !== "active") {
@@ -750,6 +860,8 @@ class Agent {
           (hasKey ? (this.weights.wHaveKey/2) : 0) +
           (this.costShare * this.weights.wCost);
 
+        shareUtil *= this.modeShareScale(); // MODE EFFECT
+
         candidates.push({
           type:"share",
           utility:shareUtil,
@@ -770,6 +882,8 @@ class Agent {
             this.weights.wHaveKey +
             (cost * this.weights.wCost);
 
+          workUtil *= this.modeSolveScale(); // MODE EFFECT
+
           candidates.push({
             type:"solve",
             utility:workUtil,
@@ -783,6 +897,8 @@ class Agent {
             (m.urgency * this.weights.wUrgency) +
             (saturation * this.weights.wSatSolve) +
             (cost * this.weights.wCost);
+
+          util *= this.modeSolveScale(); // MODE EFFECT
 
           candidates.push({
             type:"gen_solve",
@@ -799,7 +915,8 @@ class Agent {
     const unknown = visible.find(v => !this.voidMem.some(m => m.voidId === v.id));
     if (unknown){
       const scanBase = 20 + (this.consecutiveFailedScouts * this.weights.wScanFail);
-      const scanUtil = scanBase + (this.costScan * this.weights.wCost);
+      let scanUtil = scanBase + (this.costScan * this.weights.wCost);
+      scanUtil *= this.modeScanScale(); // MODE EFFECT
       candidates.push({ type:"scan", utility:scanUtil, cost:this.costScan, target:unknown, payload:{} });
     }
 
@@ -874,13 +991,17 @@ class Agent {
 
     if (!dayShareSampleTaken && dayStats){
       dayShareSampleTaken = true;
-      pushEvent("share_sample", { senderId:this.id, voidId:v.id, voidVal:v.val, neighbors:neighbors.length, withKey:!!keyObj, saturation });
+      pushEvent("share_sample", { senderId:this.id, senderMode:this.mode, voidId:v.id, voidVal:v.val, neighbors:neighbors.length, withKey:!!keyObj, saturation });
     }
+
+    // MODE: routers replicate shares harder
+    const repFactor = this.modeShareRepFactor();
+    const pShareRep = clamp(CFG.pReplicateShare * repFactor, 0, 0.95);
 
     for (const n of neighbors){
       n.memorizeVoid(v, world.day);
-      if (keyObj && Math.random() < CFG.pReplicateShare){
-        const k2 = new KeyObj(keyObj.val, keyObj.creatorId);
+      if (keyObj && Math.random() < pShareRep){
+        const k2 = new KeyObj(keyObj.val, keyObj.creatorId, n.modeTTLMax());
         n.addKey(k2);
         if (dayStats) dayStats.keys.replicatedShare++;
       }
@@ -897,13 +1018,18 @@ class Agent {
 
     const key = this.keys[keyIdx];
     if (key){
-      key.ttl = key.ttlMax;
+      key.ttlMax = this.modeTTLMax(); // keep in sync with current mode + slider
+      key.ttl = Math.max(key.ttl, key.ttlMax);
       key.uses += 1;
       this.refreshKey(keyIdx);
       if (dayStats) dayStats.keys.used++;
 
-      if (Math.random() < CFG.pReplicateInternal){
-        this.addKey(new KeyObj(key.val, key.creatorId));
+      // MODE: vaults replicate internally harder
+      const repFactor = this.modeInternalRepFactor();
+      const pInternalRep = clamp(CFG.pReplicateInternal * repFactor, 0, 0.95);
+
+      if (Math.random() < pInternalRep){
+        this.addKey(new KeyObj(key.val, key.creatorId, this.modeTTLMax()));
         if (dayStats) dayStats.keys.replicatedInternal++;
       }
     }
@@ -912,7 +1038,7 @@ class Agent {
       v.state = "solved";
       this.energy = clamp(this.energy + v.rewardSolve, 0, this.energyMax);
       if (dayStats) dayStats.voids.solved++;
-      pushEvent("void_solved", { voidId:v.id, voidVal:v.val, solverId:this.id });
+      pushEvent("void_solved", { voidId:v.id, voidVal:v.val, solverId:this.id, solverMode:this.mode });
     }
   }
 
@@ -929,14 +1055,14 @@ class Agent {
       v.hp -= 1;
       if (dayStats) dayStats.voids.hits++;
 
-      this.addKey(new KeyObj(attempt.val, this.id));
+      this.addKey(new KeyObj(attempt.val, this.id, this.modeTTLMax()));
       this.energy = clamp(this.energy + v.rewardHit, 0, this.energyMax);
 
       if (v.hp <= 0){
         v.state = "solved";
         this.energy = clamp(this.energy + v.rewardSolve, 0, this.energyMax);
         if (dayStats) dayStats.voids.solved++;
-        pushEvent("void_solved", { voidId:v.id, voidVal:v.val, solverId:this.id, via:"gen_solve" });
+        pushEvent("void_solved", { voidId:v.id, voidVal:v.val, solverId:this.id, solverMode:this.mode, via:"gen_solve" });
       }
     } else {
       this.consecutiveFailedScouts = Math.min(30, this.consecutiveFailedScouts + 2);
@@ -958,7 +1084,7 @@ class Agent {
     if (this.ageDays >= CFG.maxAgeDays){
       this.alive = false;
       if (dayStats) dayStats.deaths.age++;
-      pushEvent("agent_died", { agentId:this.id, cause:"age", ageDays:this.ageDays });
+      pushEvent("agent_died", { agentId:this.id, cause:"age", ageDays:this.ageDays, mode:this.mode });
     }
   }
 }
@@ -998,29 +1124,18 @@ function initWorld(){
     world.voidMap.set(v.id, v);
   }
 
-  // FIX: correct init_world payload (void count)
   pushEvent("init_world", { agents: world.agents.length, voids: world.voids.length });
 
   startDayStats(0);
 
-  // Optional: count initial spawns as "spawned" (helps day 0 debugging)
-  if (dayStats) dayStats.voids.spawned += world.voids.length;
-
-  // Reset inspector selection on world reset
+  // reset inspector selection
   inspector.selected = null;
-  inspector.lastPick = null;
-  renderInspector();
+  updateInspectorUI();
 }
 
 function stepTick(){
   world.tick++;
   if (dayStats) { dayStats.ticks++; }
-
-  // Occasional mismatch ping (so it's not only "day end")
-  if (dayStats && (world.tick % 200 === 0)){
-    const mm = computeVoidMapMismatch();
-    if (mm > 0) pushEvent("void_map_mismatch_tick", { tick: world.tick, mismatch: mm });
-  }
 
   let activeCount = 0;
   for (const a of world.agents){
@@ -1062,17 +1177,15 @@ function endDay(){
         if (Math.random() < pDeath){
           a.alive = false;
           if (dayStats) dayStats.deaths.explosion++;
-          pushEvent("agent_died", { agentId:a.id, cause:"explosion", voidId:v.id, dist:d, pDeath });
+          pushEvent("agent_died", { agentId:a.id, cause:"explosion", voidId:v.id, dist:d, pDeath, mode:a.mode });
         }
       }
     }
   }
 
   // remove non-active voids (and keep map in sync)
-  if (world.voids.length){
-    for (const v of world.voids){
-      if (v.state !== "active") world.voidMap.delete(v.id);
-    }
+  for (const v of world.voids){
+    if (v.state !== "active") world.voidMap.delete(v.id);
   }
   world.voids = world.voids.filter(v => v.state === "active");
 
@@ -1088,6 +1201,7 @@ function endDay(){
   }
   world.agents = world.agents.filter(a => a.alive);
 
+  // Reproduction
   if (world.agents.length < CFG.maxPop){
     const parents = world.agents.filter(a => a.ageDays >= CFG.minParentAgeDays);
     if (parents.length && Math.random() < 0.60){
@@ -1095,16 +1209,16 @@ function endDay(){
       const child = new Agent(CFG.maxMem, p.x, p.y, p);
       world.agents.push(child);
       if (dayStats) dayStats.births++;
-      pushEvent("agent_born", { childId: child.id, parentId: p.id });
+      pushEvent("agent_born", { childId: child.id, parentId: p.id, childMode: child.mode, parentMode: p.mode, childValue: child.agentValue, parentValue: p.agentValue });
     } else if (world.agents.length < 5){
       const child = new Agent(CFG.maxMem);
       world.agents.push(child);
       if (dayStats) dayStats.births++;
-      pushEvent("agent_born", { childId: child.id, parentId: null });
+      pushEvent("agent_born", { childId: child.id, parentId: null, childMode: child.mode, childValue: child.agentValue });
     }
   }
 
-  // Improved respawn: keep trying until target, bounded attempts
+  // Respawn: keep trying until target, bounded attempts
   const needed = Math.max(0, CFG.targetVoids - world.voids.length);
   const maxAttempts = Math.max(needed * 6, 30);
   let attempts = 0;
@@ -1125,18 +1239,11 @@ function endDay(){
   world.tick = 0;
   startDayStats(world.day);
 
-  // Inspector: if selection is now invalid, clear it
+  // keep inspector selection valid
   if (inspector.selected){
-    const sel = inspector.selected;
-    if (sel.type === "agent"){
-      const still = world.agents.find(a => a.id === sel.id);
-      if (!still) inspector.selected = null;
-      else inspector.selected.ref = still;
-    } else {
-      const still = world.voidMap.get(sel.id);
-      if (!still || still.state !== "active") inspector.selected = null;
-      else inspector.selected.ref = still;
-    }
+    const stillThere = resolveSelection(inspector.selected);
+    if (!stillThere) inspector.selected = null;
+    updateInspectorUI();
   }
 }
 
@@ -1144,151 +1251,115 @@ function endDay(){
 // 5) Inspector (click) //
 /////////////////////////
 
-let inspectorDiv = null;
-
-let inspector = {
-  selected: null,   // { type: "agent"|"void", id: number, ref: object }
-  lastPick: null,   // {x,y,distPx,type,id}
-  pickRadiusPx: 14,
-  prefer: "agent"   // when equally close
+const inspector = {
+  selected: null, // {type:"agent"/"void", id:number}
+  text: "",
+  uiPre: null
 };
 
-function worldToScreenX(x){ return map(x, 0, CFG.arenaSize, 0, width); }
-function worldToScreenY(y){ return map(y, 0, CFG.arenaSize, 0, height); }
-
-function screenDistPx(wx, wy, sx, sy){
-  const px = worldToScreenX(wx);
-  const py = worldToScreenY(wy);
-  const dx = px - sx, dy = py - sy;
-  return Math.sqrt(dx*dx + dy*dy);
+function screenToWorld(mx, my){
+  const wx = map(mx, 0, width, 0, CFG.arenaSize);
+  const wy = map(my, 0, height, 0, CFG.arenaSize);
+  return { wx, wy };
 }
 
-function isPointerOverUI(){
-  // Works because canvas is full-window at (0,0)
-  const el = document.elementFromPoint(mouseX, mouseY);
-  if (!el) return false;
-  return !!el.closest?.("#ui");
+function resolveSelection(sel){
+  if (!sel) return null;
+  if (sel.type === "agent"){
+    return world.agents.find(a => a.id === sel.id) || null;
+  }
+  if (sel.type === "void"){
+    return world.voidMap.get(sel.id) || null;
+  }
+  return null;
 }
 
-function pickEntityAt(sx, sy){
-  let best = null; // {type, id, ref, d}
+function pickNearestAtMouse(mx, my){
+  const { wx, wy } = screenToWorld(mx, my);
 
+  let best = null;
+  let bestD2 = Infinity;
+
+  // agents
   for (const a of world.agents){
-    if (!a.alive) continue;
-    const d = screenDistPx(a.x, a.y, sx, sy);
-    if (d <= inspector.pickRadiusPx && (!best || d < best.d || (d === best.d && inspector.prefer === "agent"))){
-      best = { type:"agent", id:a.id, ref:a, d };
+    const d2 = dist2(wx, wy, a.x, a.y);
+    if (d2 < bestD2){
+      bestD2 = d2;
+      best = { type:"agent", id:a.id, d2 };
     }
   }
-
+  // voids
   for (const v of world.voids){
-    if (v.state !== "active") continue;
-    const d = screenDistPx(v.x, v.y, sx, sy);
-    if (d <= inspector.pickRadiusPx && (!best || d < best.d || (d === best.d && inspector.prefer === "void"))){
-      best = { type:"void", id:v.id, ref:v, d };
+    const d2 = dist2(wx, wy, v.x, v.y);
+    if (d2 < bestD2){
+      bestD2 = d2;
+      best = { type:"void", id:v.id, d2 };
     }
   }
 
-  return best;
+  // threshold in WORLD units (based on pixels)
+  const thresholdPx = 14;
+  const thresholdWorld = map(thresholdPx, 0, Math.min(width,height), 0, CFG.arenaSize);
+  if (!best) return null;
+  if (Math.sqrt(best.d2) > thresholdWorld) return null;
+
+  return { type: best.type, id: best.id };
 }
 
-function fmt(n, k=2){ return (typeof n === "number") ? n.toFixed(k) : String(n); }
-
-function renderInspector(){
-  if (!inspectorDiv) return;
-
+function updateInspectorUI(){
+  if (!inspector.uiPre) return;
   const sel = inspector.selected;
   if (!sel){
-    inspectorDiv.html(`<div class="hint"><b>Inspector</b><br/>Click an agent or void to inspect.</div>`);
+    inspector.uiPre.html("Click an agent or void to inspect.\n\nTip: click near objects; selection highlights on canvas.");
+    return;
+  }
+  const obj = resolveSelection(sel);
+  if (!obj){
+    inspector.uiPre.html("Selection no longer exists (despawned).");
     return;
   }
 
   if (sel.type === "void"){
-    const v = sel.ref;
-    if (!v){
-      inspectorDiv.html(`<div class="hint"><b>Inspector</b><br/>Selection invalid.</div>`);
-      return;
-    }
-    const urg = v.urgency();
-    inspectorDiv.html(`
-      <div class="hint">
-        <b>Inspector: VOID</b><br/>
-        <span class="mono">id=${v.id}</span><br/>
-        pos: <span class="mono">${fmt(v.x,1)}, ${fmt(v.y,1)}</span><br/>
-        val: <span class="mono">${v.val}</span> (ε=${CFG.matchEps})<br/>
-        hp: <span class="mono">${v.hp}/${v.hpMax}</span><br/>
-        lifespan: <span class="mono">${v.lifespan}/${v.lifespanMax}</span><br/>
-        urgency: <span class="mono">${fmt(urg,2)}</span><br/>
-        reward: hit=<span class="mono">${v.rewardHit}</span>, solve=<span class="mono">${v.rewardSolve}</span><br/>
-      </div>
-    `);
-    return;
-  }
-
-  if (sel.type === "agent"){
-    const a = sel.ref;
-    if (!a){
-      inspectorDiv.html(`<div class="hint"><b>Inspector</b><br/>Selection invalid.</div>`);
-      return;
-    }
-
-    let bestVm = null;
-    for (const m of a.voidMem){
-      if (!bestVm || (m.urgency ?? 0) > (bestVm.urgency ?? 0)) bestVm = m;
-    }
-
-    const keysPreview = a.keys
-      .slice(-12)
-      .map(k => `${k.val}(ttl:${k.ttl},u:${k.uses})`)
-      .join(", ");
-
-    inspectorDiv.html(`
-      <div class="hint">
-        <b>Inspector: AGENT</b><br/>
-        <span class="mono">id=${a.id}</span> ${a.sleeping ? "(sleeping)" : ""}<br/>
-        pos: <span class="mono">${fmt(a.x,1)}, ${fmt(a.y,1)}</span><br/>
-        vel: <span class="mono">${fmt(a.vx,2)}, ${fmt(a.vy,2)}</span><br/>
-        alive: <span class="mono">${a.alive}</span><br/>
-        ageDays: <span class="mono">${a.ageDays}</span><br/>
-        energy: <span class="mono">${fmt(a.energy,1)}/${a.energyMax}</span><br/>
-        boredom: <span class="mono">${a.boredom}</span><br/>
-        tuning(agentValue): <span class="mono">${a.agentValue}</span><br/>
-        memSplit: <span class="mono">${fmt(a.memSplit,2)}</span>
-        caps: keys=<span class="mono">${a.maxKeys}</span>, voidMem=<span class="mono">${a.maxVoidMem}</span><br/>
-        costs: scan=<span class="mono">${fmt(a.costScan,2)}</span>, gen=<span class="mono">${fmt(a.costGen,2)}</span>, share=<span class="mono">${fmt(a.costShare,2)}</span>, solve=<span class="mono">${fmt(a.costSolve,2)}</span><br/>
-        weights: urg=<span class="mono">${fmt(a.weights.wUrgency,2)}</span>,
-        cost=<span class="mono">${fmt(a.weights.wCost,2)}</span>,
-        satShare=<span class="mono">${fmt(a.weights.wSatShare,2)}</span>,
-        satSolve=<span class="mono">${fmt(a.weights.wSatSolve,2)}</span>,
-        haveKey=<span class="mono">${fmt(a.weights.wHaveKey,2)}</span>,
-        scanFail=<span class="mono">${fmt(a.weights.wScanFail,2)}</span><br/>
-        keys: <span class="mono">${a.keys.length}</span> / ${a.maxKeys}<br/>
-        keysPreview(last12):<br/>
-        <span class="mono">${keysPreview || "(none)"}</span><br/>
-        voidMem: <span class="mono">${a.voidMem.length}</span> / ${a.maxVoidMem}<br/>
-        topUrgentVoidMem: ${
-          bestVm
-            ? `<span class="mono">voidId=${bestVm.voidId} val=${bestVm.val} urg=${fmt(bestVm.urgency,2)} lastSeenDay=${bestVm.lastSeenDay}</span>`
-            : `<span class="mono">(none)</span>`
-        }<br/>
-        failedScouts: <span class="mono">${a.consecutiveFailedScouts}</span><br/>
-      </div>
-    `);
-  }
-}
-
-function mousePressed(){
-  if (isPointerOverUI()) return;
-
-  const pick = pickEntityAt(mouseX, mouseY);
-  if (pick){
-    inspector.selected = { type: pick.type, id: pick.id, ref: pick.ref };
-    inspector.lastPick = { x: mouseX, y: mouseY, distPx: pick.d, type: pick.type, id: pick.id };
+    const v = obj;
+    const s =
+`[VOID #${v.id}]  state=${v.state}
+pos=(${v.x.toFixed(1)}, ${v.y.toFixed(1)})
+val=${v.val}°
+hp=${v.hp}/${v.hpMax}
+lifespan=${v.lifespan}/${v.lifespanMax}  ageDays=${v.ageDays}
+urgency=${v.urgency().toFixed(2)}
+rewardHit=${v.rewardHit}  rewardSolve=${v.rewardSolve}
+`;
+    inspector.uiPre.html(s);
   } else {
-    inspector.selected = null;
-    inspector.lastPick = null;
+    const a = obj;
+    // summarize key bins + top few keys
+    const topKeys = [...a.keys].slice(-8).reverse().map(k => `${k.val}° ttl=${k.ttl.toFixed(1)}/${k.ttlMax} uses=${k.uses} cr=${k.creatorId}`).join("\n");
+    const topVoids = [...a.voidMem]
+      .sort((x,y)=>(y.urgency||0)-(x.urgency||0))
+      .slice(0,6)
+      .map(m => `#${m.voidId} val=${m.val} urg=${(m.urgency||0).toFixed(2)} seenDay=${m.lastSeenDay}`)
+      .join("\n");
+    const s =
+`[AGENT #${a.id}]  mode=${a.mode}  alive=${a.alive}  sleeping=${a.sleeping}
+pos=(${a.x.toFixed(1)}, ${a.y.toFixed(1)})  v=(${a.vx.toFixed(2)}, ${a.vy.toFixed(2)})
+agentValue=${a.agentValue}°
+ageDays=${a.ageDays}
+energy=${a.energy.toFixed(1)}/${a.energyMax}
+boredom=${a.boredom}  failedScouts=${a.consecutiveFailedScouts}
+
+memory: total=${a.totalMem}  memSplit(keys)=${a.memSplit.toFixed(2)}
+caps: maxKeys=${a.maxKeys}  maxVoidMem=${a.maxVoidMem}
+keys: count=${a.keys.length}  ttlMax(mode)=${a.modeTTLMax()}  decayRate(mode)=${a.modeDecayRate()}
+
+Top keys (newest first):
+${topKeys || "(none)"}
+
+Top void memory (highest urgency):
+${topVoids || "(none)"}
+`;
+    inspector.uiPre.html(s);
   }
-  renderInspector();
 }
 
 /////////////////////////
@@ -1328,7 +1399,7 @@ function draw(){
   for (const e of world.explosions) e.age += 1;
   world.explosions = world.explosions.filter(e => e.age < 25);
 
-  // Voids
+  // voids
   for (const v of world.voids){
     const px = map(v.x, 0, CFG.arenaSize, 0, width);
     const py = map(v.y, 0, CFG.arenaSize, 0, height);
@@ -1342,7 +1413,7 @@ function draw(){
     noStroke();
   }
 
-  // Explosions
+  // explosions
   noStroke();
   for (const e of world.explosions){
     const px = map(e.x, 0, CFG.arenaSize, 0, width);
@@ -1353,7 +1424,7 @@ function draw(){
     circle(px, py, r*2);
   }
 
-  // Agents
+  // agents
   for (const a of world.agents){
     const px = map(a.x, 0, CFG.arenaSize, 0, width);
     const py = map(a.y, 0, CFG.arenaSize, 0, height);
@@ -1362,29 +1433,37 @@ function draw(){
     for (const m of a.voidMem) maxUrg = Math.max(maxUrg, m.urgency || 0);
     const t = clamp(maxUrg / 100.0, 0, 1);
     const hue = lerpHue(220, 0, t);
-    const alpha = a.sleeping ? 0.25 : 0.75;
-    const sat = a.sleeping ? 10 : 70;
-    const bri = a.sleeping ? 70 : 90;
+
+    // mode visualization: vault slightly higher saturation, router slightly lower
+    const alpha = a.sleeping ? 0.25 : 0.78;
+    const sat = a.sleeping ? 10 : (a.mode === "vault" ? 80 : 60);
+    const bri = a.sleeping ? 70 : 92;
 
     fill(hue, sat, bri, alpha);
     circle(px, py, a.sleeping ? 7 : 9);
+
+    // selected highlight
+    if (inspector.selected && inspector.selected.type === "agent" && inspector.selected.id === a.id){
+      noFill();
+      stroke(60, 10, 98, 0.9);
+      strokeWeight(2);
+      circle(px, py, 16);
+      noStroke();
+    }
   }
 
-  // Highlight selected entity
-  if (inspector.selected){
-    const sel = inspector.selected;
-    noFill();
-    stroke(60, 10, 100, 0.9);
-    strokeWeight(2);
-
-    if (sel.type === "agent" && sel.ref){
-      const a = sel.ref;
-      circle(worldToScreenX(a.x), worldToScreenY(a.y), 22);
-    } else if (sel.type === "void" && sel.ref){
-      const v = sel.ref;
-      circle(worldToScreenX(v.x), worldToScreenY(v.y), 26);
+  // selected void highlight
+  if (inspector.selected && inspector.selected.type === "void"){
+    const v = world.voidMap.get(inspector.selected.id);
+    if (v && v.state === "active"){
+      const px = map(v.x, 0, CFG.arenaSize, 0, width);
+      const py = map(v.y, 0, CFG.arenaSize, 0, height);
+      noFill();
+      stroke(60, 10, 98, 0.9);
+      strokeWeight(2);
+      circle(px, py, 18);
+      noStroke();
     }
-    noStroke();
   }
 
   if (showHud){
@@ -1392,7 +1471,9 @@ function draw(){
   }
 
   applyUI();
-  renderInspector();
+
+  // keep inspector text reasonably fresh
+  if (frameCount % 10 === 0) updateInspectorUI();
 }
 
 function lerpHue(h1, h2, t){
@@ -1405,10 +1486,17 @@ function drawHUD(){
   const active = world.agents.filter(a => a.alive && !a.sleeping).length;
 
   let ent = computeEntropyProxy();
-  let cov = computeCoverageFast();
+  let cov = computeCoverage();
+
+  // mode counts (live)
+  let vCount = 0, rCount = 0;
+  for (const a of world.agents){
+    if (a.mode === "vault") vCount++;
+    else rCount++;
+  }
 
   fill(0, 0, 100, 0.85);
-  rect(width-360, 10, 350, 150, 10);
+  rect(width-380, 10, 370, 165, 10);
 
   fill(220, 20, 10, 1);
   textSize(12);
@@ -1428,14 +1516,16 @@ function drawHUD(){
   text(
     `Day: ${world.day}   Tick: ${world.tick}\n` +
     `Pop: ${pop}   Active: ${active}\n` +
+    `Modes: vault=${vCount} router=${rCount}\n` +
     `Voids: ${voids}   Entropy~: ${ent.toFixed(0)}\n` +
     `Coverage: ${(cov*100).toFixed(1)}%\n` +
     `${anLine}\n` +
     `${clLine}\n` +
     `Telemetry days: ${telemetry ? telemetry.days.length : 0}  events: ${telemetry ? telemetry.events.length : 0}`,
-    width-350, 18
+    width-370, 18
   );
 
+  // spectra bars (voids) + line (keys)
   const bins = CFG.telemetryBins;
   const vb = new Array(bins).fill(0);
   const kb = new Array(bins).fill(0);
@@ -1451,7 +1541,7 @@ function drawHUD(){
     }
   }
 
-  const x0 = width-350, y0 = 140, w = 330, h = 18;
+  const x0 = width-370, y0 = 155, w = 350, h = 18;
   const maxV = Math.max(1, ...vb);
   const maxK = Math.max(1, ...kb);
 
@@ -1487,7 +1577,7 @@ function initUI(){
     const row = createDiv("").addClass("row").parent(ui);
     createElement("label", label).parent(row);
     const s = createSlider(min, max, value, step).parent(row);
-    s.style("width", "200px");
+    s.style("width", "210px");
     const v = createSpan(String(value)).addClass("val mono").parent(row);
     sliders[name] = { s, v, label };
   };
@@ -1497,7 +1587,7 @@ function initUI(){
   mkSlider("voidHp", "Void HP", 1, 120, CFG.voidHp, 1);
   mkSlider("maxPop", "Max population", 10, 500, CFG.maxPop, 10);
   mkSlider("maxMem", "Memory (keys+voids)", 10, 200, CFG.maxMem, 5);
-  mkSlider("keyTTLMax", "Key TTL (days)", 2, 40, CFG.keyTTLMax, 1);
+  mkSlider("keyTTLMax", "Key TTL base (days)", 2, 40, CFG.keyTTLMax, 1);
   mkSlider("matchEps", "Match ε (deg)", 0, 10, CFG.matchEps, 1);
   mkSlider("blastRadius", "Blast radius", 40, 260, CFG.blastRadius, 5);
   mkSlider("kDeath", "Blast lethality", 0.00, 0.60, CFG.kDeath, 0.01);
@@ -1518,17 +1608,16 @@ function initUI(){
   });
 
   createDiv(`<div class="hint">
-    <b>Telemetry (high-signal)</b><br/>
-    • Per-day: coverage, entropy proxy, action counts, void/keys lifecycle, gen-solve success, histograms.<br/>
-    • Sparse events only: solves/explosions/births/deaths + 1 share sample/day.<br/>
-    • Cleanup: void memory pruning is tracked as cleanup (not anomaly).<br/>
-    <span class="mono">Download Telemetry</span> exports JSON for offline debugging.
+    <b>Modes: Vault vs Router</b><br/>
+    • <b>Vault</b>: bigger key memory, longer TTL, slower decay, more internal replication, less share/scan.<br/>
+    • <b>Router</b>: smaller key memory, faster decay, more share/scan, more share replication.<br/>
+    This should prevent “key monoculture” from deleting rare keys: routers can trend, vaults preserve.
   </div>`).parent(ui);
 
-  // Inspector box
-  inspectorDiv = createDiv("").parent(ui);
-  inspectorDiv.style("margin-top", "10px");
-  inspectorDiv.html(`<div class="hint"><b>Inspector</b><br/>Click an agent or void to inspect.</div>`);
+  // Inspector UI
+  const insp = createDiv("").addClass("inspector").parent(ui);
+  createElement("h3", "Inspector").parent(insp);
+  inspector.uiPre = createElement("pre", "Click an agent or void to inspect.\n\nTip: click near objects; selection highlights on canvas.").parent(insp);
 }
 
 function applyUI(){
@@ -1553,8 +1642,10 @@ function applyUI(){
       a.totalMem = CFG.maxMem;
       a.recomputeCaps();
     }
+    // keep each key aligned to the agent's mode TTL max
+    const desired = a.modeTTLMax();
     for (const key of a.keys){
-      key.ttlMax = CFG.keyTTLMax;
+      key.ttlMax = desired;
       key.ttl = Math.min(key.ttl, key.ttlMax);
     }
   }
@@ -1568,6 +1659,27 @@ function keyPressed(){
   if (key === 'r' || key === 'R'){
     initWorld();
   }
+  if (key === 'Escape'){
+    inspector.selected = null;
+    updateInspectorUI();
+  }
+}
+
+function mousePressed(){
+  // ignore clicks on UI panel
+  const panel = document.getElementById("ui");
+  if (panel){
+    const rect = panel.getBoundingClientRect();
+    if (mouseX >= rect.left && mouseX <= rect.right && mouseY >= rect.top && mouseY <= rect.bottom) return;
+  }
+
+  const pick = pickNearestAtMouse(mouseX, mouseY);
+  if (pick){
+    inspector.selected = pick;
+  } else {
+    inspector.selected = null;
+  }
+  updateInspectorUI();
 }
 </script>
 </body>
