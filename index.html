@@ -3,27 +3,50 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width,initial-scale=1" />
-  <title>BCM Spectrum Simulator (p5.js) + Telemetry + Inspector + Vault/Router</title>
+  <title>BCM Spectrum Simulator</title>
   <script src="https://cdn.jsdelivr.net/npm/p5@1.9.2/lib/p5.min.js"></script>
-  <script src="https://cdn.jsdelivr.net/npm/p5@1.9.2/lib/addons/p5.dom.min.js"></script>
+  <script src="simulation.js"></script>
   <style>
-    body { margin: 0; background:#0b0f14; color:#e8eef6; font-family: ui-sans-serif, system-ui, -apple-system, Segoe UI, Roboto, Arial; }
-    .panel { position: fixed; left: 10px; top: 10px; width: 420px; background: rgba(10,14,20,0.88);
-             border: 1px solid rgba(255,255,255,0.08); border-radius: 10px; padding: 12px 12px 10px; backdrop-filter: blur(6px); }
+    body { margin: 0; background:#0b0f14; color:#e8eef6; font-family: ui-sans-serif, system-ui, -apple-system, Segoe UI, Roboto, Arial; overflow: hidden; }
+    .panel { position: fixed; left: 10px; top: 10px; width: 380px; background: rgba(10,14,20,0.92); border: 1px solid rgba(255,255,255,0.08);
+             border-radius: 10px; padding: 12px 12px 10px; backdrop-filter: blur(8px); max-height: calc(100vh - 40px); overflow-y: auto; }
     .row { display:flex; justify-content:space-between; gap:10px; align-items:center; margin: 6px 0; }
-    .row label { font-size: 12px; opacity: 0.9; }
-    .row .val { font-size: 12px; opacity: 0.85; min-width: 60px; text-align:right; }
-    .btns { display:flex; gap:8px; margin-top:8px; flex-wrap:wrap; }
-    button { background:#1b2432; color:#e8eef6; border:1px solid rgba(255,255,255,0.12); border-radius:8px; padding:7px 10px; cursor:pointer; }
+    .row label { font-size: 12px; opacity: 0.9; flex-shrink: 0; }
+    .row .val { font-size: 12px; opacity: 0.85; min-width: 50px; text-align:right; }
+    .row input[type="range"] { flex: 1; max-width: 180px; }
+    .btns { display:flex; gap:8px; margin-top:10px; flex-wrap:wrap; }
+    button { background:#1b2432; color:#e8eef6; border:1px solid rgba(255,255,255,0.12); border-radius:8px; padding:7px 12px; cursor:pointer; font-size: 12px; }
     button:hover { background:#243247; }
-    .hint { font-size: 12px; opacity: 0.8; line-height: 1.3; margin-top: 8px; }
-    .mono { font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace; }
+    button:active { background:#2d3d52; }
+    .hint { font-size: 11px; opacity: 0.75; line-height: 1.4; margin-top: 10px; padding-top: 10px; border-top: 1px solid rgba(255,255,255,0.08); }
+    .mono { font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace; }
+    .section-title { font-size: 11px; text-transform: uppercase; letter-spacing: 0.05em; opacity: 0.6; margin: 12px 0 6px; }
+    .inspector {
+      margin-top: 12px;
+      border-top: 1px solid rgba(255,255,255,0.10);
+      padding-top: 10px;
+    }
+    .inspector h3 {
+      margin: 0 0 8px;
+      font-size: 11px;
+      letter-spacing: 0.02em;
+      opacity: 0.8;
+      text-transform: uppercase;
+    }
+    .inspector pre {
+      margin: 0;
+      max-height: 200px;
+      overflow: auto;
+      font-size: 10px;
+      line-height: 1.35;
+      padding: 8px;
+      border-radius: 6px;
+      background: rgba(255,255,255,0.04);
+      border: 1px solid rgba(255,255,255,0.06);
+      white-space: pre-wrap;
+      word-break: break-word;
+    }
     canvas { display:block; }
-
-    .sectionTitle { font-size: 12px; opacity: 0.9; margin-top: 10px; padding-top: 10px; border-top: 1px solid rgba(255,255,255,0.08); }
-    .inspectorBox { margin-top: 6px; padding: 8px; border-radius: 8px; background: rgba(255,255,255,0.04); border: 1px solid rgba(255,255,255,0.06); }
-    .inspectorLine { font-size: 12px; line-height: 1.35; opacity: 0.95; }
-    .pill { display:inline-block; padding: 2px 6px; border-radius: 999px; border: 1px solid rgba(255,255,255,0.12); background: rgba(255,255,255,0.04); font-size: 11px; margin-right: 6px; }
   </style>
 </head>
 <body>
@@ -31,1558 +54,414 @@
 
 <script>
 /**
- * BCM Spectrum Simulator (p5.js)
- * Update:
- * - Click inspector for agents/voids (debug info + highlight)
- * - Vault vs Router modes (two-tier memory ecology)
- * - Reduce redundant sharing (novelty gate + stronger saturation penalty)
- * - Cooperative solve damage (more agents around a void => faster clearing)
- * - Telemetry: actionsByMode + mode counts (kept high-signal)
+ * BCM Spectrum Simulator - Visual Layer
+ * Uses simulation.js for core logic
  */
 
-/////////////////////////
-// 1) Config + helpers //
-/////////////////////////
-
-const CFG = {
-  arenaSize: 1000,
-  initialAgents: 50,
-  targetVoids: 25,
-  maxPop: 200,
-
-  visionRadius: 120,
-  interactRadius: 40,
-  blastRadius: 120,
-
-  matchEps: 2,
-  orthoBonus: true,
-
-  voidHp: 40,
-  voidLifespanMin: 5,
-  voidLifespanMax: 15,
-  voidRespawnProb: 0.50,
-
-  dailyEnergy: 80,
-  energyMax: 160,
-  carryoverEnergy: true,
-  startEnergy: 100,
-  rewardPerHit: 0.5,
-  rewardOnSolve: 10,
-
-  maxAgeDays: 100,
-  minParentAgeDays: 25,
-
-  keyTTLMax: 12,
-  pReplicateInternal: 0.05,
-  pReplicateShare: 0.20,
-
-  boredomLimit: 300,
-
-  baseDeath: 0.01,
-  kDeath: 0.20,
-
-  ticksPerFrame: 6,
-  maxTicksPerDay: 5000,
-
-  maxMem: 60,
-
-  drawTrails: false,
-  backgroundFade: 28,
-
-  // telemetry controls
-  telemetryBins: 36,
-  telemetryMaxEvents: 2500,
-
-  // ---- NEW: Vault/Router ecology ----
-  enableModes: true,
-  pVaultAtBirth: 0.28,             // initial mode bias (mutations can flip)
-  pModeFlipOnBirth: 0.06,          // chance child flips mode vs parent
-  vaultMemSplit: 0.78,             // % of memory devoted to KEYS (rare key bank)
-  routerMemSplit: 0.35,            // % of memory devoted to KEYS (void routing + gossip)
-  vaultKeyTTLBoost: 1.35,          // vaults keep keys longer (effective TTL)
-  routerShareBoost: 1.15,          // routers more likely to share (weights)
-  vaultGenBoost: 1.10,             // vaults more likely to stockpile/gen (weights)
-
-  // ---- NEW: Share / Solve tuning ----
-  shareNoveltyGate: true,          // don't share if no one benefits
-  shareSatExponent: 2.2,           // stronger non-linear saturation penalty
-  routerAvoidGenSolve: true,       // routers mostly route; only gen-solve under high urgency
-  routerGenSolveUrgencyMin: 70,    // allow gen-solve if urgency >= this
-  solveDamageBase: 1,              // base damage per hit
-  solveDamagePer3Neighbors: 1,     // +1 damage per 3 neighbors (cap below)
-  solveDamageMax: 4,               // cap cooperative damage
-};
-
-function clamp(v, lo, hi){ return Math.max(lo, Math.min(hi, v)); }
-function wrap(v, max){ v = v % max; if (v < 0) v += max; return v; }
-function dist2(ax, ay, bx, by){ const dx=ax-bx, dy=ay-by; return dx*dx+dy*dy; }
-
-function circDist(a, b, mod=360){
-  let d = Math.abs(a - b) % mod;
-  return Math.min(d, mod - d);
-}
-function matches(a, b, eps){ return circDist(a, b) <= eps; }
-
-// signed shortest circular difference in [-180, 180]
-function circSignedDiff(a, b, mod=360){
-  let d = ((a - b) % mod + mod) % mod;
-  if (d > mod/2) d -= mod;
-  return d;
-}
-
-function rollDice(n, d){
-  let s = 0;
-  for (let i=0;i<n;i++) s += 1 + Math.floor(Math.random()*d);
-  return s;
-}
-function symmetricNoise(n=6, d=5){
-  return rollDice(n,d) - rollDice(n,d);
-}
-function randInt(a,b){ return a + Math.floor(Math.random()*(b-a+1)); }
-
-function sampleVoidVal(){
-  const diceDivide = (maxVal, divisions) => {
-    if (divisions <= 0) return 0;
-    const step = maxVal / divisions;
-    const k = Math.floor(Math.random()*divisions);
-    return Math.floor(k * step);
-  };
-  const noise = (rollDice(4,5) - rollDice(1,5));
-  const val = (
-    diceDivide(360, 2) +
-    diceDivide(180, 2) +
-    diceDivide(90, 2) +
-    diceDivide(45, 3) +
-    diceDivide(15, 3) +
-    noise
-  );
-  return wrap(val, 360);
-}
-function sampleAgentValue(){
-  const step = 360/8;
-  const k = Math.floor(Math.random()*8);
-  return Math.floor(k * step);
-}
-
-function mean(arr){
-  if (!arr.length) return 0;
-  return arr.reduce((a,b)=>a+b,0) / arr.length;
-}
-
-/////////////////////////////
-// 2) Telemetry (high signal)
-/////////////////////////////
-
-let telemetry = null;
-let dayStats = null;
-let dayShareSampleTaken = false;
-
-function snapshotConfig(){
-  return JSON.parse(JSON.stringify(CFG));
-}
-
-function initTelemetry(){
-  telemetry = {
-    meta: {
-      version: "bcm-sim-p5-telemetry-v1.4-inspector-modes",
-      startedAtISO: new Date().toISOString()
-    },
-    configInitial: snapshotConfig(),
-    days: [],
-    events: []
-  };
-}
-
-function pushEvent(type, payload){
-  if (!telemetry) return;
-  telemetry.events.push({
-    day: world.day,
-    tick: world.tick,
-    type,
-    payload
-  });
-  if (telemetry.events.length > CFG.telemetryMaxEvents){
-    telemetry.events.splice(0, Math.floor(CFG.telemetryMaxEvents * 0.2));
-  }
-}
-
-function startDayStats(day){
-  dayShareSampleTaken = false;
-
-  dayStats = {
-    day,
-    ticks: 0,
-
-    popStart: world.agents.length,
-    popEnd: world.agents.length,
-    voidsStart: world.voids.filter(v=>v.state==="active").length,
-    voidsEnd: world.voids.filter(v=>v.state==="active").length,
-
-    actions: { scan:0, share:0, solve:0, gen_solve:0, stockpile:0, sleep:0 },
-    actionsByMode: {
-      vault: { scan:0, share:0, solve:0, gen_solve:0, stockpile:0, sleep:0 },
-      router:{ scan:0, share:0, solve:0, gen_solve:0, stockpile:0, sleep:0 }
-    },
-
-    births: 0,
-    deaths: { explosion:0, age:0 },
-    voids: { spawned:0, solved:0, exploded:0, hits:0 },
-
-    keys: { added:0, evicted:0, pruned:0, used:0, replicatedInternal:0, replicatedShare:0 },
-
-    genSolve: { attempts:0, successes:0 },
-
-    share: { total:0, withKey:0, neighborsSum:0 },
-
-    // modes snapshot (end-of-day)
-    modes: { vault:0, router:0 },
-
-    anomalies: {
-      voidMapMismatch: 0,
-      shareHighSaturation: 0,
-      solveLowSaturation: 0,
-      genSolveWasteSuspected: false,
-      genNoiseBiasSuspected: false
-    },
-
-    cleanup: {
-      voidMemRemovedMissing: 0,
-      voidMemRemovedRecent: 0
-    },
-
-    coverage: null,
-    entropyProxy: null,
-    meanEnergy: null,
-    meanKeysPerAgent: null,
-
-    hist: {
-      voids: new Array(CFG.telemetryBins).fill(0),
-      keys: new Array(CFG.telemetryBins).fill(0),
-      tuning: new Array(CFG.telemetryBins).fill(0)
-    },
-
-    genNoise: { count:0, sumSigned:0, sumAbs:0 }
-  };
-}
-
-function computeCoverage(){
-  const activeVoids = world.voids.filter(v => v.state === "active");
-  if (activeVoids.length === 0) return 1.0;
-
-  let covered = 0;
-  for (const v of activeVoids){
-    let ok = false;
-    for (const a of world.agents){
-      for (const k of a.keys){
-        if (matches(k.val, v.val, CFG.matchEps)){ ok = true; break; }
-      }
-      if (ok) break;
-    }
-    if (ok) covered++;
-  }
-  return covered / activeVoids.length;
-}
-
-function computeEntropyProxy(){
-  let ent = 0;
-  for (const v of world.voids){
-    if (v.state !== "active") continue;
-    ent += v.hp * v.urgency();
-  }
-  return ent;
-}
-
-function fillHistograms(){
-  const bins = CFG.telemetryBins;
-  dayStats.hist.voids.fill(0);
-  dayStats.hist.keys.fill(0);
-  dayStats.hist.tuning.fill(0);
-
-  for (const v of world.voids){
-    if (v.state !== "active") continue;
-    const idx = clamp(Math.floor((v.val/360)*bins), 0, bins-1);
-    dayStats.hist.voids[idx] += 1;
-  }
-
-  for (const a of world.agents){
-    const tidx = clamp(Math.floor((a.agentValue/360)*bins), 0, bins-1);
-    dayStats.hist.tuning[tidx] += 1;
-    for (const k of a.keys){
-      const kidx = clamp(Math.floor((k.val/360)*bins), 0, bins-1);
-      dayStats.hist.keys[kidx] += 1;
-    }
-  }
-}
-
-function computeVoidMapMismatch(){
-  let missingFromMap = 0;
-  for (const v of world.voids){
-    if (v.state !== "active") continue;
-    const vm = world.voidMap.get(v.id);
-    if (!vm || vm !== v) missingFromMap++;
-  }
-
-  const activeIds = new Set();
-  for (const v of world.voids) if (v.state === "active") activeIds.add(v.id);
-
-  let extraInMap = 0;
-  for (const [id, v] of world.voidMap.entries()){
-    if (!activeIds.has(id)) extraInMap++;
-    else if (!v || v.state !== "active") extraInMap++;
-  }
-
-  return missingFromMap + extraInMap;
-}
-
-function finalizeDayStats(){
-  if (!dayStats) return;
-
-  dayStats.popEnd = world.agents.length;
-  dayStats.voidsEnd = world.voids.filter(v=>v.state==="active").length;
-
-  // modes snapshot
-  dayStats.modes.vault = world.agents.filter(a=>a.mode==="vault").length;
-  dayStats.modes.router = world.agents.filter(a=>a.mode==="router").length;
-
-  dayStats.coverage = computeCoverage();
-  dayStats.entropyProxy = computeEntropyProxy();
-  dayStats.meanEnergy = mean(world.agents.map(a => a.energy));
-  dayStats.meanKeysPerAgent = mean(world.agents.map(a => a.keys.length));
-
-  fillHistograms();
-
-  dayStats.anomalies.voidMapMismatch = computeVoidMapMismatch();
-
-  if (dayStats.genSolve.attempts >= 200 && dayStats.genSolve.successes === 0){
-    dayStats.anomalies.genSolveWasteSuspected = true;
-  }
-
-  if (dayStats.genNoise.count >= 50){
-    const meanSigned = dayStats.genNoise.sumSigned / dayStats.genNoise.count;
-    const meanAbs = dayStats.genNoise.sumAbs / dayStats.genNoise.count;
-    if (Math.abs(meanSigned) > Math.max(5, meanAbs * 0.25)){
-      dayStats.anomalies.genNoiseBiasSuspected = true;
-    }
-  }
-
-  telemetry.days.push(dayStats);
-  dayStats = null;
-}
-
-function downloadTelemetry(){
-  if (!telemetry) return;
-  telemetry.configCurrent = snapshotConfig();
-  telemetry.meta.downloadedAtISO = new Date().toISOString();
-
-  telemetry.meta.live = {
-    day: world.day,
-    tick: world.tick,
-    pop: world.agents.length,
-    voids: world.voids.filter(v=>v.state==="active").length,
-    coverage: computeCoverage(),
-    entropyProxy: computeEntropyProxy()
-  };
-
-  const json = JSON.stringify(telemetry, null, 2);
-  const blob = new Blob([json], { type: "application/json" });
-  const url = URL.createObjectURL(blob);
-
-  const a = document.createElement("a");
-  a.href = url;
-  a.download = `bcm_telemetry_${new Date().toISOString().replace(/[:.]/g,'-')}.json`;
-  document.body.appendChild(a);
-  a.click();
-  a.remove();
-  URL.revokeObjectURL(url);
-}
-
-// helper for telemetry: action increments
-function incAction(type, mode){
-  if (!dayStats) return;
-  if (dayStats.actions[type] !== undefined) dayStats.actions[type] += 1;
-  if (dayStats.actionsByMode?.[mode]?.[type] !== undefined) dayStats.actionsByMode[mode][type] += 1;
-}
-
-/////////////////////
-// 3) World objects //
-/////////////////////
-
-let nextAgentId = 0;
-let nextVoidId = 0;
-
-class VoidObj {
-  constructor(hp){
-    this.id = nextVoidId++;
-    this.x = Math.random()*CFG.arenaSize;
-    this.y = Math.random()*CFG.arenaSize;
-    this.val = sampleVoidVal();
-    this.hpMax = hp;
-    this.hp = hp;
-    this.lifespanMax = randInt(CFG.voidLifespanMin, CFG.voidLifespanMax);
-    this.lifespan = this.lifespanMax;
-    this.ageDays = 0;
-    this.state = "active";
-    this.rewardHit = CFG.rewardPerHit;
-    this.rewardSolve = CFG.rewardOnSolve;
-  }
-  urgency(){
-    return 300.0 / (this.lifespan + 0.1);
-  }
-}
-
-class KeyObj {
-  constructor(val, creatorId, ttlMaxOverride=null){
-    this.val = wrap(Math.round(val), 360);
-    this.creatorId = creatorId;
-    this.ttlMax = ttlMaxOverride !== null ? ttlMaxOverride : CFG.keyTTLMax;
-    this.ttl = this.ttlMax;
-    this.uses = 0;
-  }
-}
-
-function chooseMode(parent=null){
-  if (!CFG.enableModes) return "router";
-  if (!parent){
-    return (Math.random() < CFG.pVaultAtBirth) ? "vault" : "router";
-  }
-  if (Math.random() < CFG.pModeFlipOnBirth){
-    return parent.mode === "vault" ? "router" : "vault";
-  }
-  return parent.mode;
-}
-
-class Agent {
-  constructor(totalMem, x=null, y=null, parent=null){
-    this.id = nextAgentId++;
-
-    this.x = (x === null) ? Math.random()*CFG.arenaSize : x;
-    this.y = (y === null) ? Math.random()*CFG.arenaSize : y;
-    this.vx = (Math.random()*2 - 1);
-    this.vy = (Math.random()*2 - 1);
-
-    this.alive = true;
-    this.sleeping = false;
-    this.ageDays = 0;
-
-    this.energyMax = CFG.energyMax;
-    this.energy = CFG.startEnergy;
-    this.boredom = 0;
-
-    this.totalMem = totalMem;
-    this.keys = [];
-    this.voidMem = []; // {voidId,x,y,val,urgency,lastSeenDay}
-    this.consecutiveFailedScouts = 0;
-
-    // ---- mode ----
-    this.mode = chooseMode(parent);
-
-    if (parent){
-      this.agentValue = wrap(parent.agentValue + randInt(-5,5), 360);
-      this.costs = parent.costs.map(c => Math.max(0.1, c + (Math.random()*0.2 - 0.1)));
-      this.memSplit = clamp(parent.memSplit + (Math.random()*0.10 - 0.05), 0.1, 0.9);
-
-      this.weights = {};
-      for (const k of Object.keys(parent.weights)){
-        this.weights[k] = parent.weights[k] + (Math.random()*0.4 - 0.2);
-      }
-    } else {
-      this.agentValue = sampleAgentValue();
-      this.costs = [Math.random(), Math.random(), Math.random(), Math.random()];
-      this.memSplit = 0.5;
-      this.weights = {
-        wUrgency: 1.0,
-        wCost: -2.0,
-        wSatShare: -50.0,
-        wSatSolve: 20.0,
-        wHaveKey: 150.0,
-        wScanFail: -5.0
-      };
-    }
-
-    // Normalize costs
-    let s = this.costs.reduce((a,b)=>a+b,0);
-    this.costs = this.costs.map(x => x * (8.0 / s));
-    this.costScan = this.costs[0];
-    this.costGen  = this.costs[1];
-    this.costShare= this.costs[2];
-    this.costSolve= this.costs[3];
-
-    // ---- enforce mode memory splits ----
-    if (CFG.enableModes){
-      this.memSplit = (this.mode === "vault") ? CFG.vaultMemSplit : CFG.routerMemSplit;
-
-      // mode nudges on weights (small, but consistent)
-      if (this.mode === "router"){
-        this.weights.wSatShare *= CFG.routerShareBoost;
-        this.weights.wScanFail *= 1.10; // a bit more "itchy" to scan when missing
-      } else { // vault
-        this.weights.wHaveKey *= 1.05;  // "Eureka" bias
-        this.weights.wSatShare *= 0.85; // less chatter
-      }
-    }
-
-    this.recomputeCaps();
-
-    // Initial stockpile: vault gets slightly more
-    const initialKeys = (this.mode === "vault") ? 7 : 4;
-    for (let i=0;i<initialKeys;i++) this.stockpileGenerate(true);
-  }
-
-  recomputeCaps(){
-    this.maxKeys = Math.floor(this.totalMem * this.memSplit);
-    this.maxVoidMem = this.totalMem - this.maxKeys;
-    if (this.maxKeys < 1) this.maxKeys = 1;
-    if (this.maxVoidMem < 1) this.maxVoidMem = 1;
-  }
-
-  memorizeVoid(v, day){
-    const urg = v.urgency();
-
-    for (const m of this.voidMem){
-      if (m.voidId === v.id){
-        m.x = v.x; m.y = v.y;
-        m.val = v.val;
-        m.urgency = urg;
-        m.lastSeenDay = day;
-        return true;
-      }
-    }
-
-    const entry = { voidId: v.id, x:v.x, y:v.y, val:v.val, urgency:urg, lastSeenDay:day };
-
-    if (this.voidMem.length < this.maxVoidMem){
-      this.voidMem.push(entry);
-      return true;
-    }
-
-    this.voidMem.sort((a,b)=>a.urgency - b.urgency);
-    if (urg > this.voidMem[0].urgency){
-      this.voidMem.shift();
-      this.voidMem.push(entry);
-      return true;
-    }
-    return false;
-  }
-
-  // TTL per mode (vault keeps longer)
-  effectiveKeyTTLMax(){
-    if (!CFG.enableModes) return CFG.keyTTLMax;
-    if (this.mode === "vault") return Math.max(2, Math.round(CFG.keyTTLMax * CFG.vaultKeyTTLBoost));
-    return CFG.keyTTLMax;
-  }
-
-  addKey(key){
-    if (this.keys.length < this.maxKeys){
-      this.keys.push(key);
-      if (dayStats) dayStats.keys.added++;
-      return;
-    }
-
-    let bestIdx = -1;
-    let lowestRetention = Infinity;
-
-    for (let i=0;i<this.keys.length;i++){
-      const k = this.keys[i];
-      let retention = 0;
-      let matchesKnown = false;
-
-      for (const vm of this.voidMem){
-        const v = world.voidMap.get(vm.voidId);
-        if (!v || v.state !== "active") continue;
-
-        const urg = v.urgency();
-
-        if (matches(k.val, v.val, CFG.matchEps)){
-          retention += urg + 1000;
-          matchesKnown = true;
-        } else if (CFG.orthoBonus && k.creatorId === this.id){
-          const v1 = wrap(k.val + 90, 360);
-          const v2 = wrap(k.val - 90, 360);
-          if (matches(v1, v.val, CFG.matchEps) || matches(v2, v.val, CFG.matchEps)){
-            retention += (urg/2) + 500;
-            matchesKnown = true;
-          }
-        }
-      }
-
-      if (!matchesKnown) retention = Math.random()*10;
-      if (retention < lowestRetention){
-        lowestRetention = retention;
-        bestIdx = i;
-      }
-    }
-
-    this.keys.splice(bestIdx, 1);
-    this.keys.push(key);
-
-    if (dayStats){
-      dayStats.keys.added++;
-      dayStats.keys.evicted++;
-    }
-  }
-
-  refreshKey(index){
-    if (index < 0 || index >= this.keys.length) return;
-    const k = this.keys.splice(index, 1)[0];
-    this.keys.push(k);
-  }
-
-  decayKeys(){
-    for (const k of this.keys) k.ttl -= 1;
-    const before = this.keys.length;
-    this.keys = this.keys.filter(k => k.ttl > 0);
-    const pruned = before - this.keys.length;
-    if (dayStats) dayStats.keys.pruned += pruned;
-  }
-
-  stockpileGenerate(free=false){
-    const val = wrap(this.agentValue + symmetricNoise(6,5), 360);
-    const ttlMax = this.effectiveKeyTTLMax();
-    this.addKey(new KeyObj(val, this.id, ttlMax));
-
-    if (!free){
-      if (dayStats){
-        const d = circSignedDiff(val, this.agentValue);
-        dayStats.genNoise.count++;
-        dayStats.genNoise.sumSigned += d;
-        dayStats.genNoise.sumAbs += Math.abs(d);
-      }
-      this.energy -= this.costGen;
-      this.boredom = 0;
-      incAction("stockpile", this.mode);
-    }
-  }
-
-  attemptTargetedGenerate(targetVal, urgency){
-    const attempt = this.annealAttempt(targetVal, urgency);
-    const ok = matches(attempt, targetVal, CFG.matchEps);
-    return { ok, val: ok ? targetVal : attempt };
-  }
-
-  annealAttempt(targetVal, urgency){
-    const fail = this.consecutiveFailedScouts;
-
-    const p = clamp(
-      0.35 * (urgency / 60) + 0.08 * (fail / 10),
-      0, 1
-    );
-
-    let base = this.agentValue;
-    if (this.keys.length > 0 && p > 0.45 && Math.random() < p){
-      base = this.keys[Math.floor(Math.random()*this.keys.length)].val;
-    }
-
-    const k = Math.floor(clamp(p * 3.5, 0, 3));
-    const noise = symmetricNoise(6 + 4*k, 5);
-
-    let attempt = wrap(base + noise, 360);
-    if (CFG.orthoBonus && p > 0.65 && Math.random() < (p - 0.55)){
-      attempt = wrap(attempt + (Math.random() < 0.5 ? 90 : -90), 360);
-    }
-    return attempt;
-  }
-
-  move(){
-    if (this.sleeping || !this.alive) return;
-
-    this.boredom += 1;
-    if (this.boredom > CFG.boredomLimit){
-      this.sleeping = true;
-      incAction("sleep", this.mode);
-      return;
-    }
-
-    // Clean missing voidIds (stats, not anomaly)
-    this.voidMem = this.voidMem.filter(m => {
-      const v = world.voidMap.get(m.voidId);
-      if (!v || v.state !== "active") {
-        if (dayStats){
-          if ((world.day - m.lastSeenDay) > 1) dayStats.cleanup.voidMemRemovedMissing++;
-          else dayStats.cleanup.voidMemRemovedRecent++;
-        }
-        return false;
-      }
-      return true;
-    });
-
-    let target = null;
-    let bestPriority = -Infinity;
-
-    for (const m of this.voidMem){
-      const v = world.voidMap.get(m.voidId);
-      if (!v || v.state !== "active") continue;
-
-      m.urgency = v.urgency();
-
-      let hasKeyBonus = 1.0;
-      for (const k of this.keys){
-        if (matches(k.val, v.val, CFG.matchEps)){ hasKeyBonus = 2.0; break; }
-      }
-
-      const d = Math.sqrt(dist2(this.x,this.y,v.x,v.y));
-      const priority = (m.urgency * hasKeyBonus) + (500 / (d + 5));
-      if (priority > bestPriority){
-        bestPriority = priority;
-        target = v;
-      }
-    }
-
-    let ax = 0, ay = 0;
-    if (target){
-      const ang = Math.atan2(target.y - this.y, target.x - this.x);
-      ax = Math.cos(ang) * 0.9;
-      ay = Math.sin(ang) * 0.9;
-    } else {
-      ax = (Math.random()*0.6 - 0.3);
-      ay = (Math.random()*0.6 - 0.3);
-    }
-
-    this.vx = (this.vx + ax) * 0.90;
-    this.vy = (this.vy + ay) * 0.90;
-
-    this.x = wrap(this.x + this.vx, CFG.arenaSize);
-    this.y = wrap(this.y + this.vy, CFG.arenaSize);
-  }
-
-  interact(){
-    if (this.sleeping || !this.alive) return;
-
-    const neighbors = [];
-    for (const other of world.agents){
-      if (other.id === this.id || !other.alive || other.sleeping) continue;
-      if (dist2(this.x,this.y,other.x,other.y) <= CFG.interactRadius*CFG.interactRadius) neighbors.push(other);
-    }
-
-    for (const m of this.voidMem){
-      const v = world.voidMap.get(m.voidId);
-      if (v && v.state === "active") m.urgency = v.urgency();
-    }
-
-    const candidates = [];
-
-    for (const m of this.voidMem){
-      const v = world.voidMap.get(m.voidId);
-      if (!v || v.state !== "active") continue;
-
-      // saturation: who already knows this void
-      let knownCount = 0;
-      for (const n of neighbors){
-        if (n.voidMem.some(vm => vm.voidId === v.id)) knownCount++;
-      }
-      const saturation = neighbors.length ? (knownCount / neighbors.length) : 0;
-
-      // do I have a key?
-      let keyIdx = -1;
-      let isOrtho = false;
-      for (let i=0;i<this.keys.length;i++){
-        const k = this.keys[i];
-        if (matches(k.val, v.val, CFG.matchEps)){ keyIdx = i; break; }
-        if (CFG.orthoBonus && k.creatorId === this.id){
-          const v1 = wrap(k.val + 90, 360);
-          const v2 = wrap(k.val - 90, 360);
-          if (matches(v1, v.val, CFG.matchEps) || matches(v2, v.val, CFG.matchEps)){
-            keyIdx = i; isOrtho = true; break;
-          }
-        }
-      }
-      const hasKey = keyIdx !== -1;
-
-      // ---- SHARE (alarm / key routing) ----
-      if (neighbors.length){
-        // novelty gate: only share if it helps someone (void unknown OR key missing)
-        let shareHelpsSomeone = true;
-        if (CFG.shareNoveltyGate){
-          if (hasKey){
-            // share only if at least one neighbor lacks a matching key
-            shareHelpsSomeone = neighbors.some(n => !n.keys.some(kk => matches(kk.val, v.val, CFG.matchEps)));
-          } else {
-            // share only if at least one neighbor doesn't know about the void
-            shareHelpsSomeone = neighbors.some(n => !n.voidMem.some(vm => vm.voidId === v.id));
-          }
-        }
-
-        if (shareHelpsSomeone){
-          const satPenalty = Math.pow(saturation, CFG.shareSatExponent) * this.weights.wSatShare;
-
-          // routers are "loud" unless saturated; vaults quieter
-          let shareUtil =
-            (m.urgency * this.weights.wUrgency) +
-            satPenalty +
-            (hasKey ? (this.weights.wHaveKey/2) : 0) +
-            (this.costShare * this.weights.wCost);
-
-          // extra clamp: if very saturated and no key, don't spam
-          if (!hasKey && saturation >= 0.75) shareUtil -= 9999;
-
-          candidates.push({
-            type:"share",
-            utility:shareUtil,
-            cost:this.costShare,
-            target:neighbors,
-            payload:{ voidObj:v, keyObj: hasKey ? this.keys[keyIdx] : null, saturation }
-          });
-        }
-      }
-
-      // ---- WORK / SOLVE ----
-      const d = Math.sqrt(dist2(this.x,this.y,v.x,v.y));
-      if (d < CFG.interactRadius){
-        if (hasKey){
-          const extra = isOrtho ? 50 : 0;
-          const cost = this.costSolve + extra;
-
-          let workUtil =
-            (m.urgency * this.weights.wUrgency) +
-            (saturation * this.weights.wSatSolve) +
-            this.weights.wHaveKey +
-            (cost * this.weights.wCost);
-
-          candidates.push({
-            type:"solve",
-            utility:workUtil,
-            cost:cost,
-            target:v,
-            payload:{ keyIdx, saturation, coop: neighbors.length }
-          });
-        } else {
-          // gen_solve (desperation / exploration)
-          let allow = true;
-
-          // routers: mostly avoid gen_solve; prefer routing
-          if (CFG.enableModes && this.mode === "router" && CFG.routerAvoidGenSolve){
-            allow = (v.urgency() >= CFG.routerGenSolveUrgencyMin) && (saturation >= 0.25); // "panic + others aware"
-          }
-
-          if (allow){
-            const cost = this.costGen + this.costSolve;
-            let util =
-              (m.urgency * this.weights.wUrgency) +
-              (saturation * this.weights.wSatSolve) +
-              (cost * this.weights.wCost);
-
-            candidates.push({
-              type:"gen_solve",
-              utility:util,
-              cost:cost,
-              target:v,
-              payload:{ saturation, coop: neighbors.length }
-            });
-          }
-        }
-      }
-    }
-
-    // ---- SCAN ----
-    const visible = world.voids.filter(v => v.state==="active" && dist2(this.x,this.y,v.x,v.y) <= CFG.visionRadius*CFG.visionRadius);
-    const unknown = visible.find(v => !this.voidMem.some(m => m.voidId === v.id));
-    if (unknown){
-      const scanBase = 20 + (this.consecutiveFailedScouts * this.weights.wScanFail);
-      const scanUtil = scanBase + (this.costScan * this.weights.wCost);
-      candidates.push({ type:"scan", utility:scanUtil, cost:this.costScan, target:unknown, payload:{} });
-    }
-
-    // ---- STOCKPILE ----
-    if (this.keys.length < this.maxKeys){
-      let stockUtil = 5 + (this.costGen * this.weights.wCost);
-
-      // vaults like stockpiling a bit more (but not if urgency pressure is high everywhere)
-      if (CFG.enableModes && this.mode === "vault"){
-        stockUtil *= CFG.vaultGenBoost;
-      }
-
-      candidates.push({ type:"stockpile", utility:stockUtil, cost:this.costGen, target:null, payload:{} });
-    }
-
-    candidates.sort((a,b)=>b.utility - a.utility);
-    const best = candidates[0];
-
-    if (!best || best.utility <= 0){
-      if (this.energy < 10 && !this.sleeping){
-        this.sleeping = true;
-        incAction("sleep", this.mode);
-      }
-      return;
-    }
-    if (this.energy < best.cost){
-      if (this.energy < 10 && !this.sleeping){
-        this.sleeping = true;
-        incAction("sleep", this.mode);
-      }
-      return;
-    }
-
-    // anomaly counters (same logic as before)
-    if (dayStats && (best.type === "share" || best.type === "solve")){
-      const sat = best.payload.saturation ?? null;
-      const nei = (best.type === "share") ? (best.target?.length ?? 0) : neighbors.length;
-      const MIN_NEI = 3;
-      if (sat !== null && nei >= MIN_NEI){
-        if (best.type === "share" && sat >= 0.75) dayStats.anomalies.shareHighSaturation++;
-        if (best.type === "solve" && sat <= 0.15) dayStats.anomalies.solveLowSaturation++;
-      }
-    }
-
-    this.energy -= best.cost;
-    this.boredom = 0;
-
-    // telemetry action counts
-    incAction(best.type, this.mode);
-
-    switch(best.type){
-      case "share":
-        this.doShare(best.target, best.payload.voidObj, best.payload.keyObj, best.payload.saturation);
-        break;
-      case "solve":
-        this.doSolve(best.target, best.payload.keyIdx, best.payload.coop);
-        break;
-      case "gen_solve":
-        this.doGenSolve(best.target, best.payload.coop);
-        break;
-      case "scan":
-        this.doScan(best.target);
-        break;
-      case "stockpile":
-        this.stockpileGenerate(false);
-        break;
-    }
-  }
-
-  doScan(v){
-    this.memorizeVoid(v, world.day);
-    this.consecutiveFailedScouts = 0;
-  }
-
-  doShare(neighbors, v, keyObj, saturation){
-    if (dayStats){
-      dayStats.share.total++;
-      dayStats.share.neighborsSum += neighbors.length;
-      if (keyObj) dayStats.share.withKey++;
-    }
-
-    if (!dayShareSampleTaken && dayStats){
-      dayShareSampleTaken = true;
-      pushEvent("share_sample", {
-        senderId:this.id, senderMode:this.mode,
-        voidId:v.id, voidVal:v.val,
-        neighbors:neighbors.length, withKey:!!keyObj, saturation
-      });
-    }
-
-    for (const n of neighbors){
-      n.memorizeVoid(v, world.day);
-      if (keyObj && Math.random() < CFG.pReplicateShare){
-        const ttlMax = (CFG.enableModes && n.mode==="vault")
-          ? Math.max(2, Math.round(CFG.keyTTLMax * CFG.vaultKeyTTLBoost))
-          : CFG.keyTTLMax;
-        const k2 = new KeyObj(keyObj.val, keyObj.creatorId, ttlMax);
-        n.addKey(k2);
-        if (dayStats) dayStats.keys.replicatedShare++;
-      }
-    }
-  }
-
-  computeSolveDamage(coopCount){
-    const bonus = Math.floor(Math.max(0, coopCount) / 3) * CFG.solveDamagePer3Neighbors;
-    return clamp(CFG.solveDamageBase + bonus, 1, CFG.solveDamageMax);
-  }
-
-  doSolve(v, keyIdx, coopCount){
-    if (v.state !== "active") return;
-
-    const dmg = this.computeSolveDamage(coopCount);
-
-    v.hp -= dmg;
-    if (dayStats) dayStats.voids.hits += dmg;
-
-    this.energy = clamp(this.energy + v.rewardHit, 0, this.energyMax);
-
-    const key = this.keys[keyIdx];
-    if (key){
-      key.ttl = key.ttlMax;
-      key.uses += 1;
-      this.refreshKey(keyIdx);
-      if (dayStats) dayStats.keys.used++;
-
-      if (Math.random() < CFG.pReplicateInternal){
-        const ttlMax = this.effectiveKeyTTLMax();
-        this.addKey(new KeyObj(key.val, key.creatorId, ttlMax));
-        if (dayStats) dayStats.keys.replicatedInternal++;
-      }
-    }
-
-    if (v.hp <= 0){
-      v.state = "solved";
-      this.energy = clamp(this.energy + v.rewardSolve, 0, this.energyMax);
-      if (dayStats) dayStats.voids.solved++;
-      pushEvent("void_solved", { voidId:v.id, voidVal:v.val, solverId:this.id, solverMode:this.mode, coop:coopCount, dmg });
-    }
-  }
-
-  doGenSolve(v, coopCount){
-    if (v.state !== "active") return;
-
-    if (dayStats) dayStats.genSolve.attempts++;
-
-    const urg = v.urgency();
-    const attempt = this.attemptTargetedGenerate(v.val, urg);
-
-    if (attempt.ok){
-      if (dayStats) dayStats.genSolve.successes++;
-
-      const dmg = this.computeSolveDamage(coopCount);
-
-      v.hp -= dmg;
-      if (dayStats) dayStats.voids.hits += dmg;
-
-      const ttlMax = this.effectiveKeyTTLMax();
-      this.addKey(new KeyObj(attempt.val, this.id, ttlMax));
-      this.energy = clamp(this.energy + v.rewardHit, 0, this.energyMax);
-
-      if (v.hp <= 0){
-        v.state = "solved";
-        this.energy = clamp(this.energy + v.rewardSolve, 0, this.energyMax);
-        if (dayStats) dayStats.voids.solved++;
-        pushEvent("void_solved", { voidId:v.id, voidVal:v.val, solverId:this.id, solverMode:this.mode, via:"gen_solve", coop:coopCount, dmg });
-      }
-    } else {
-      this.consecutiveFailedScouts = Math.min(30, this.consecutiveFailedScouts + 2);
-    }
-  }
-
-  startNewDay(){
-    this.sleeping = false;
-    this.boredom = 0;
-    this.ageDays += 1;
-    this.consecutiveFailedScouts = Math.max(0, this.consecutiveFailedScouts - 1);
-
-    if (CFG.carryoverEnergy){
-      this.energy = clamp(this.energy + CFG.dailyEnergy, 0, this.energyMax);
-    } else {
-      this.energy = CFG.dailyEnergy;
-    }
-
-    if (this.ageDays >= CFG.maxAgeDays){
-      this.alive = false;
-      if (dayStats) dayStats.deaths.age++;
-      pushEvent("agent_died", { agentId:this.id, mode:this.mode, cause:"age", ageDays:this.ageDays });
-    }
-  }
-}
-
-//////////////////////////////
-// 4) World state + stepping //
-//////////////////////////////
-
-const world = {
-  day: 0,
-  tick: 0,
-  agents: [],
-  voids: [],
-  voidMap: new Map(),
-  explosions: [],
-  paused: false
-};
-
-function initWorld(){
-  world.day = 0;
-  world.tick = 0;
-  world.agents = [];
-  world.voids = [];
-  world.voidMap = new Map();
-  world.explosions = [];
-  nextAgentId = 0;
-  nextVoidId = 0;
-
-  initTelemetry();
-
-  for (let i=0;i<CFG.initialAgents;i++){
-    world.agents.push(new Agent(CFG.maxMem));
-  }
-  for (let i=0;i<CFG.targetVoids;i++){
-    const v = new VoidObj(CFG.voidHp);
-    world.voids.push(v);
-    world.voidMap.set(v.id, v);
-  }
-
-  pushEvent("init_world", { agents: world.agents.length, voids: world.voids.length });
-
-  startDayStats(0);
-
-  // reset inspector selection
-  inspector.selected = null;
-  updateInspectorUI();
-}
-
-function stepTick(){
-  world.tick++;
-  if (dayStats) { dayStats.ticks++; }
-
-  let activeCount = 0;
-  for (const a of world.agents){
-    if (!a.alive || a.sleeping) continue;
-    a.move();
-    a.interact();
-    activeCount++;
-  }
-
-  if (activeCount === 0 || world.tick >= CFG.maxTicksPerDay){
-    endDay();
-  }
-}
-
-function endDay(){
-  const exploded = [];
-  for (const v of world.voids){
-    if (v.state !== "active") continue;
-    v.lifespan -= 1;
-    v.ageDays += 1;
-    if (v.lifespan <= 0){
-      v.state = "exploded";
-      exploded.push(v);
-      world.explosions.push({ x:v.x, y:v.y, age: 0 });
-
-      if (dayStats) dayStats.voids.exploded++;
-      pushEvent("void_exploded", { voidId:v.id, voidVal:v.val, x:v.x, y:v.y });
-    }
-  }
-
-  if (exploded.length){
-    for (const v of exploded){
-      for (const a of world.agents){
-        if (!a.alive) continue;
-        const d = Math.sqrt(dist2(a.x,a.y,v.x,v.y));
-        if (d > CFG.blastRadius) continue;
-        const t = 1.0 - (d / CFG.blastRadius);
-        const pDeath = clamp(CFG.baseDeath + CFG.kDeath * t, 0, 1);
-        if (Math.random() < pDeath){
-          a.alive = false;
-          if (dayStats) dayStats.deaths.explosion++;
-          pushEvent("agent_died", { agentId:a.id, mode:a.mode, cause:"explosion", voidId:v.id, dist:d, pDeath });
-        }
-      }
-    }
-  }
-
-  // remove non-active voids (and keep map in sync)
-  if (world.voids.length){
-    for (const v of world.voids){
-      if (v.state !== "active") world.voidMap.delete(v.id);
-    }
-  }
-  world.voids = world.voids.filter(v => v.state === "active");
-
-  for (const a of world.agents){
-    if (!a.alive) continue;
-    a.decayKeys();
-  }
-
-  world.agents = world.agents.filter(a => a.alive);
-
-  for (const a of world.agents){
-    a.startNewDay();
-  }
-  world.agents = world.agents.filter(a => a.alive);
-
-  // Reproduction
-  if (world.agents.length < CFG.maxPop){
-    const parents = world.agents.filter(a => a.ageDays >= CFG.minParentAgeDays);
-    if (parents.length && Math.random() < 0.60){
-      const p = parents[Math.floor(Math.random()*parents.length)];
-      const child = new Agent(CFG.maxMem, p.x, p.y, p);
-      world.agents.push(child);
-      if (dayStats) dayStats.births++;
-      pushEvent("agent_born", { childId: child.id, childMode: child.mode, parentId: p.id, parentMode: p.mode });
-    } else if (world.agents.length < 5){
-      const child = new Agent(CFG.maxMem);
-      world.agents.push(child);
-      if (dayStats) dayStats.births++;
-      pushEvent("agent_born", { childId: child.id, childMode: child.mode, parentId: null });
-    }
-  }
-
-  // Void Respawn: keep trying until target (bounded attempts)
-  const needed = Math.max(0, CFG.targetVoids - world.voids.length);
-  const maxAttempts = Math.max(needed * 6, 30);
-  let attempts = 0;
-
-  while (world.voids.length < CFG.targetVoids && attempts < maxAttempts){
-    attempts++;
-    if (Math.random() < CFG.voidRespawnProb){
-      const v = new VoidObj(CFG.voidHp);
-      world.voids.push(v);
-      world.voidMap.set(v.id, v);
-      if (dayStats) dayStats.voids.spawned++;
-    }
-  }
-
-  finalizeDayStats();
-
-  world.day += 1;
-  world.tick = 0;
-  startDayStats(world.day);
-
-  // keep inspector in sync if selected object disappeared
-  if (inspector.selected){
-    if (inspector.selected.type === "agent"){
-      const still = world.agents.find(a=>a.id===inspector.selected.id);
-      if (!still) inspector.selected = null;
-    } else {
-      const still = world.voidMap.get(inspector.selected.id);
-      if (!still) inspector.selected = null;
-    }
-    updateInspectorUI();
-  }
-}
-
-/////////////////////////
-// 5) Inspector (click) //
-/////////////////////////
-
-const inspector = {
-  selected: null,      // {type:"agent"|"void", id:number}
-  div: null
-};
-
-function worldPosFromMouse(){
-  const wx = map(mouseX, 0, width, 0, CFG.arenaSize);
-  const wy = map(mouseY, 0, height, 0, CFG.arenaSize);
-  return {x: wx, y: wy};
-}
-
-function pickNearest(){
-  const wp = worldPosFromMouse();
-  const clickR_world = map(14, 0, Math.min(width,height), 0, CFG.arenaSize);
-
-  let best = null;
-  let bestD2 = Infinity;
-
-  // agents
-  for (const a of world.agents){
-    const d2 = dist2(wp.x, wp.y, a.x, a.y);
-    if (d2 < bestD2){
-      bestD2 = d2;
-      best = { type:"agent", id:a.id };
-    }
-  }
-
-  // voids (active only)
-  for (const v of world.voids){
-    const d2 = dist2(wp.x, wp.y, v.x, v.y);
-    if (d2 < bestD2){
-      bestD2 = d2;
-      best = { type:"void", id:v.id };
-    }
-  }
-
-  if (!best) return null;
-  if (Math.sqrt(bestD2) > clickR_world) return null;
-  return best;
-}
-
-function getSelectedObject(){
-  if (!inspector.selected) return null;
-  if (inspector.selected.type === "agent"){
-    return world.agents.find(a=>a.id===inspector.selected.id) || null;
-  }
-  if (inspector.selected.type === "void"){
-    return world.voidMap.get(inspector.selected.id) || null;
-  }
-  return null;
-}
-
-function fmt(n, k=2){
-  if (typeof n !== "number") return String(n);
-  return Number.isFinite(n) ? n.toFixed(k) : String(n);
-}
-
-function updateInspectorUI(){
-  if (!inspector.div) return;
-
-  const sel = inspector.selected;
-  if (!sel){
-    inspector.div.html(`
-      <div class="inspectorLine"><span class="pill">Click</span> an agent or void to inspect.</div>
-      <div class="inspectorLine" style="opacity:0.75;margin-top:6px;">Tip: click near an object; the closest within radius is selected.</div>
-    `);
-    return;
-  }
-
-  const obj = getSelectedObject();
-  if (!obj){
-    inspector.selected = null;
-    updateInspectorUI();
-    return;
-  }
-
-  if (sel.type === "void"){
-    const urg = obj.urgency();
-    inspector.div.html(`
-      <div class="inspectorLine"><span class="pill">VOID</span> id=<span class="mono">${obj.id}</span></div>
-      <div class="inspectorLine">val=<span class="mono">${obj.val}</span>° &nbsp; hp=<span class="mono">${obj.hp}</span>/<span class="mono">${obj.hpMax}</span></div>
-      <div class="inspectorLine">lifespan=<span class="mono">${obj.lifespan}</span>/<span class="mono">${obj.lifespanMax}</span> &nbsp; ageDays=<span class="mono">${obj.ageDays}</span></div>
-      <div class="inspectorLine">urgency=<span class="mono">${fmt(urg,2)}</span> &nbsp; state=<span class="mono">${obj.state}</span></div>
-      <div class="inspectorLine">pos=(<span class="mono">${fmt(obj.x,1)}</span>, <span class="mono">${fmt(obj.y,1)}</span>)</div>
-    `);
-  } else {
-    // agent
-    const topKeys = obj.keys.slice(-6).map(k=>`${k.val}°(ttl:${k.ttl}/${k.ttlMax})`).join(", ");
-    const topVoids = obj.voidMem
-      .slice()
-      .sort((a,b)=>(b.urgency||0)-(a.urgency||0))
-      .slice(0,5)
-      .map(m=>`id:${m.voidId} val:${m.val} urg:${fmt(m.urgency,1)}`)
-      .join(" | ");
-
-    inspector.div.html(`
-      <div class="inspectorLine"><span class="pill">AGENT</span> id=<span class="mono">${obj.id}</span> &nbsp; mode=<span class="mono">${obj.mode}</span></div>
-      <div class="inspectorLine">energy=<span class="mono">${fmt(obj.energy,1)}</span>/<span class="mono">${obj.energyMax}</span> &nbsp; ageDays=<span class="mono">${obj.ageDays}</span> &nbsp; sleeping=<span class="mono">${obj.sleeping}</span></div>
-      <div class="inspectorLine">tuning=<span class="mono">${obj.agentValue}</span>° &nbsp; boredom=<span class="mono">${obj.boredom}</span> &nbsp; failedScouts=<span class="mono">${obj.consecutiveFailedScouts}</span></div>
-      <div class="inspectorLine">mem: total=<span class="mono">${obj.totalMem}</span> keysCap=<span class="mono">${obj.maxKeys}</span> voidCap=<span class="mono">${obj.maxVoidMem}</span></div>
-      <div class="inspectorLine">keys=<span class="mono">${obj.keys.length}</span> voidMem=<span class="mono">${obj.voidMem.length}</span></div>
-
-      <div class="inspectorLine" style="margin-top:6px; opacity:0.9;">Recent keys:</div>
-      <div class="inspectorLine mono" style="opacity:0.9;">${topKeys || "(none)"}</div>
-
-      <div class="inspectorLine" style="margin-top:6px; opacity:0.9;">Top void memory:</div>
-      <div class="inspectorLine mono" style="opacity:0.9;">${topVoids || "(none)"}</div>
-
-      <div class="inspectorLine" style="margin-top:6px; opacity:0.85;">Costs (scan/gen/share/solve): <span class="mono">${fmt(obj.costScan,2)} / ${fmt(obj.costGen,2)} / ${fmt(obj.costShare,2)} / ${fmt(obj.costSolve,2)}</span></div>
-      <div class="inspectorLine" style="opacity:0.85;">Weights: <span class="mono">Urg=${fmt(obj.weights.wUrgency,2)} Cost=${fmt(obj.weights.wCost,2)} SatShare=${fmt(obj.weights.wSatShare,1)} SatSolve=${fmt(obj.weights.wSatSolve,1)} HaveKey=${fmt(obj.weights.wHaveKey,1)}</span></div>
-    `);
-  }
-}
-
-/////////////////////////
-// 6) p5.js rendering   //
-/////////////////////////
-
-let ui;
-let sliders = {};
-let btnPause, btnReset, btnHud, btnDownload;
+// ========================
+// State
+// ========================
+
+let sim = null;
+let explosions = [];
+let paused = false;
 let showHud = true;
 
-function setup(){
-  createCanvas(window.innerWidth, window.innerHeight);
+// UI elements
+let sliders = {};
+let btnPause, btnReset, btnHud, btnDownload;
+
+// Inspector state
+let inspectorPre = null;
+let selectedType = null;
+let selectedId = null;
+
+// Config (local copy for UI binding, plus visual-specific settings)
+let CFG = {
+  ...BCMSimulator.DEFAULT_CFG,
+  // Visual settings not in simulation module
+  backgroundFade: 28,
+  drawTrails: false,
+  ticksPerFrame: 6,
+  telemetryBins: 36,
+  vaultKeyTTLBoost: 1.35,
+  enableModes: true
+};
+
+// ========================
+// p5.js Setup
+// ========================
+
+function setup() {
+  createCanvas(windowWidth, windowHeight);
   colorMode(HSB, 360, 100, 100, 1);
   noStroke();
   initUI();
-  initWorld();
+  initSimulation();
   background(220, 35, 8);
 }
 
-function windowResized(){
-  resizeCanvas(window.innerWidth, window.innerHeight);
+function windowResized() {
+  resizeCanvas(windowWidth, windowHeight);
 }
 
-function draw(){
-  if (!CFG.drawTrails){
-    fill(220, 35, 8, CFG.backgroundFade/255);
-    rect(0,0,width,height);
-  }
+function initSimulation() {
+  sim = new BCMSimulator.Simulation(CFG);
+  sim.init();
+  explosions = [];
+  paused = false;
+  btnPause.html("Pause");
+  selectedType = null;
+  selectedId = null;
+  renderInspector();
+}
 
-  if (!world.paused){
-    for (let i=0;i<CFG.ticksPerFrame;i++){
-      stepTick();
+// ========================
+// Main Draw Loop
+// ========================
+
+function draw() {
+  // Background fade
+  fill(220, 35, 8, CFG.backgroundFade / 255);
+  rect(0, 0, width, height);
+
+  // Run simulation
+  if (!paused) {
+    for (let i = 0; i < CFG.ticksPerFrame; i++) {
+      sim.stepTick();
+      if (sim.lastExplosions && sim.lastExplosions.length) {
+        for (const v of sim.lastExplosions) {
+          spawnExplosion(v);
+        }
+        sim.lastExplosions.length = 0;
+      }
     }
   }
 
-  for (const e of world.explosions) e.age += 1;
-  world.explosions = world.explosions.filter(e => e.age < 25);
+  // Update explosion ages
+  for (const e of explosions) e.age += 1;
+  explosions = explosions.filter(e => e.age < e.life);
 
-  // voids
-  for (const v of world.voids){
+  // Draw voids
+  drawVoids();
+
+  // Draw explosions
+  drawExplosions();
+
+  // Draw agents
+  drawAgents();
+
+  // Draw selection highlight
+  drawSelection();
+
+  // Draw HUD
+  if (showHud) {
+    drawHUD();
+  }
+
+  // Apply UI changes
+  applyUI();
+}
+
+// ========================
+// Drawing Functions
+// ========================
+
+function drawVoids() {
+  for (const v of sim.voids) {
+    if (v.state !== "active") continue;
+
     const px = map(v.x, 0, CFG.arenaSize, 0, width);
     const py = map(v.y, 0, CFG.arenaSize, 0, height);
     const hue = v.val;
     const urg = v.urgency();
-    const bright = clamp(30 + urg/2, 30, 100);
+    const bright = BCMSimulator.clamp(30 + urg / 2, 30, 100);
+
+    // Draw X shape for voids
     stroke(hue, 80, bright, 0.9);
     strokeWeight(2);
-    line(px-6, py-6, px+6, py+6);
-    line(px-6, py+6, px+6, py-6);
+    line(px - 6, py - 6, px + 6, py + 6);
+    line(px - 6, py + 6, px + 6, py - 6);
     noStroke();
   }
+}
 
-  // explosions
-  noStroke();
-  for (const e of world.explosions){
-    const px = map(e.x, 0, CFG.arenaSize, 0, width);
-    const py = map(e.y, 0, CFG.arenaSize, 0, height);
-    const a = 0.35 * (1 - e.age/25);
-    fill(0, 90, 90, a);
-    const r = map(e.age, 0, 25, 10, map(CFG.blastRadius,0,CFG.arenaSize,0,Math.min(width,height)));
-    circle(px, py, r*2);
+function spawnExplosion(v) {
+  const sparks = [];
+  const sparkCount = 18;
+  for (let i = 0; i < sparkCount; i++) {
+    sparks.push({
+      a: Math.random() * TWO_PI,
+      r: 0.35 + Math.random() * 0.85,
+      w: 0.6 + Math.random() * 1.8,
+      delay: Math.random() * 0.18
+    });
   }
 
-  // agents
-  for (const a of world.agents){
+  explosions.push({
+    x: v.x,
+    y: v.y,
+    age: 0,
+    life: 36,
+    hue: v.val,
+    sparks
+  });
+}
+
+function drawExplosions() {
+  if (!explosions.length) return;
+  const maxR = map(CFG.blastRadius, 0, CFG.arenaSize, 0, Math.min(width, height));
+
+  for (const e of explosions) {
+    const px = map(e.x, 0, CFG.arenaSize, 0, width);
+    const py = map(e.y, 0, CFG.arenaSize, 0, height);
+    const t = BCMSimulator.clamp(e.age / e.life, 0, 1);
+    const te = easeOutCubic(t);
+    const ringR = lerp(8, maxR, te);
+
+    push();
+    blendMode(ADD);
+
+    // Expanding glow
+    noStroke();
+    fill(e.hue, 80, 100, 0.38 * (1 - t));
+    circle(px, py, ringR * 2.1);
+
+    // Shock ring
+    stroke(e.hue, 40, 100, 0.6 * (1 - t));
+    strokeWeight(2 + 3 * (1 - t));
+    noFill();
+    circle(px, py, ringR * 2);
+
+    // Core flash
+    noStroke();
+    fill(0, 0, 100, 0.7 * (1 - t));
+    circle(px, py, lerp(22, 4, te));
+
+    // Sparks
+    stroke(e.hue, 90, 100, 0.8 * (1 - t));
+    for (const s of e.sparks) {
+      const sp = (t - s.delay) / (1 - s.delay);
+      if (sp <= 0) continue;
+      const tt = BCMSimulator.clamp(sp, 0, 1);
+      const len = maxR * s.r * tt;
+      const sx = px + Math.cos(s.a) * (len * 0.2);
+      const sy = py + Math.sin(s.a) * (len * 0.2);
+      const ex = px + Math.cos(s.a) * len;
+      const ey = py + Math.sin(s.a) * len;
+      strokeWeight(s.w * (1 - tt));
+      line(sx, sy, ex, ey);
+    }
+
+    pop();
+  }
+}
+
+function drawAgents() {
+  for (const a of sim.agents) {
+    if (!a.alive) continue;
+
     const px = map(a.x, 0, CFG.arenaSize, 0, width);
     const py = map(a.y, 0, CFG.arenaSize, 0, height);
 
+    // Calculate stress level from remembered voids
     let maxUrg = 0;
     for (const m of a.voidMem) maxUrg = Math.max(maxUrg, m.urgency || 0);
-    const t = clamp(maxUrg / 100.0, 0, 1);
+    const t = BCMSimulator.clamp(maxUrg / 100.0, 0, 1);
 
-    // Router vs Vault tint (subtle): vault a bit greener, router a bit bluer
-    const baseHue = (a.mode === "vault") ? 150 : 220;
-    const hue = lerpHue(baseHue, 0, t);
-
+    // Hue: blue (calm) -> red (stressed)
+    const hue = lerpHue(220, 0, t);
     const alpha = a.sleeping ? 0.25 : 0.75;
-    const sat = a.sleeping ? 10 : 70;
-    const bri = a.sleeping ? 70 : 90;
+
+    // Mode affects saturation and brightness
+    const sat = a.sleeping ? 10 : (a.mode === "vault" ? 55 : 75);
+    const bri = a.sleeping ? 70 : (a.mode === "vault" ? 85 : 92);
 
     fill(hue, sat, bri, alpha);
     circle(px, py, a.sleeping ? 7 : 9);
+
+    // Mode indicator - distinct shapes for visibility
+    if (!a.sleeping) {
+      if (a.mode === "vault") {
+        // Green diamond for vault (key storage)
+        fill(140, 80, 95, 1.0);
+        stroke(140, 90, 60, 1.0);
+        strokeWeight(1);
+        push();
+        translate(px + 8, py - 8);
+        rotate(PI / 4);
+        rectMode(CENTER);
+        rect(0, 0, 6, 6);
+        pop();
+        noStroke();
+      } else {
+        // Orange/yellow circle for router (information sharing)
+        fill(35, 90, 100, 1.0);
+        stroke(25, 100, 70, 1.0);
+        strokeWeight(1);
+        circle(px + 8, py - 8, 7);
+        noStroke();
+      }
+    }
   }
+}
 
-  // highlight selected
-  drawSelectionHighlight();
-
-  if (showHud){
-    drawHUD();
+function drawSelection() {
+  if (selectedType === "agent") {
+    const a = sim.agents.find(x => x.id === selectedId);
+    if (a) {
+      const px = map(a.x, 0, CFG.arenaSize, 0, width);
+      const py = map(a.y, 0, CFG.arenaSize, 0, height);
+      noFill();
+      stroke(0, 0, 100, 0.9);
+      strokeWeight(2);
+      circle(px, py, 18);
+      noStroke();
+    }
+  } else if (selectedType === "void") {
+    const v = sim.voidMap.get(selectedId);
+    if (v && v.state === "active") {
+      const px = map(v.x, 0, CFG.arenaSize, 0, width);
+      const py = map(v.y, 0, CFG.arenaSize, 0, height);
+      noFill();
+      stroke(0, 0, 100, 0.9);
+      strokeWeight(2);
+      circle(px, py, 22);
+      noStroke();
+    }
   }
-
-  applyUI();
 }
 
-function lerpHue(h1, h2, t){
-  return h1 + (h2 - h1)*t;
-}
+function drawHUD() {
+  const pop = sim.agents.length;
+  const voids = sim.voids.filter(v => v.state === "active").length;
+  const active = sim.agents.filter(a => a.alive && !a.sleeping).length;
+  const vaults = sim.agents.filter(a => a.mode === "vault").length;
+  const routers = sim.agents.filter(a => a.mode === "router").length;
 
-function drawSelectionHighlight(){
-  if (!inspector.selected) return;
-  const obj = getSelectedObject();
-  if (!obj) return;
+  const ent = sim.computeEntropyProxy();
+  const cov = sim.computeCoverage();
 
-  const px = map(obj.x, 0, CFG.arenaSize, 0, width);
-  const py = map(obj.y, 0, CFG.arenaSize, 0, height);
+  // Background panel
+  fill(0, 0, 100, 0.88);
+  rect(width - 360, 10, 350, 155, 10);
 
-  noFill();
-  stroke(60, 10, 95, 0.9);
-  strokeWeight(2);
-  const r = (inspector.selected.type === "void") ? 16 : 14;
-  circle(px, py, r*2);
-  strokeWeight(1);
-  circle(px, py, (r+6)*2);
-  noStroke();
-}
-
-function drawHUD(){
-  const pop = world.agents.length;
-  const voids = world.voids.length;
-  const active = world.agents.filter(a => a.alive && !a.sleeping).length;
-
-  let ent = computeEntropyProxy();
-  let cov = computeCoverage();
-
-  fill(0, 0, 100, 0.85);
-  rect(width-380, 10, 370, 160, 10);
-
+  // Text
   fill(220, 20, 10, 1);
   textSize(12);
   textAlign(LEFT, TOP);
 
-  const an = dayStats ? dayStats.anomalies : null;
-  const cl = dayStats ? dayStats.cleanup : null;
-
-  const anLine = an
-    ? `Anom: mapMis=${an.voidMapMismatch} shareHiSat=${an.shareHighSaturation} genWaste=${an.genSolveWasteSuspected?1:0}`
-    : "Anom: (n/a)";
-
-  const clLine = cl
-    ? `Cleanup: memMissing=${cl.voidMemRemovedMissing} memRecent=${cl.voidMemRemovedRecent}`
-    : "Cleanup: (n/a)";
-
-  const modesLine = dayStats
-    ? `Modes: vault=${dayStats.modes.vault} router=${dayStats.modes.router}`
-    : `Modes: (n/a)`;
+  const stats = sim.currentDayStats;
+  const bhLine = stats
+    ? `Behavior: shareGate=${stats.behavior.shareSuppressedByGate} routerGenSkip=${stats.behavior.routerGenSolveSkipped}`
+    : "Behavior: (n/a)";
 
   text(
-    `Day: ${world.day}   Tick: ${world.tick}\n` +
+    `Day: ${sim.day}   Tick: ${sim.tick}\n` +
     `Pop: ${pop}   Active: ${active}\n` +
-    `${modesLine}\n` +
+    `Modes: vault=${vaults} router=${routers}\n` +
     `Voids: ${voids}   Entropy~: ${ent.toFixed(0)}\n` +
-    `Coverage: ${(cov*100).toFixed(1)}%\n` +
-    `${anLine}\n` +
-    `${clLine}\n` +
-    `Telemetry days: ${telemetry ? telemetry.days.length : 0}  events: ${telemetry ? telemetry.events.length : 0}`,
-    width-370, 18
+    `Coverage: ${(cov * 100).toFixed(1)}%\n` +
+    `${bhLine}\n` +
+    `Telemetry days: ${sim.dayStats.length}`,
+    width - 350, 18
   );
 
-  // mini histogram (void distribution + key distribution line)
-  const bins = CFG.telemetryBins;
+  // Spectrum mini-chart
+  drawSpectrumChart(width - 350, 148, 330, 14);
+}
+
+function drawSpectrumChart(x0, y0, w, h) {
+  const bins = CFG.telemetryBins || 36;
   const vb = new Array(bins).fill(0);
   const kb = new Array(bins).fill(0);
 
-  for (const v of world.voids){
-    const idx = Math.floor((v.val/360)*bins);
-    vb[clamp(idx,0,bins-1)]++;
+  for (const v of sim.voids) {
+    if (v.state !== "active") continue;
+    const idx = Math.floor((v.val / 360) * bins);
+    vb[BCMSimulator.clamp(idx, 0, bins - 1)]++;
   }
-  for (const a of world.agents){
-    for (const k of a.keys){
-      const idx = Math.floor((k.val/360)*bins);
-      kb[clamp(idx,0,bins-1)]++;
+
+  for (const a of sim.agents) {
+    for (const k of a.keys) {
+      const idx = Math.floor((k.val / 360) * bins);
+      kb[BCMSimulator.clamp(idx, 0, bins - 1)]++;
     }
   }
 
-  const x0 = width-370, y0 = 150, w = 350, h = 16;
   const maxV = Math.max(1, ...vb);
   const maxK = Math.max(1, ...kb);
 
-  for (let i=0;i<bins;i++){
-    const x = x0 + (i/bins)*w;
-    const bw = w/bins;
-    const hh = (vb[i]/maxV)*h;
-    fill(i*(360/bins), 70, 90, 0.55);
-    rect(x, y0 + (h-hh), bw, hh);
+  // Void histogram bars
+  for (let i = 0; i < bins; i++) {
+    const x = x0 + (i / bins) * w;
+    const bw = w / bins;
+    const hh = (vb[i] / maxV) * h;
+    fill(i * (360 / bins), 70, 90, 0.55);
+    rect(x, y0 + (h - hh), bw, hh);
   }
+
+  // Key distribution line
   stroke(120, 10, 95, 0.8);
   strokeWeight(1);
   noFill();
   beginShape();
-  for (let i=0;i<bins;i++){
-    const x = x0 + (i+0.5)/bins*w;
-    const yy = y0 + h - (kb[i]/maxK)*h;
+  for (let i = 0; i < bins; i++) {
+    const x = x0 + (i + 0.5) / bins * w;
+    const yy = y0 + h - (kb[i] / maxK) * h;
     vertex(x, yy);
   }
   endShape();
   noStroke();
 }
 
-/////////////////////////
-// 7) UI controls       //
-/////////////////////////
+function lerpHue(h1, h2, t) {
+  return h1 + (h2 - h1) * t;
+}
 
-function initUI(){
-  ui = select("#ui");
+function easeOutCubic(t) {
+  return 1 - Math.pow(1 - t, 3);
+}
+
+// ========================
+// UI Controls
+// ========================
+
+function initUI() {
+  const ui = select("#ui");
   ui.html("");
 
-  const mkSlider = (name, label, min, max, value, step=1) => {
+  const mkSlider = (name, label, min, max, value, step = 1) => {
     const row = createDiv("").addClass("row").parent(ui);
     createElement("label", label).parent(row);
     const s = createSlider(min, max, value, step).parent(row);
-    s.style("width", "220px");
     const v = createSpan(String(value)).addClass("val mono").parent(row);
-    sliders[name] = { s, v, label };
+    sliders[name] = { s, v };
   };
 
-  mkSlider("ticksPerFrame", "Speed (ticks/frame)", 1, 40, CFG.ticksPerFrame, 1);
+  createElement("div", "Simulation").addClass("section-title").parent(ui);
+  mkSlider("ticksPerFrame", "Speed", 1, 40, CFG.ticksPerFrame, 1);
   mkSlider("targetVoids", "Target voids", 5, 100, CFG.targetVoids, 1);
-  mkSlider("voidHp", "Void HP", 1, 120, CFG.voidHp, 1);
+  mkSlider("voidHp", "Void HP", 1, 160, CFG.voidHp, 1);
   mkSlider("maxPop", "Max population", 10, 500, CFG.maxPop, 10);
-  mkSlider("maxMem", "Memory (keys+voids)", 10, 200, CFG.maxMem, 5);
-  mkSlider("keyTTLMax", "Key TTL (days)", 2, 40, CFG.keyTTLMax, 1);
-  mkSlider("matchEps", "Match ε (deg)", 0, 10, CFG.matchEps, 1);
+
+  createElement("div", "Keys & Memory").addClass("section-title").parent(ui);
+  mkSlider("maxMem", "Memory capacity", 10, 200, CFG.maxMem, 5);
+  mkSlider("keyTTLMax", "Key TTL (days)", 2, 60, CFG.keyTTLMax, 1);
+  mkSlider("matchEps", "Match tolerance", 0, 12, CFG.matchEps, 1);
+
+  createElement("div", "Explosions").addClass("section-title").parent(ui);
   mkSlider("blastRadius", "Blast radius", 40, 260, CFG.blastRadius, 5);
   mkSlider("kDeath", "Blast lethality", 0.00, 0.60, CFG.kDeath, 0.01);
 
+  // Buttons
   const btnRow = createDiv("").addClass("btns").parent(ui);
   btnPause = createButton("Pause").parent(btnRow).mousePressed(() => {
-    world.paused = !world.paused;
-    btnPause.html(world.paused ? "Resume" : "Pause");
+    paused = !paused;
+    btnPause.html(paused ? "Resume" : "Pause");
   });
   btnReset = createButton("Reset").parent(btnRow).mousePressed(() => {
-    initWorld();
+    initSimulation();
   });
   btnHud = createButton("Toggle HUD").parent(btnRow).mousePressed(() => {
     showHud = !showHud;
@@ -1591,19 +470,22 @@ function initUI(){
     downloadTelemetry();
   });
 
+  // Hints
   createDiv(`<div class="hint">
-    <b>Modes</b>: <span class="pill">vault</span> banks keys (rarity preservation), <span class="pill">router</span> routes voids (awareness / sharing).<br/>
-    <b>Sharing</b>: uses novelty gate (only if someone benefits) + stronger saturation penalty.<br/>
-    <b>Co-op solve</b>: damage increases with nearby agents (faster void clearing).
+    <b>Controls:</b> Space=pause, R=reset, Click=inspect<br/>
+    <b>Agent color:</b> <span style="color:#7af">●</span> Calm
+    <span style="color:#f77">●</span> Stressed
+    <span style="color:#888">●</span> Sleeping<br/>
+    <b>Mode marker:</b> <span style="color:#5d5; font-weight:bold">◆</span> Vault (diverse keys)
+    <span style="color:#fa0">●</span> Router (clustered)<br/>
+    <b>X</b> = Void (color = spectrum type, brightness = urgency)
   </div>`).parent(ui);
 
-  // inspector UI
-  createDiv(`<div class="sectionTitle"><b>Inspector</b></div>`).parent(ui);
-  inspector.div = createDiv("").addClass("inspectorBox").parent(ui);
-  updateInspectorUI();
+  // Inspector
+  initInspectorUI(ui);
 }
 
-function applyUI(){
+function applyUI() {
   const get = (k) => sliders[k].s.value();
 
   CFG.ticksPerFrame = Number(get("ticksPerFrame"));
@@ -1616,58 +498,225 @@ function applyUI(){
   CFG.blastRadius = Number(get("blastRadius"));
   CFG.kDeath = Number(get("kDeath"));
 
-  for (const k of Object.keys(sliders)){
+  // Update slider value displays
+  for (const k of Object.keys(sliders)) {
     sliders[k].v.html(String(sliders[k].s.value()));
   }
 
-  for (const a of world.agents){
-    if (a.totalMem !== CFG.maxMem){
+  // Apply to simulation config
+  sim.cfg.targetVoids = CFG.targetVoids;
+  sim.cfg.voidHp = CFG.voidHp;
+  sim.cfg.maxPop = CFG.maxPop;
+  sim.cfg.maxMem = CFG.maxMem;
+  sim.cfg.keyTTLMax = CFG.keyTTLMax;
+  sim.cfg.matchEps = CFG.matchEps;
+  sim.cfg.blastRadius = CFG.blastRadius;
+  sim.cfg.kDeath = CFG.kDeath;
+
+  // Live apply to existing agents
+  for (const a of sim.agents) {
+    if (a.totalMem !== CFG.maxMem) {
       a.totalMem = CFG.maxMem;
       a.recomputeCaps();
     }
-    for (const key of a.keys){
-      // refresh global TTL cap changes, but keep vault boost
-      const targetTTL = (CFG.enableModes && a.mode==="vault")
-        ? Math.max(2, Math.round(CFG.keyTTLMax * CFG.vaultKeyTTLBoost))
-        : CFG.keyTTLMax;
-
-      key.ttlMax = targetTTL;
+    for (const key of a.keys) {
+      if (CFG.enableModes && a.mode === "vault") {
+        key.ttlMax = Math.round(CFG.keyTTLMax * CFG.vaultKeyTTLBoost);
+      } else {
+        key.ttlMax = CFG.keyTTLMax;
+      }
       key.ttl = Math.min(key.ttl, key.ttlMax);
     }
   }
+
+  renderInspector();
 }
 
-function keyPressed(){
+// ========================
+// Inspector
+// ========================
+
+function initInspectorUI(parentDiv) {
+  const wrap = createDiv("").addClass("inspector").parent(parentDiv);
+  createElement("h3", "Inspector").parent(wrap);
+  inspectorPre = createElement("pre", "Click an agent or void to inspect.\nTip: Shift-click to pin selection.")
+    .addClass("mono")
+    .parent(wrap);
+}
+
+function renderInspector() {
+  if (!inspectorPre) return;
+
+  if (!selectedType) {
+    inspectorPre.html("Click an agent or void to inspect.\nTip: Shift-click to pin selection.");
+    return;
+  }
+
+  if (selectedType === "agent") {
+    const a = sim.agents.find(x => x.id === selectedId);
+    if (!a) {
+      inspectorPre.html("Selected agent no longer exists.");
+      selectedType = null;
+      selectedId = null;
+      return;
+    }
+
+    const sampleKeys = a.keys.slice(-8).map(k => ({
+      val: k.val,
+      ttl: k.ttl,
+      uses: k.uses
+    }));
+
+    const sampleVoids = a.voidMem
+      .slice()
+      .sort((x, y) => (y.urgency || 0) - (x.urgency || 0))
+      .slice(0, 6)
+      .map(m => ({
+        voidId: m.voidId,
+        val: m.val,
+        urg: +(m.urgency || 0).toFixed(1)
+      }));
+
+    const obj = {
+      id: a.id,
+      mode: a.mode,
+      ageDays: a.ageDays,
+      sleeping: a.sleeping,
+      energy: +a.energy.toFixed(1),
+      agentValue: a.agentValue,
+      keys: { count: a.keys.length, max: a.maxKeys, sample: sampleKeys },
+      voidMem: { count: a.voidMem.length, max: a.maxVoidMem, sample: sampleVoids }
+    };
+
+    inspectorPre.html(JSON.stringify(obj, null, 2));
+    return;
+  }
+
+  if (selectedType === "void") {
+    const v = sim.voidMap.get(selectedId);
+    if (!v || v.state !== "active") {
+      inspectorPre.html("Selected void no longer exists.");
+      selectedType = null;
+      selectedId = null;
+      return;
+    }
+
+    const obj = {
+      id: v.id,
+      val: v.val,
+      hp: +v.hp.toFixed(1),
+      hpMax: v.hpMax,
+      lifespan: v.lifespan,
+      lifespanMax: v.lifespanMax,
+      urgency: +v.urgency().toFixed(1)
+    };
+
+    inspectorPre.html(JSON.stringify(obj, null, 2));
+  }
+}
+
+function pickEntityAt(mx, my) {
+  const THR_AGENT = 12;
+  const THR_VOID = 16;
+
+  let best = null;
+  let bestD = Infinity;
+
+  // Check agents
+  for (const a of sim.agents) {
+    if (!a.alive) continue;
+    const px = map(a.x, 0, CFG.arenaSize, 0, width);
+    const py = map(a.y, 0, CFG.arenaSize, 0, height);
+    const d = Math.hypot(mx - px, my - py);
+    if (d < THR_AGENT && d < bestD) {
+      best = { type: "agent", id: a.id };
+      bestD = d;
+    }
+  }
+
+  // Check voids
+  for (const v of sim.voids) {
+    if (v.state !== "active") continue;
+    const px = map(v.x, 0, CFG.arenaSize, 0, width);
+    const py = map(v.y, 0, CFG.arenaSize, 0, height);
+    const d = Math.hypot(mx - px, my - py);
+    if (d < THR_VOID && d < bestD) {
+      best = { type: "void", id: v.id };
+      bestD = d;
+    }
+  }
+
+  return best;
+}
+
+// ========================
+// Telemetry Download
+// ========================
+
+function downloadTelemetry() {
+  const telemetry = {
+    meta: {
+      version: "bcm-sim-v2.0",
+      downloadedAtISO: new Date().toISOString()
+    },
+    config: { ...CFG },
+    days: sim.dayStats,
+    live: {
+      day: sim.day,
+      tick: sim.tick,
+      pop: sim.agents.length,
+      voids: sim.voids.filter(v => v.state === "active").length,
+      coverage: sim.computeCoverage(),
+      entropyProxy: sim.computeEntropyProxy()
+    }
+  };
+
+  const json = JSON.stringify(telemetry, null, 2);
+  const blob = new Blob([json], { type: "application/json" });
+  const url = URL.createObjectURL(blob);
+
+  const a = document.createElement("a");
+  a.href = url;
+  a.download = `bcm_telemetry_${new Date().toISOString().replace(/[:.]/g, '-')}.json`;
+  document.body.appendChild(a);
+  a.click();
+  a.remove();
+  URL.revokeObjectURL(url);
+}
+
+// ========================
+// Keyboard & Mouse
+// ========================
+
+function keyPressed() {
   if (key === ' ') {
-    world.paused = !world.paused;
-    btnPause.html(world.paused ? "Resume" : "Pause");
+    paused = !paused;
+    btnPause.html(paused ? "Resume" : "Pause");
   }
-  if (key === 'r' || key === 'R'){
-    initWorld();
-  }
-  if (key === 'Escape'){
-    inspector.selected = null;
-    updateInspectorUI();
+  if (key === 'r' || key === 'R') {
+    initSimulation();
   }
 }
 
-// click inspector selection
-function mousePressed(){
-  // ignore clicks on UI panel
-  const panel = document.getElementById("ui");
-  const rect = panel.getBoundingClientRect();
-  if (mouseX >= rect.left && mouseX <= rect.right && mouseY >= rect.top && mouseY <= rect.bottom){
+function mousePressed() {
+  // Ignore clicks on UI panel
+  const uiEl = document.getElementById("ui");
+  const rect = uiEl.getBoundingClientRect();
+  if (mouseX >= rect.left && mouseX <= rect.right && mouseY >= rect.top && mouseY <= rect.bottom) {
     return;
   }
 
-  const picked = pickNearest();
-  if (!picked){
-    inspector.selected = null;
-    updateInspectorUI();
+  const hit = pickEntityAt(mouseX, mouseY);
+  if (!hit) {
+    selectedType = null;
+    selectedId = null;
+    renderInspector();
     return;
   }
-  inspector.selected = picked;
-  updateInspectorUI();
+
+  selectedType = hit.type;
+  selectedId = hit.id;
+  renderInspector();
 }
 </script>
 </body>
