@@ -907,27 +907,31 @@ function mousePressed() {
 function touchStarted() {
   // Use p5.js touch coordinates
   if (touches.length > 0) {
-    handlePointerPress(touches[0].x, touches[0].y);
+    const touchX = touches[0].x;
+    const touchY = touches[0].y;
+
+    // Check if touch is on UI panel - allow default behavior
+    const uiEl = document.getElementById("ui");
+    const rect = uiEl.getBoundingClientRect();
+    if (touchX >= rect.left && touchX <= rect.right && touchY >= rect.top && touchY <= rect.bottom) {
+      return true; // Allow default behavior for panel interactions
+    }
+
+    // Check if touch is on toggle button - allow default behavior
+    const toggleEl = document.getElementById("panelToggle");
+    const toggleRect = toggleEl.getBoundingClientRect();
+    if (touchX >= toggleRect.left && touchX <= toggleRect.right && touchY >= toggleRect.top && touchY <= toggleRect.bottom) {
+      return true; // Allow default behavior for toggle button
+    }
+
+    // Touch is on canvas - handle it
+    handlePointerPress(touchX, touchY);
+    return false; // Prevent default only for canvas touches
   }
-  // Prevent default behavior (like scrolling)
-  return false;
+  return true;
 }
 
 function handlePointerPress(x, y) {
-  // Ignore clicks/touches on UI panel
-  const uiEl = document.getElementById("ui");
-  const rect = uiEl.getBoundingClientRect();
-  if (x >= rect.left && x <= rect.right && y >= rect.top && y <= rect.bottom) {
-    return;
-  }
-
-  // Ignore clicks/touches on toggle button
-  const toggleEl = document.getElementById("panelToggle");
-  const toggleRect = toggleEl.getBoundingClientRect();
-  if (x >= toggleRect.left && x <= toggleRect.right && y >= toggleRect.top && y <= toggleRect.bottom) {
-    return;
-  }
-
   // Double-tap detection for mobile (pause/resume)
   const currentTime = millis();
   if (currentTime - lastTapTime < DOUBLE_TAP_DELAY && width <= 768) {
