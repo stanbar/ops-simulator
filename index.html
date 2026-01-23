@@ -49,10 +49,17 @@
       font-size: 20px;
       color: #e8eef6;
       user-select: none;
+      transition: left 0.3s ease;
+      -webkit-tap-highlight-color: transparent;
+      touch-action: manipulation;
     }
 
     .panel-toggle:active {
       background: #2d3d52;
+    }
+
+    .panel-toggle.panel-open {
+      left: calc(min(100vw - 24px, 360px) - 44px - 10px);
     }
 
     .row { display:flex; justify-content:space-between; gap:10px; align-items:center; margin: 6px 0; }
@@ -106,6 +113,11 @@
 
       .panel-toggle {
         display: flex;
+        left: 10px;
+      }
+
+      .panel-toggle.panel-open {
+        left: calc(min(100vw - 24px, 360px) - 54px);
       }
 
       .panel.collapsed + .panel-toggle {
@@ -636,14 +648,34 @@ function initPanelToggle() {
   const panel = document.getElementById("ui");
   let panelCollapsed = false;
 
-  toggleBtn.addEventListener("click", () => {
+  toggleBtn.addEventListener("click", (e) => {
+    e.stopPropagation();
+    e.preventDefault();
     panelCollapsed = !panelCollapsed;
     if (panelCollapsed) {
       panel.classList.add("collapsed");
       toggleBtn.textContent = "☰";
+      toggleBtn.classList.remove("panel-open");
     } else {
       panel.classList.remove("collapsed");
       toggleBtn.textContent = "✕";
+      toggleBtn.classList.add("panel-open");
+    }
+  });
+
+  // Also handle touch events explicitly
+  toggleBtn.addEventListener("touchend", (e) => {
+    e.stopPropagation();
+    e.preventDefault();
+    panelCollapsed = !panelCollapsed;
+    if (panelCollapsed) {
+      panel.classList.add("collapsed");
+      toggleBtn.textContent = "☰";
+      toggleBtn.classList.remove("panel-open");
+    } else {
+      panel.classList.remove("collapsed");
+      toggleBtn.textContent = "✕";
+      toggleBtn.classList.add("panel-open");
     }
   });
 
