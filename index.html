@@ -2,20 +2,65 @@
 <html lang="en">
 <head>
   <meta charset="UTF-8" />
-  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no" />
   <title>BCM Spectrum Simulator</title>
   <script src="https://cdn.jsdelivr.net/npm/p5@1.9.2/lib/p5.min.js"></script>
   <script src="simulation.js"></script>
   <style>
-    body { margin: 0; background:#0b0f14; color:#e8eef6; font-family: ui-sans-serif, system-ui, -apple-system, Segoe UI, Roboto, Arial; overflow: hidden; }
-    .panel { position: fixed; left: 10px; top: 10px; width: 380px; background: rgba(10,14,20,0.92); border: 1px solid rgba(255,255,255,0.08);
-             border-radius: 10px; padding: 12px 12px 10px; backdrop-filter: blur(8px); max-height: calc(100vh - 40px); overflow-y: auto; }
+    body { margin: 0; background:#0b0f14; color:#e8eef6; font-family: ui-sans-serif, system-ui, -apple-system, Segoe UI, Roboto, Arial; overflow: hidden; -webkit-tap-highlight-color: transparent; }
+
+    .panel {
+      position: fixed;
+      left: 10px;
+      top: 10px;
+      width: 380px;
+      background: rgba(10,14,20,0.92);
+      border: 1px solid rgba(255,255,255,0.08);
+      border-radius: 10px;
+      padding: 12px 12px 10px;
+      backdrop-filter: blur(8px);
+      max-height: calc(100vh - 40px);
+      overflow-y: auto;
+      transition: transform 0.3s ease, opacity 0.3s ease;
+      z-index: 1000;
+    }
+
+    .panel.collapsed {
+      transform: translateX(calc(-100% - 20px));
+      opacity: 0;
+      pointer-events: none;
+    }
+
+    .panel-toggle {
+      position: fixed;
+      left: 10px;
+      top: 10px;
+      width: 44px;
+      height: 44px;
+      background: rgba(10,14,20,0.92);
+      border: 1px solid rgba(255,255,255,0.12);
+      border-radius: 8px;
+      cursor: pointer;
+      display: none;
+      align-items: center;
+      justify-content: center;
+      z-index: 1001;
+      backdrop-filter: blur(8px);
+      font-size: 20px;
+      color: #e8eef6;
+      user-select: none;
+    }
+
+    .panel-toggle:active {
+      background: #2d3d52;
+    }
+
     .row { display:flex; justify-content:space-between; gap:10px; align-items:center; margin: 6px 0; }
     .row label { font-size: 12px; opacity: 0.9; flex-shrink: 0; }
     .row .val { font-size: 12px; opacity: 0.85; min-width: 50px; text-align:right; }
     .row input[type="range"] { flex: 1; max-width: 180px; }
     .btns { display:flex; gap:8px; margin-top:10px; flex-wrap:wrap; }
-    button { background:#1b2432; color:#e8eef6; border:1px solid rgba(255,255,255,0.12); border-radius:8px; padding:7px 12px; cursor:pointer; font-size: 12px; }
+    button { background:#1b2432; color:#e8eef6; border:1px solid rgba(255,255,255,0.12); border-radius:8px; padding:7px 12px; cursor:pointer; font-size: 12px; min-height: 32px; touch-action: manipulation; }
     button:hover { background:#243247; }
     button:active { background:#2d3d52; }
     .hint { font-size: 11px; opacity: 0.75; line-height: 1.4; margin-top: 10px; padding-top: 10px; border-top: 1px solid rgba(255,255,255,0.08); }
@@ -47,10 +92,85 @@
       word-break: break-word;
     }
     canvas { display:block; }
+
+    /* Mobile Responsive Styles */
+    @media (max-width: 768px) {
+      .panel {
+        left: 0;
+        top: 0;
+        width: calc(100vw - 24px);
+        max-width: 360px;
+        max-height: calc(100vh - 20px);
+        border-radius: 0 10px 10px 0;
+      }
+
+      .panel-toggle {
+        display: flex;
+      }
+
+      .panel.collapsed + .panel-toggle {
+        background: rgba(10,14,20,0.8);
+      }
+
+      .row {
+        flex-wrap: wrap;
+      }
+
+      .row label {
+        flex-basis: 100%;
+        margin-bottom: 4px;
+      }
+
+      .row input[type="range"] {
+        max-width: none;
+      }
+
+      button {
+        flex: 1;
+        min-width: 80px;
+        padding: 10px 12px;
+        font-size: 13px;
+        min-height: 40px;
+      }
+
+      .btns {
+        gap: 6px;
+      }
+
+      .hint {
+        font-size: 10px;
+      }
+    }
+
+    @media (max-width: 480px) {
+      .panel {
+        max-width: calc(100vw - 20px);
+        padding: 10px;
+      }
+
+      .row label {
+        font-size: 11px;
+      }
+
+      .row .val {
+        font-size: 11px;
+      }
+
+      button {
+        font-size: 12px;
+        padding: 9px 10px;
+      }
+
+      .section-title {
+        font-size: 10px;
+        margin: 10px 0 4px;
+      }
+    }
   </style>
 </head>
 <body>
   <div class="panel" id="ui"></div>
+  <div class="panel-toggle" id="panelToggle">☰</div>
 
 <script>
 /**
@@ -76,6 +196,10 @@ let inspectorPre = null;
 let selectedType = null;
 let selectedId = null;
 
+// Touch state for double-tap detection
+let lastTapTime = 0;
+const DOUBLE_TAP_DELAY = 300;
+
 // Config (local copy for UI binding, plus visual-specific settings)
 let CFG = {
   ...BCMSimulator.DEFAULT_CFG,
@@ -97,6 +221,7 @@ function setup() {
   colorMode(HSB, 360, 100, 100, 1);
   noStroke();
   initUI();
+  initPanelToggle();
   initSimulation();
   background(220, 35, 8);
 }
@@ -342,33 +467,53 @@ function drawHUD() {
   const ent = sim.computeEntropyProxy();
   const cov = sim.computeCoverage();
 
+  // Responsive HUD sizing
+  const isMobile = width < 768;
+  const hudWidth = isMobile ? Math.min(width - 20, 280) : 350;
+  const hudHeight = isMobile ? 135 : 155;
+  const fontSize = isMobile ? 10 : 12;
+  const hudX = width - hudWidth - 10;
+  const hudY = 10;
+
   // Background panel
   fill(0, 0, 100, 0.88);
-  rect(width - 360, 10, 350, 155, 10);
+  rect(hudX, hudY, hudWidth, hudHeight, 10);
 
   // Text
   fill(220, 20, 10, 1);
-  textSize(12);
+  textSize(fontSize);
   textAlign(LEFT, TOP);
 
   const stats = sim.currentDayStats;
-  const bhLine = stats
-    ? `Behavior: shareGate=${stats.behavior.shareSuppressedByGate} routerGenSkip=${stats.behavior.routerGenSolveSkipped}`
-    : "Behavior: (n/a)";
 
-  text(
-    `Day: ${sim.day}   Tick: ${sim.tick}\n` +
-    `Pop: ${pop}   Active: ${active}\n` +
-    `Modes: vault=${vaults} router=${routers}\n` +
-    `Voids: ${voids}   Entropy~: ${ent.toFixed(0)}\n` +
-    `Coverage: ${(cov * 100).toFixed(1)}%\n` +
-    `${bhLine}\n` +
-    `Telemetry days: ${sim.dayStats.length}`,
-    width - 350, 18
-  );
+  let content;
+  if (isMobile) {
+    // Compact mobile version
+    content = `Day: ${sim.day}  Tick: ${sim.tick}\n` +
+      `Pop: ${pop}  Active: ${active}\n` +
+      `V:${vaults} R:${routers}  Voids: ${voids}\n` +
+      `Entropy: ${ent.toFixed(0)}  Cov: ${(cov * 100).toFixed(1)}%\n` +
+      `Tel: ${sim.dayStats.length} days`;
+  } else {
+    // Full desktop version
+    const bhLine = stats
+      ? `Behavior: shareGate=${stats.behavior.shareSuppressedByGate} routerGenSkip=${stats.behavior.routerGenSolveSkipped}`
+      : "Behavior: (n/a)";
+
+    content = `Day: ${sim.day}   Tick: ${sim.tick}\n` +
+      `Pop: ${pop}   Active: ${active}\n` +
+      `Modes: vault=${vaults} router=${routers}\n` +
+      `Voids: ${voids}   Entropy~: ${ent.toFixed(0)}\n` +
+      `Coverage: ${(cov * 100).toFixed(1)}%\n` +
+      `${bhLine}\n` +
+      `Telemetry days: ${sim.dayStats.length}`;
+  }
+
+  text(content, hudX + 10, hudY + 8);
 
   // Spectrum mini-chart
-  drawSpectrumChart(width - 350, 148, 330, 14);
+  const chartY = hudY + hudHeight - 18;
+  drawSpectrumChart(hudX + 10, chartY, hudWidth - 20, isMobile ? 12 : 14);
 }
 
 function drawSpectrumChart(x0, y0, w, h) {
@@ -472,7 +617,8 @@ function initUI() {
 
   // Hints
   createDiv(`<div class="hint">
-    <b>Controls:</b> Space=pause, R=reset, Click=inspect<br/>
+    <b>Controls:</b> Space=pause, R=reset, Click/Tap=inspect<br/>
+    <b>Mobile:</b> Double-tap canvas to pause/resume<br/>
     <b>Agent color:</b> <span style="color:#7af">●</span> Calm
     <span style="color:#f77">●</span> Stressed
     <span style="color:#888">●</span> Sleeping<br/>
@@ -483,6 +629,30 @@ function initUI() {
 
   // Inspector
   initInspectorUI(ui);
+}
+
+function initPanelToggle() {
+  const toggleBtn = document.getElementById("panelToggle");
+  const panel = document.getElementById("ui");
+  let panelCollapsed = false;
+
+  toggleBtn.addEventListener("click", () => {
+    panelCollapsed = !panelCollapsed;
+    if (panelCollapsed) {
+      panel.classList.add("collapsed");
+      toggleBtn.textContent = "☰";
+    } else {
+      panel.classList.remove("collapsed");
+      toggleBtn.textContent = "✕";
+    }
+  });
+
+  // Auto-collapse on mobile initially
+  if (window.innerWidth <= 768) {
+    panelCollapsed = true;
+    panel.classList.add("collapsed");
+    toggleBtn.textContent = "☰";
+  }
 }
 
 function applyUI() {
@@ -699,14 +869,44 @@ function keyPressed() {
 }
 
 function mousePressed() {
-  // Ignore clicks on UI panel
+  handlePointerPress(mouseX, mouseY);
+}
+
+function touchStarted() {
+  // Use p5.js touch coordinates
+  if (touches.length > 0) {
+    handlePointerPress(touches[0].x, touches[0].y);
+  }
+  // Prevent default behavior (like scrolling)
+  return false;
+}
+
+function handlePointerPress(x, y) {
+  // Ignore clicks/touches on UI panel
   const uiEl = document.getElementById("ui");
   const rect = uiEl.getBoundingClientRect();
-  if (mouseX >= rect.left && mouseX <= rect.right && mouseY >= rect.top && mouseY <= rect.bottom) {
+  if (x >= rect.left && x <= rect.right && y >= rect.top && y <= rect.bottom) {
     return;
   }
 
-  const hit = pickEntityAt(mouseX, mouseY);
+  // Ignore clicks/touches on toggle button
+  const toggleEl = document.getElementById("panelToggle");
+  const toggleRect = toggleEl.getBoundingClientRect();
+  if (x >= toggleRect.left && x <= toggleRect.right && y >= toggleRect.top && y <= toggleRect.bottom) {
+    return;
+  }
+
+  // Double-tap detection for mobile (pause/resume)
+  const currentTime = millis();
+  if (currentTime - lastTapTime < DOUBLE_TAP_DELAY && width <= 768) {
+    paused = !paused;
+    btnPause.html(paused ? "Resume" : "Pause");
+    lastTapTime = 0; // Reset to prevent triple-tap
+    return;
+  }
+  lastTapTime = currentTime;
+
+  const hit = pickEntityAt(x, y);
   if (!hit) {
     selectedType = null;
     selectedId = null;
