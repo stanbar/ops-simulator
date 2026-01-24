@@ -201,7 +201,7 @@ let showHud = true;
 
 // UI elements
 let sliders = {};
-let btnPause, btnReset, btnHud, btnDownload;
+let btnPause, btnReset, btnHud, btnDownload, btnTimeRange;
 
 // Inspector state
 let inspectorPre = null;
@@ -211,6 +211,9 @@ let selectedId = null;
 // Touch state for double-tap detection
 let lastTapTime = 0;
 const DOUBLE_TAP_DELAY = 300;
+
+// Time-series graph state
+let timeSeriesRange = 100; // 100 or 1000 days
 
 // Config (local copy for UI binding, plus visual-specific settings)
 let CFG = {
@@ -482,7 +485,9 @@ function drawHUD() {
   // Responsive HUD sizing
   const isMobile = width < 768;
   const hudWidth = isMobile ? Math.min(width - 20, 280) : 350;
-  const hudHeight = isMobile ? 135 : 155;
+  const timeSeriesHeight = isMobile ? 100 : 140;
+  const baseHudHeight = isMobile ? 135 : 155;
+  const hudHeight = baseHudHeight + timeSeriesHeight + 10;
   const fontSize = isMobile ? 10 : 12;
   const hudX = width - hudWidth - 10;
   const hudY = 10;
@@ -505,7 +510,7 @@ function drawHUD() {
       `Pop: ${pop}  Active: ${active}\n` +
       `V:${vaults} R:${routers}  Voids: ${voids}\n` +
       `Entropy: ${ent.toFixed(0)}  Cov: ${(cov * 100).toFixed(1)}%\n` +
-      `Tel: ${sim.dayStats.length} days`;
+      `Tel: ${sim.dayStats.length} days  [${timeSeriesRange}d]`;
   } else {
     // Full desktop version
     const bhLine = stats
@@ -518,14 +523,132 @@ function drawHUD() {
       `Voids: ${voids}   Entropy~: ${ent.toFixed(0)}\n` +
       `Coverage: ${(cov * 100).toFixed(1)}%\n` +
       `${bhLine}\n` +
-      `Telemetry days: ${sim.dayStats.length}`;
+      `Telemetry days: ${sim.dayStats.length}  [Range: ${timeSeriesRange}d]`;
   }
 
   text(content, hudX + 10, hudY + 8);
 
   // Spectrum mini-chart
-  const chartY = hudY + hudHeight - 18;
-  drawSpectrumChart(hudX + 10, chartY, hudWidth - 20, isMobile ? 12 : 14);
+  const spectrumY = hudY + baseHudHeight - 18;
+  drawSpectrumChart(hudX + 10, spectrumY, hudWidth - 20, isMobile ? 12 : 14);
+
+  // Time-series emergence graphs
+  const graphY = hudY + baseHudHeight + 5;
+  drawTimeSeriesGraphs(hudX + 10, graphY, hudWidth - 20, timeSeriesHeight - 10);
+}
+
+function drawTimeSeriesGraphs(x0, y0, w, h) {
+  const dayData = sim.dayStats;
+  if (dayData.length < 2) {
+    // Not enough data yet
+    fill(220, 10, 50, 0.6);
+    textSize(10);
+    textAlign(CENTER, CENTER);
+    text("Collecting data...", x0 + w / 2, y0 + h / 2);
+    textAlign(LEFT, TOP);
+    return;
+  }
+
+  // Determine visible range
+  const rangeEnd = dayData.length;
+  const rangeStart = Math.max(0, rangeEnd - timeSeriesRange);
+  const visibleData = dayData.slice(rangeStart, rangeEnd);
+
+  if (visibleData.length < 2) return;
+
+  // Graph layout: 3 stacked mini-graphs
+  const graphCount = 3;
+  const graphH = (h - 20) / graphCount;
+  const graphGap = 2;
+
+  // Graph 1: Coverage (0-100%)
+  drawMiniGraph(
+    x0, y0, w, graphH,
+    visibleData,
+    d => (d.coverage || 0) * 100,
+    { label: "Coverage %", color: [140, 70, 85], min: 0, max: 100 }
+  );
+
+  // Graph 2: Solve vs Explode rate
+  drawMiniGraph(
+    x0, y0 + graphH + graphGap, w, graphH,
+    visibleData,
+    d => {
+      const total = (d.voids?.solved || 0) + (d.voids?.exploded || 0);
+      if (total === 0) return 50;
+      return ((d.voids?.solved || 0) / total) * 100;
+    },
+    { label: "Solve Rate %", color: [200, 60, 80], min: 0, max: 100 }
+  );
+
+  // Graph 3: Population
+  const maxPop = Math.max(...visibleData.map(d => d.popEnd || 0), 10);
+  drawMiniGraph(
+    x0, y0 + 2 * (graphH + graphGap), w, graphH,
+    visibleData,
+    d => d.popEnd || 0,
+    { label: "Population", color: [30, 70, 85], min: 0, max: maxPop }
+  );
+
+  // X-axis label (day range)
+  fill(220, 10, 60, 0.7);
+  textSize(8);
+  textAlign(LEFT, TOP);
+  const startDay = visibleData[0]?.day || 0;
+  const endDay = visibleData[visibleData.length - 1]?.day || 0;
+  text(`Day ${startDay}`, x0, y0 + h - 8);
+  textAlign(RIGHT, TOP);
+  text(`Day ${endDay}`, x0 + w, y0 + h - 8);
+  textAlign(LEFT, TOP);
+}
+
+function drawMiniGraph(x0, y0, w, h, data, accessor, opts) {
+  const { label, color, min, max } = opts;
+  const [hue, sat, bri] = color;
+
+  // Background
+  fill(220, 15, 15, 0.4);
+  noStroke();
+  rect(x0, y0, w, h, 3);
+
+  // Reference lines at 25%, 50%, 75% for percentage graphs
+  if (max === 100) {
+    stroke(220, 10, 40, 0.3);
+    strokeWeight(0.5);
+    for (const pct of [25, 50, 75]) {
+      const ly = y0 + h - (pct / 100) * h;
+      line(x0, ly, x0 + w, ly);
+    }
+  }
+
+  // Draw the line
+  stroke(hue, sat, bri, 0.9);
+  strokeWeight(1.5);
+  noFill();
+  beginShape();
+  for (let i = 0; i < data.length; i++) {
+    const val = accessor(data[i]);
+    const clampedVal = Math.max(min, Math.min(max, val));
+    const px = x0 + (i / (data.length - 1)) * w;
+    const py = y0 + h - ((clampedVal - min) / (max - min)) * h;
+    vertex(px, py);
+  }
+  endShape();
+  noStroke();
+
+  // Current value dot
+  const lastVal = accessor(data[data.length - 1]);
+  const clampedLast = Math.max(min, Math.min(max, lastVal));
+  const lastX = x0 + w;
+  const lastY = y0 + h - ((clampedLast - min) / (max - min)) * h;
+  fill(hue, sat, bri, 1);
+  ellipse(lastX - 2, lastY, 5, 5);
+
+  // Label
+  fill(hue, sat - 20, bri, 0.85);
+  textSize(8);
+  textAlign(LEFT, TOP);
+  text(`${label}: ${lastVal.toFixed(1)}`, x0 + 3, y0 + 2);
 }
 
 function drawSpectrumChart(x0, y0, w, h) {
@@ -625,6 +748,10 @@ function initUI() {
   });
   btnDownload = createButton("Download Telemetry").parent(btnRow).mousePressed(() => {
     downloadTelemetry();
+  });
+  btnTimeRange = createButton("Graph: 100d").parent(btnRow).mousePressed(() => {
+    timeSeriesRange = timeSeriesRange === 100 ? 1000 : 100;
+    btnTimeRange.html(`Graph: ${timeSeriesRange}d`);
   });
 
   // Hints
