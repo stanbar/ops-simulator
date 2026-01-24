@@ -541,8 +541,8 @@ function drawTimeSeriesGraphs(x0, y0, w, h) {
   const dayData = sim.dayStats;
   if (dayData.length < 2) {
     // Not enough data yet
-    fill(220, 10, 50, 0.6);
-    textSize(10);
+    fill(220, 15, 30, 0.8);
+    textSize(11);
     textAlign(CENTER, CENTER);
     text("Collecting data...", x0 + w / 2, y0 + h / 2);
     textAlign(LEFT, TOP);
@@ -590,15 +590,15 @@ function drawTimeSeriesGraphs(x0, y0, w, h) {
     { label: "Population", color: [30, 70, 85], min: 0, max: maxPop }
   );
 
-  // X-axis label (day range)
-  fill(220, 10, 60, 0.7);
-  textSize(8);
+  // X-axis label (day range) - dark text
+  fill(220, 15, 25, 0.9);
+  textSize(9);
   textAlign(LEFT, TOP);
   const startDay = visibleData[0]?.day || 0;
   const endDay = visibleData[visibleData.length - 1]?.day || 0;
-  text(`Day ${startDay}`, x0, y0 + h - 8);
+  text(`Day ${startDay}`, x0, y0 + h - 10);
   textAlign(RIGHT, TOP);
-  text(`Day ${endDay}`, x0 + w, y0 + h - 8);
+  text(`Day ${endDay}`, x0 + w, y0 + h - 10);
   textAlign(LEFT, TOP);
 }
 
@@ -606,14 +606,14 @@ function drawMiniGraph(x0, y0, w, h, data, accessor, opts) {
   const { label, color, min, max } = opts;
   const [hue, sat, bri] = color;
 
-  // Background
-  fill(220, 15, 15, 0.4);
+  // White background
+  fill(0, 0, 98, 0.95);
   noStroke();
   rect(x0, y0, w, h, 3);
 
   // Reference lines at 25%, 50%, 75% for percentage graphs
   if (max === 100) {
-    stroke(220, 10, 40, 0.3);
+    stroke(220, 5, 75, 0.6);
     strokeWeight(0.5);
     for (const pct of [25, 50, 75]) {
       const ly = y0 + h - (pct / 100) * h;
@@ -621,9 +621,9 @@ function drawMiniGraph(x0, y0, w, h, data, accessor, opts) {
     }
   }
 
-  // Draw the line
-  stroke(hue, sat, bri, 0.9);
-  strokeWeight(1.5);
+  // Draw the line - darker, more saturated
+  stroke(hue, sat + 10, bri - 30, 1);
+  strokeWeight(2);
   noFill();
   beginShape();
   for (let i = 0; i < data.length; i++) {
@@ -641,12 +641,12 @@ function drawMiniGraph(x0, y0, w, h, data, accessor, opts) {
   const clampedLast = Math.max(min, Math.min(max, lastVal));
   const lastX = x0 + w;
   const lastY = y0 + h - ((clampedLast - min) / (max - min)) * h;
-  fill(hue, sat, bri, 1);
-  ellipse(lastX - 2, lastY, 5, 5);
+  fill(hue, sat + 10, bri - 30, 1);
+  ellipse(lastX - 2, lastY, 6, 6);
 
-  // Label
-  fill(hue, sat - 20, bri, 0.85);
-  textSize(8);
+  // Label - dark text on white background
+  fill(hue, sat + 10, 25, 1);
+  textSize(9);
   textAlign(LEFT, TOP);
   text(`${label}: ${lastVal.toFixed(1)}`, x0 + 3, y0 + 2);
 }
