@@ -722,6 +722,17 @@ function drawSpectrumChart(x0, y0, w, h) {
   }
   endShape();
   noStroke();
+
+  // Hotspot markers - triangles below the chart showing active hotspot centers
+  if (sim.hotspots && sim.hotspots.length > 0) {
+    for (const hs of sim.hotspots) {
+      const hx = x0 + (hs.center / 360) * w;
+      const lifeRatio = 1 - (hs.age / hs.lifespan);
+      fill(280, 70, 90, 0.7 * lifeRatio + 0.3);
+      noStroke();
+      triangle(hx - 3, y0, hx + 3, y0, hx, y0 + 5);
+    }
+  }
 }
 
 function lerpHue(h1, h2, t) {

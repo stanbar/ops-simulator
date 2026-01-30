@@ -101,7 +101,16 @@ const DEFAULT_CFG = {
   principleInheritChance: 0.6,
   principleNoise: 15,
   principleGenChance: 0.35,
-  principleGenSolveBoost: 0.12
+  principleGenSolveBoost: 0.12,
+
+  // Void Ecology - drifting spectral hotspots
+  enableVoidEcology: true,
+  numHotspots: 4,
+  hotspotSpread: 30,
+  hotspotDriftRate: 2,
+  hotspotLifespanMin: 20,
+  hotspotLifespanMax: 60,
+  hotspotBias: 0.70
 };
 
 // ========================
@@ -1056,6 +1065,7 @@ class Simulation {
     this.dayStats = [];
     this.currentDayStats = null;
     this.lastExplosions = [];
+    this.hotspots = [];
   }
 
   init() {
@@ -1069,17 +1079,51 @@ class Simulation {
     this.dayStats = [];
     this.lastExplosions = [];
 
+    // Initialize spectral hotspots
+    this.hotspots = [];
+    if (this.cfg.enableVoidEcology) {
+      for (let i = 0; i < this.cfg.numHotspots; i++) {
+        this.hotspots.push(this.createHotspot());
+      }
+    }
+
     for (let i = 0; i < this.cfg.initialAgents; i++) {
       this.agents.push(new Agent(this.cfg, this, this.nextAgentId++));
     }
 
     for (let i = 0; i < this.cfg.targetVoids; i++) {
-      const v = new VoidObj(this.cfg, this.nextVoidId++);
+      const v = this.spawnVoid();
       this.voids.push(v);
       this.voidMap.set(v.id, v);
     }
 
     this.startDayStats();
+  }
+
+  createHotspot() {
+    return {
+      center: Math.floor(Math.random() * 360),
+      spread: this.cfg.hotspotSpread + randInt(-10, 10),
+      lifespan: randInt(this.cfg.hotspotLifespanMin, this.cfg.hotspotLifespanMax),
+      age: 0
+    };
+  }
+
+  sampleVoidValEcology() {
+    if (this.hotspots.length > 0 && Math.random() < this.cfg.hotspotBias) {
+      const h = this.hotspots[Math.floor(Math.random() * this.hotspots.length)];
+      return wrap(h.center + symmetricNoise(Math.ceil(h.spread / 5), 5), 360);
+    }
+    return sampleVoidVal();
+  }
+
+  spawnVoid() {
+    const cfg = this.cfg;
+    const v = new VoidObj(cfg, this.nextVoidId++);
+    if (cfg.enableVoidEcology) {
+      v.val = this.sampleVoidValEcology();
+    }
+    return v;
   }
 
   startDayStats() {
@@ -1230,10 +1274,22 @@ class Simulation {
     while (this.voids.length < cfg.targetVoids && attempts < maxAttempts) {
       attempts++;
       if (Math.random() < cfg.voidRespawnProb) {
-        const v = new VoidObj(cfg, this.nextVoidId++);
+        const v = this.spawnVoid();
         this.voids.push(v);
         this.voidMap.set(v.id, v);
         if (stats) stats.voids.spawned++;
+      }
+    }
+
+    // Hotspot lifecycle: drift, age, rebirth
+    if (cfg.enableVoidEcology) {
+      for (let i = 0; i < this.hotspots.length; i++) {
+        const h = this.hotspots[i];
+        h.age++;
+        h.center = wrap(h.center + randInt(-cfg.hotspotDriftRate, cfg.hotspotDriftRate), 360);
+        if (h.age >= h.lifespan) {
+          this.hotspots[i] = this.createHotspot();
+        }
       }
     }
 
