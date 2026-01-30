@@ -224,7 +224,8 @@ let CFG = {
   ticksPerFrame: 6,
   telemetryBins: 36,
   vaultKeyTTLBoost: 1.35,
-  enableModes: true
+  enableModes: true,
+  enableConsciousness: true
 };
 
 // ========================
@@ -418,7 +419,20 @@ function drawAgents() {
     const bri = a.sleeping ? 70 : (a.mode === "vault" ? 85 : 92);
 
     fill(hue, sat, bri, alpha);
-    circle(px, py, a.sleeping ? 7 : 9);
+    const baseSize = a.sleeping ? 7 : 9;
+    // Maturity slightly increases agent size
+    const maturityBonus = a.crisisCount ? Math.min(a.crisisCount * 0.5, 3) : 0;
+    circle(px, py, baseSize + maturityBonus);
+
+    // Crisis indicator - pulsing ring (the "dark night")
+    if (a.crisisState && !a.sleeping) {
+      const pulse = 0.5 + 0.5 * Math.sin(frameCount * 0.15 + a.id);
+      noFill();
+      stroke(280, 80, 90, 0.6 * pulse);
+      strokeWeight(2);
+      circle(px, py, 16 + pulse * 6);
+      noStroke();
+    }
 
     // Mode indicator - distinct shapes for visibility
     if (!a.sleeping) {
@@ -481,12 +495,14 @@ function drawHUD() {
 
   const ent = sim.computeEntropyProxy();
   const cov = sim.computeCoverage();
+  const inCrisis = sim.agents.filter(a => a.crisisState).length;
+  const avgMaturity = sim.agents.length ? (sim.agents.reduce((s, a) => s + a.crisisCount, 0) / sim.agents.length) : 0;
 
   // Responsive HUD sizing
   const isMobile = width < 768;
   const hudWidth = isMobile ? Math.min(width - 20, 280) : 350;
-  const timeSeriesHeight = isMobile ? 100 : 140;
-  const baseHudHeight = isMobile ? 135 : 155;
+  const timeSeriesHeight = isMobile ? 130 : 180;
+  const baseHudHeight = isMobile ? 155 : 175;
   const hudHeight = baseHudHeight + timeSeriesHeight + 10;
   const fontSize = isMobile ? 10 : 12;
   const hudX = width - hudWidth - 10;
@@ -510,6 +526,7 @@ function drawHUD() {
       `Pop: ${pop}  Active: ${active}\n` +
       `V:${vaults} R:${routers}  Voids: ${voids}\n` +
       `Entropy: ${ent.toFixed(0)}  Cov: ${(cov * 100).toFixed(1)}%\n` +
+      `Crisis: ${inCrisis}  Maturity: ${avgMaturity.toFixed(1)}\n` +
       `Tel: ${sim.dayStats.length} days  [${timeSeriesRange}d]`;
   } else {
     // Full desktop version
@@ -517,11 +534,14 @@ function drawHUD() {
       ? `Behavior: shareGate=${stats.behavior.shareSuppressedByGate} routerGenSkip=${stats.behavior.routerGenSolveSkipped}`
       : "Behavior: (n/a)";
 
+    const totalPrinciples = sim.agents.reduce((s, a) => s + a.principles.length, 0);
+
     content = `Day: ${sim.day}   Tick: ${sim.tick}\n` +
       `Pop: ${pop}   Active: ${active}\n` +
       `Modes: vault=${vaults} router=${routers}\n` +
       `Voids: ${voids}   Entropy~: ${ent.toFixed(0)}\n` +
       `Coverage: ${(cov * 100).toFixed(1)}%\n` +
+      `Crisis: ${inCrisis}   Maturity: ${avgMaturity.toFixed(1)}   Principles: ${totalPrinciples}\n` +
       `${bhLine}\n` +
       `Telemetry days: ${sim.dayStats.length}  [Range: ${timeSeriesRange}d]`;
   }
@@ -556,8 +576,8 @@ function drawTimeSeriesGraphs(x0, y0, w, h) {
 
   if (visibleData.length < 2) return;
 
-  // Graph layout: 3 stacked mini-graphs
-  const graphCount = 3;
+  // Graph layout: 4 stacked mini-graphs
+  const graphCount = 4;
   const graphH = (h - 20) / graphCount;
   const graphGap = 2;
 
@@ -588,6 +608,15 @@ function drawTimeSeriesGraphs(x0, y0, w, h) {
     visibleData,
     d => d.popEnd || 0,
     { label: "Population", color: [30, 70, 85], min: 0, max: maxPop }
+  );
+
+  // Graph 4: Consciousness - crisis rate and maturity
+  const maxMaturity = Math.max(...visibleData.map(d => d.consciousness?.meanMaturity || 0), 1);
+  drawMiniGraph(
+    x0, y0 + 3 * (graphH + graphGap), w, graphH,
+    visibleData,
+    d => d.consciousness?.meanMaturity || 0,
+    { label: "Maturity", color: [280, 60, 80], min: 0, max: maxMaturity }
   );
 
   // X-axis label (day range) - dark text
@@ -693,6 +722,17 @@ function drawSpectrumChart(x0, y0, w, h) {
   }
   endShape();
   noStroke();
+
+  // Hotspot markers - triangles below the chart showing active hotspot centers
+  if (sim.hotspots && sim.hotspots.length > 0) {
+    for (const hs of sim.hotspots) {
+      const hx = x0 + (hs.center / 360) * w;
+      const lifeRatio = 1 - (hs.age / hs.lifespan);
+      fill(280, 70, 90, 0.7 * lifeRatio + 0.3);
+      noStroke();
+      triangle(hx - 3, y0, hx + 3, y0, hx, y0 + 5);
+    }
+  }
 }
 
 function lerpHue(h1, h2, t) {
@@ -763,7 +803,8 @@ function initUI() {
     <span style="color:#888">●</span> Sleeping<br/>
     <b>Mode marker:</b> <span style="color:#5d5; font-weight:bold">◆</span> Vault (diverse keys)
     <span style="color:#fa0">●</span> Router (clustered)<br/>
-    <b>X</b> = Void (color = spectrum type, brightness = urgency)
+    <b>X</b> = Void (color = spectrum type, brightness = urgency)<br/>
+    <span style="color:#c6f">&#9711;</span> = Crisis (pulsing ring = restructuring worldview)
   </div>`).parent(ui);
 
   // Inspector
@@ -906,6 +947,18 @@ function renderInspector() {
         urg: +(m.urgency || 0).toFixed(1)
       }));
 
+    const consciousness = {
+      predictionError: +a.predictionError.toFixed(2),
+      crisisState: a.crisisState,
+      crisisTimer: a.crisisTimer,
+      maturity: a.crisisCount,
+      principles: a.principles.map(p => ({
+        center: p.center,
+        spread: p.spread,
+        weight: +p.weight.toFixed(2)
+      }))
+    };
+
     const obj = {
       id: a.id,
       mode: a.mode,
@@ -914,7 +967,8 @@ function renderInspector() {
       energy: +a.energy.toFixed(1),
       agentValue: a.agentValue,
       keys: { count: a.keys.length, max: a.maxKeys, sample: sampleKeys },
-      voidMem: { count: a.voidMem.length, max: a.maxVoidMem, sample: sampleVoids }
+      voidMem: { count: a.voidMem.length, max: a.maxVoidMem, sample: sampleVoids },
+      consciousness
     };
 
     inspectorPre.html(JSON.stringify(obj, null, 2));
