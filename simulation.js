@@ -610,13 +610,29 @@ class Agent {
       }
     }
 
+    // Choose generation base: principles allow aiming at the target directly
     let base = this.agentValue;
-    if (this.keys.length > 0 && p > 0.45 && Math.random() < p) {
+    let principleAim = false;
+
+    if (cfg.enableConsciousness && this.principles.length > 0) {
+      for (const pr of this.principles) {
+        if (circDist(pr.center, targetVal) < pr.spread) {
+          // Agent "understands" this region - aim at the target
+          base = targetVal;
+          principleAim = true;
+          break;
+        }
+      }
+    }
+
+    if (!principleAim && this.keys.length > 0 && p > 0.45 && Math.random() < p) {
       base = this.keys[Math.floor(Math.random() * this.keys.length)].val;
     }
 
-    const k = Math.floor(clamp(p * 3.5, 0, 3));
-    const noise = symmetricNoise(6 + 4 * k, 5);
+    // Principle-aimed attempts use tighter noise (skill)
+    const k = principleAim ? 0 : Math.floor(clamp(p * 3.5, 0, 3));
+    const noiseDice = principleAim ? 2 : (6 + 4 * k);
+    const noise = symmetricNoise(noiseDice, 5);
 
     let attempt = wrap(base + noise, 360);
     if (cfg.orthoBonus && p > 0.65 && Math.random() < (p - 0.55)) {
