@@ -81,7 +81,27 @@ const DEFAULT_CFG = {
   solveDamagePer3Neighbors: 1,
   solveDamageMax: 4,
 
-  vaultDiversityRetentionBoost: 8.0
+  vaultDiversityRetentionBoost: 8.0,
+
+  // Consciousness & Prediction System
+  enableConsciousness: true,
+  spectralBins: 36,
+  predictionLearnRate: 0.15,
+  predictionDecayRate: 0.03,
+  predictionErrorDecay: 0.92,
+  crisisThresholdBase: 4.0,
+  crisisThresholdPerMaturity: 1.5,
+  crisisDurationMin: 2,
+  crisisDurationMax: 5,
+  crisisScanBoost: 60,
+  crisisShareBoost: 40,
+  crisisSolvePenalty: 0.4,
+  crisisKeyRetentionPenalty: 0.4,
+  maxPrinciples: 6,
+  principleInheritChance: 0.6,
+  principleNoise: 15,
+  principleGenChance: 0.35,
+  principleGenSolveBoost: 0.12
 };
 
 // ========================
@@ -208,6 +228,14 @@ class Agent {
     this.voidMem = [];
     this.consecutiveFailedScouts = 0;
 
+    // Consciousness system
+    this.spectralModel = new Array(cfg.spectralBins || 36).fill(0);
+    this.predictionError = 0;
+    this.crisisState = false;
+    this.crisisTimer = 0;
+    this.crisisCount = 0;
+    this.principles = [];
+
     if (cfg.enableModes) {
       if (parent) {
         const flip = Math.random() < cfg.pModeFlipOnBirth;
@@ -226,6 +254,17 @@ class Agent {
       this.weights = {};
       for (const k of Object.keys(parent.weights)) {
         this.weights[k] = parent.weights[k] + (Math.random() * 0.4 - 0.2);
+      }
+      // Inherit consciousness: partial spectral model + principles with noise
+      if (cfg.enableConsciousness) {
+        this.spectralModel = parent.spectralModel.map(v => v * 0.5);
+        this.principles = parent.principles
+          .filter(() => Math.random() < cfg.principleInheritChance)
+          .map(p => ({
+            center: wrap(p.center + randInt(-cfg.principleNoise, cfg.principleNoise), 360),
+            spread: p.spread,
+            weight: p.weight * 0.8
+          }));
       }
     } else {
       this.agentValue = sampleAgentValue();
@@ -282,6 +321,11 @@ class Agent {
         m.lastSeenDay = day;
         return true;
       }
+    }
+
+    // New void encountered - update spectral prediction model
+    if (this._cfg.enableConsciousness) {
+      this.updateSpectralModel(v.val);
     }
 
     const entry = { voidId: v.id, x: v.x, y: v.y, val: v.val, urgency: urg, lastSeenDay: day };
@@ -352,6 +396,11 @@ class Agent {
         retention += diversity;
       }
 
+      // During crisis, reduce retention - willing to discard old assumptions
+      if (cfg.enableConsciousness && this.crisisState) {
+        retention *= cfg.crisisKeyRetentionPenalty;
+      }
+
       if (retention < lowestRetention) {
         lowestRetention = retention;
         bestIdx = i;
@@ -382,11 +431,107 @@ class Agent {
     return pruned;
   }
 
+  // --- Consciousness System Methods ---
+
+  updateSpectralModel(voidVal) {
+    const bins = this._cfg.spectralBins || 36;
+    const idx = clamp(Math.floor((voidVal / 360) * bins), 0, bins - 1);
+    const surprise = 1.0 - this.spectralModel[idx];
+    this.predictionError += surprise * 0.5;
+    this.spectralModel[idx] = clamp(
+      this.spectralModel[idx] + this._cfg.predictionLearnRate * surprise,
+      0, 1
+    );
+  }
+
+  checkCrisis(stats = null) {
+    const cfg = this._cfg;
+    if (!cfg.enableConsciousness || this.crisisState) return;
+    const threshold = cfg.crisisThresholdBase + this.crisisCount * cfg.crisisThresholdPerMaturity;
+    if (this.predictionError > threshold) {
+      this.crisisState = true;
+      this.crisisTimer = randInt(cfg.crisisDurationMin, cfg.crisisDurationMax);
+      if (stats && stats.consciousness) stats.consciousness.crisisTriggered++;
+    }
+  }
+
+  resolveCrisis(stats = null) {
+    const cfg = this._cfg;
+    const bins = cfg.spectralBins || 36;
+
+    // Extract principle: find peak region in spectral model
+    let bestBin = 0, bestVal = 0;
+    for (let i = 0; i < this.spectralModel.length; i++) {
+      if (this.spectralModel[i] > bestVal) {
+        bestVal = this.spectralModel[i];
+        bestBin = i;
+      }
+    }
+
+    if (bestVal > 0.15) {
+      const center = Math.floor((bestBin + 0.5) * (360 / bins));
+
+      // Calculate spread from neighboring bins
+      let spread = 10;
+      for (let offset = 1; offset <= 3; offset++) {
+        const left = (bestBin - offset + bins) % bins;
+        const right = (bestBin + offset) % bins;
+        if (this.spectralModel[left] > bestVal * 0.3 ||
+            this.spectralModel[right] > bestVal * 0.3) {
+          spread += 10;
+        }
+      }
+
+      // Check for existing nearby principle to reinforce
+      const existing = this.principles.find(p => circDist(p.center, center) < 30);
+      if (existing) {
+        existing.weight = clamp(existing.weight + 0.3, 0, 2.5);
+        existing.spread = clamp(existing.spread * 0.9, 5, 60);
+      } else if (this.principles.length < cfg.maxPrinciples) {
+        this.principles.push({ center, spread, weight: 1.0 });
+      } else {
+        // Replace weakest principle
+        let weakest = 0;
+        for (let i = 1; i < this.principles.length; i++) {
+          if (this.principles[i].weight < this.principles[weakest].weight) weakest = i;
+        }
+        if (this.principles[weakest].weight < 1.0) {
+          this.principles[weakest] = { center, spread, weight: 1.0 };
+        }
+      }
+    }
+
+    this.crisisState = false;
+    this.crisisTimer = 0;
+    this.crisisCount++;
+    this.predictionError = 0;
+    if (stats && stats.consciousness) stats.consciousness.crisisResolved++;
+  }
+
   stockpileGenerate(free = false, stats = null) {
     const cfg = this._cfg;
     let val;
 
-    if (cfg.enableModes && this.mode === "vault") {
+    // Consciousness-driven generation overrides normal mode behavior
+    if (cfg.enableConsciousness) {
+      if (this.crisisState) {
+        // During crisis: wide-spectrum exploration (opening the gates)
+        val = Math.floor(Math.random() * 360);
+      } else if (this.principles.length > 0 && Math.random() < cfg.principleGenChance) {
+        // Post-crisis wisdom: principle-guided generation
+        const totalWeight = this.principles.reduce((s, p) => s + p.weight, 0);
+        let r = Math.random() * totalWeight;
+        let chosen = this.principles[0];
+        for (const p of this.principles) {
+          r -= p.weight;
+          if (r <= 0) { chosen = p; break; }
+        }
+        val = wrap(chosen.center + symmetricNoise(Math.ceil(chosen.spread / 5), 5), 360);
+      }
+    }
+
+    // Fall through to normal mode-based generation if not overridden
+    if (val === undefined && cfg.enableModes && this.mode === "vault") {
       // Vaults actively seek DIVERSITY - generate keys across the spectrum
       // 40% chance: generate in a random spectrum region (exploring)
       // 30% chance: generate opposite to current keys (filling gaps)
@@ -415,7 +560,7 @@ class Agent {
         // Baseline: near agentValue with moderate noise
         val = wrap(this.agentValue + symmetricNoise(8, 6), 360);
       }
-    } else {
+    } else if (val === undefined) {
       // Routers stay CLUSTERED around their agentValue (specialization)
       // Tighter noise distribution
       val = wrap(this.agentValue + symmetricNoise(4, 4), 360);
@@ -445,6 +590,16 @@ class Agent {
     );
 
     if (cfg.enableModes && this.mode === "vault") p = clamp(p * cfg.vaultGenBoost, 0, 1);
+
+    // Principle bonus: if target is near a known principle, boost success
+    if (cfg.enableConsciousness && this.principles.length > 0) {
+      for (const pr of this.principles) {
+        if (circDist(pr.center, targetVal) < pr.spread) {
+          p = clamp(p + cfg.principleGenSolveBoost * pr.weight, 0, 1);
+          break;
+        }
+      }
+    }
 
     let base = this.agentValue;
     if (this.keys.length > 0 && p > 0.45 && Math.random() < p) {
@@ -576,6 +731,11 @@ class Agent {
 
         shareUtil *= shareBoost;
 
+        // Crisis: boost share utility (seeking information from others)
+        if (cfg.enableConsciousness && this.crisisState) {
+          shareUtil += cfg.crisisShareBoost;
+        }
+
         let allowShare = true;
 
         if (cfg.shareNoveltyGate) {
@@ -615,6 +775,11 @@ class Agent {
             this.weights.wHaveKey +
             (cost * this.weights.wCost);
 
+          // Crisis: reduce solve effectiveness (agent is destabilized)
+          if (cfg.enableConsciousness && this.crisisState) {
+            workUtil *= cfg.crisisSolvePenalty;
+          }
+
           candidates.push({
             type: "solve",
             utility: workUtil,
@@ -635,6 +800,11 @@ class Agent {
 
               util -= cfg.routerGenSolvePenalty;
 
+              // Crisis: reduce gen-solve effectiveness
+              if (cfg.enableConsciousness && this.crisisState) {
+                util *= cfg.crisisSolvePenalty;
+              }
+
               candidates.push({
                 type: "gen_solve",
                 utility: util,
@@ -649,6 +819,11 @@ class Agent {
               (m.urgency * this.weights.wUrgency) +
               (saturation * this.weights.wSatSolve) +
               (cost * this.weights.wCost);
+
+            // Crisis: reduce gen-solve effectiveness
+            if (cfg.enableConsciousness && this.crisisState) {
+              util *= cfg.crisisSolvePenalty;
+            }
 
             candidates.push({
               type: "gen_solve",
@@ -666,7 +841,11 @@ class Agent {
     const unknown = visible.find(v => !this.voidMem.some(m => m.voidId === v.id));
     if (unknown) {
       const scanBase = 20 + (this.consecutiveFailedScouts * this.weights.wScanFail);
-      const scanUtil = scanBase + (this.costScan * this.weights.wCost);
+      let scanUtil = scanBase + (this.costScan * this.weights.wCost);
+      // Crisis: dramatically boost scan utility (opening the gates to new information)
+      if (cfg.enableConsciousness && this.crisisState) {
+        scanUtil += cfg.crisisScanBoost;
+      }
       candidates.push({ type: "scan", utility: scanUtil, cost: this.costScan, target: unknown, payload: {} });
     }
 
@@ -812,6 +991,10 @@ class Agent {
       }
     } else {
       this.consecutiveFailedScouts = Math.min(30, this.consecutiveFailedScouts + 2);
+      // Failed solve attempt = prediction error (my map was wrong)
+      if (cfg.enableConsciousness) {
+        this.predictionError += 0.3;
+      }
     }
   }
 
@@ -822,6 +1005,26 @@ class Agent {
     this.boredom = 0;
     this.ageDays += 1;
     this.consecutiveFailedScouts = Math.max(0, this.consecutiveFailedScouts - 1);
+
+    // Consciousness lifecycle
+    if (cfg.enableConsciousness) {
+      // Decay spectral model (forgetting)
+      for (let i = 0; i < this.spectralModel.length; i++) {
+        this.spectralModel[i] *= (1 - cfg.predictionDecayRate);
+      }
+      // Decay prediction error naturally
+      this.predictionError *= cfg.predictionErrorDecay;
+
+      // Crisis lifecycle
+      if (this.crisisState) {
+        this.crisisTimer--;
+        if (this.crisisTimer <= 0) {
+          this.resolveCrisis(stats);
+        }
+      } else {
+        this.checkCrisis(stats);
+      }
+    }
 
     if (cfg.carryoverEnergy) {
       this.energy = clamp(this.energy + cfg.dailyEnergy, 0, this.energyMax);
@@ -917,6 +1120,15 @@ class Simulation {
       modes: {
         vault: this.agents.filter(a => a.mode === "vault").length,
         router: this.agents.filter(a => a.mode === "router").length
+      },
+
+      consciousness: {
+        meanPredictionError: 0,
+        agentsInCrisis: 0,
+        meanMaturity: 0,
+        totalPrinciples: 0,
+        crisisTriggered: 0,
+        crisisResolved: 0
       }
     };
   }
@@ -958,6 +1170,14 @@ class Simulation {
       for (const v of exploded) {
         for (const a of this.agents) {
           if (!a.alive) continue;
+
+          // Prediction error: known void exploded = failure signal
+          if (cfg.enableConsciousness) {
+            if (a.voidMem.some(m => m.voidId === v.id)) {
+              a.predictionError += 0.5;
+            }
+          }
+
           const d = Math.sqrt(dist2(a.x, a.y, v.x, v.y));
           if (d > cfg.blastRadius) continue;
           const t = 1.0 - (d / cfg.blastRadius);
@@ -1040,6 +1260,13 @@ class Simulation {
       vault: this.agents.filter(a => a.mode === "vault").length,
       router: this.agents.filter(a => a.mode === "router").length
     };
+
+    if (this.cfg.enableConsciousness) {
+      stats.consciousness.meanPredictionError = mean(this.agents.map(a => a.predictionError));
+      stats.consciousness.agentsInCrisis = this.agents.filter(a => a.crisisState).length;
+      stats.consciousness.meanMaturity = mean(this.agents.map(a => a.crisisCount));
+      stats.consciousness.totalPrinciples = this.agents.reduce((s, a) => s + a.principles.length, 0);
+    }
 
     this.dayStats.push(stats);
     this.currentDayStats = null;
