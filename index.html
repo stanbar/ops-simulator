@@ -434,6 +434,12 @@ function drawAgents() {
       noStroke();
     }
 
+    // Denial indicator - red inner dot (suppressed error building up)
+    if (a.denialCount > 2 && !a.sleeping && !a.crisisState) {
+      fill(0, 90, 90, Math.min(0.8, a.denialCount * 0.15));
+      circle(px, py, 4);
+    }
+
     // Mode indicator - distinct shapes for visibility
     if (!a.sleeping) {
       if (a.mode === "vault") {
@@ -497,6 +503,7 @@ function drawHUD() {
   const cov = sim.computeCoverage();
   const inCrisis = sim.agents.filter(a => a.crisisState).length;
   const avgMaturity = sim.agents.length ? (sim.agents.reduce((s, a) => s + a.crisisCount, 0) / sim.agents.length) : 0;
+  const avgDenial = sim.agents.length ? (sim.agents.reduce((s, a) => s + a.denialCount, 0) / sim.agents.length) : 0;
 
   // Responsive HUD sizing
   const isMobile = width < 768;
@@ -542,6 +549,7 @@ function drawHUD() {
       `Voids: ${voids}   Entropy~: ${ent.toFixed(0)}\n` +
       `Coverage: ${(cov * 100).toFixed(1)}%\n` +
       `Crisis: ${inCrisis}   Maturity: ${avgMaturity.toFixed(1)}   Principles: ${totalPrinciples}\n` +
+      `Denial: ${avgDenial.toFixed(1)}\n` +
       `${bhLine}\n` +
       `Telemetry days: ${sim.dayStats.length}  [Range: ${timeSeriesRange}d]`;
   }
@@ -952,6 +960,9 @@ function renderInspector() {
       crisisState: a.crisisState,
       crisisTimer: a.crisisTimer,
       maturity: a.crisisCount,
+      denialCount: a.denialCount,
+      learningRate: +a.learningRateMultiplier.toFixed(2),
+      egoThreshold: +(Math.max(1.5, sim.cfg.crisisThresholdBase - a.crisisCount * sim.cfg.egoReductionPerMaturity)).toFixed(2),
       principles: a.principles.map(p => ({
         center: p.center,
         spread: p.spread,

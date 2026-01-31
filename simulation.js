@@ -90,7 +90,7 @@ const DEFAULT_CFG = {
   predictionDecayRate: 0.03,
   predictionErrorDecay: 0.92,
   crisisThresholdBase: 4.0,
-  crisisThresholdPerMaturity: 1.5,
+  egoReductionPerMaturity: 0.5,
   crisisDurationMin: 2,
   crisisDurationMax: 5,
   crisisScanBoost: 60,
@@ -102,6 +102,19 @@ const DEFAULT_CFG = {
   principleNoise: 15,
   principleGenChance: 0.35,
   principleGenSolveBoost: 0.12,
+
+  // Denial mechanic (ego)
+  denialChanceBase: 0.6,
+  denialReductionPerMaturity: 0.15,
+  denialErrorCompounding: 0.2,
+
+  // Micro-update system (fluid ego)
+  microUpdateThresholdFraction: 0.4,
+  microUpdatePredErrorReduction: 0.7,
+
+  // Learning rate modulation
+  crisisLearningRateBoost: 3.0,
+  microUpdateLearningRateBoost: 1.5,
 
   // Void Ecology - drifting spectral hotspots
   enableVoidEcology: true,
@@ -244,6 +257,8 @@ class Agent {
     this.crisisTimer = 0;
     this.crisisCount = 0;
     this.principles = [];
+    this.denialCount = 0;
+    this.learningRateMultiplier = 1.0;
 
     if (cfg.enableModes) {
       if (parent) {
@@ -443,12 +458,19 @@ class Agent {
   // --- Consciousness System Methods ---
 
   updateSpectralModel(voidVal) {
-    const bins = this._cfg.spectralBins || 36;
+    const cfg = this._cfg;
+    const bins = cfg.spectralBins || 36;
     const idx = clamp(Math.floor((voidVal / 360) * bins), 0, bins - 1);
     const surprise = 1.0 - this.spectralModel[idx];
-    this.predictionError += surprise * 0.5;
+
+    // Denial compounding: suppressed errors build hidden debt that amplifies future surprise
+    const denialPenalty = 1.0 + (this.denialCount || 0) * cfg.denialErrorCompounding;
+    this.predictionError += surprise * 0.5 * denialPenalty;
+
+    // Learning rate modulation: crisis boosts plasticity, micro-update gives mild boost
+    const lr = cfg.predictionLearnRate * (this.learningRateMultiplier || 1.0);
     this.spectralModel[idx] = clamp(
-      this.spectralModel[idx] + this._cfg.predictionLearnRate * surprise,
+      this.spectralModel[idx] + lr * surprise,
       0, 1
     );
   }
@@ -456,10 +478,28 @@ class Agent {
   checkCrisis(stats = null) {
     const cfg = this._cfg;
     if (!cfg.enableConsciousness || this.crisisState) return;
-    const threshold = cfg.crisisThresholdBase + this.crisisCount * cfg.crisisThresholdPerMaturity;
+
+    // Ego inversion: mature agents have LOWER threshold (fluid ego, more open to crisis)
+    // Novice agents have HIGH threshold (rigid ego, resistant to change)
+    const threshold = Math.max(1.5, cfg.crisisThresholdBase - this.crisisCount * cfg.egoReductionPerMaturity);
+
     if (this.predictionError > threshold) {
+      // Denial mechanic: novice agents may suppress the signal (high ego = denial)
+      // Mature agents accept it (courage) — denial chance decreases with maturity
+      const denialChance = Math.max(0, cfg.denialChanceBase - this.crisisCount * cfg.denialReductionPerMaturity);
+      if (Math.random() < denialChance) {
+        // Denial: suppress prediction error but compound it (hidden debt)
+        this.predictionError *= 0.6;
+        this.denialCount++;
+        if (stats && stats.consciousness) stats.consciousness.denials++;
+        return;
+      }
+
+      // Courage: enter crisis (the dark night)
+      const baseDuration = randInt(cfg.crisisDurationMin, cfg.crisisDurationMax);
+      // Mature agents resolve crises faster (compressed processing)
+      this.crisisTimer = Math.max(1, baseDuration - Math.floor(this.crisisCount * 0.5));
       this.crisisState = true;
-      this.crisisTimer = randInt(cfg.crisisDurationMin, cfg.crisisDurationMax);
       if (stats && stats.consciousness) stats.consciousness.crisisTriggered++;
     }
   }
@@ -514,7 +554,46 @@ class Agent {
     this.crisisTimer = 0;
     this.crisisCount++;
     this.predictionError = 0;
+    this.denialCount = 0; // Crisis resolution clears denial debt
     if (stats && stats.consciousness) stats.consciousness.crisisResolved++;
+  }
+
+  // Micro-update: mature agents do continuous small corrections without full crisis
+  // This is the "fluid ego" - able to adjust without breaking down
+  doMicroUpdate(stats = null) {
+    const cfg = this._cfg;
+    this.learningRateMultiplier = cfg.microUpdateLearningRateBoost;
+
+    // Reduce prediction error gently (partial integration, not full reset)
+    this.predictionError *= cfg.microUpdatePredErrorReduction;
+
+    // Nudge closest principle toward current spectral peak
+    if (this.principles.length > 0) {
+      const bins = cfg.spectralBins || 36;
+      let bestBin = 0, bestVal = 0;
+      for (let i = 0; i < this.spectralModel.length; i++) {
+        if (this.spectralModel[i] > bestVal) {
+          bestVal = this.spectralModel[i];
+          bestBin = i;
+        }
+      }
+      if (bestVal > 0.2) {
+        const peakCenter = Math.floor((bestBin + 0.5) * (360 / bins));
+        let closest = null, closestDist = Infinity;
+        for (const p of this.principles) {
+          const d = circDist(p.center, peakCenter);
+          if (d < closestDist) { closestDist = d; closest = p; }
+        }
+        if (closest && closestDist < 60) {
+          // Gently nudge principle toward observed peak
+          const diff = circSignedDiff(peakCenter, closest.center);
+          closest.center = wrap(closest.center + Math.round(diff * 0.2), 360);
+          closest.weight = clamp(closest.weight + 0.05, 0, 2.5);
+        }
+      }
+    }
+
+    if (stats && stats.consciousness) stats.consciousness.microUpdates++;
   }
 
   stockpileGenerate(free = false, stats = null) {
@@ -1033,6 +1112,9 @@ class Agent {
 
     // Consciousness lifecycle
     if (cfg.enableConsciousness) {
+      // Reset learning rate each day (will be set by state below)
+      this.learningRateMultiplier = 1.0;
+
       // Decay spectral model (forgetting)
       for (let i = 0; i < this.spectralModel.length; i++) {
         this.spectralModel[i] *= (1 - cfg.predictionDecayRate);
@@ -1042,11 +1124,22 @@ class Agent {
 
       // Crisis lifecycle
       if (this.crisisState) {
+        // In crisis: boosted learning rate (high plasticity / dark night)
+        this.learningRateMultiplier = cfg.crisisLearningRateBoost;
         this.crisisTimer--;
         if (this.crisisTimer <= 0) {
           this.resolveCrisis(stats);
         }
       } else {
+        // Micro-update check: mature agents with moderate prediction error
+        // do continuous small corrections (fluid ego) instead of waiting for crisis
+        const crisisThreshold = Math.max(1.5, cfg.crisisThresholdBase - this.crisisCount * cfg.egoReductionPerMaturity);
+        const microThreshold = crisisThreshold * cfg.microUpdateThresholdFraction;
+        if (this.crisisCount >= 1 && this.predictionError > microThreshold) {
+          this.doMicroUpdate(stats);
+        }
+
+        // Full crisis check (may still trigger if error exceeds full threshold)
         this.checkCrisis(stats);
       }
     }
@@ -1188,7 +1281,9 @@ class Simulation {
         meanMaturity: 0,
         totalPrinciples: 0,
         crisisTriggered: 0,
-        crisisResolved: 0
+        crisisResolved: 0,
+        denials: 0,
+        microUpdates: 0
       }
     };
   }
@@ -1338,6 +1433,8 @@ class Simulation {
       stats.consciousness.agentsInCrisis = this.agents.filter(a => a.crisisState).length;
       stats.consciousness.meanMaturity = mean(this.agents.map(a => a.crisisCount));
       stats.consciousness.totalPrinciples = this.agents.reduce((s, a) => s + a.principles.length, 0);
+      stats.consciousness.meanDenialCount = mean(this.agents.map(a => a.denialCount));
+      stats.consciousness.meanLearningRate = mean(this.agents.map(a => a.learningRateMultiplier));
     }
 
     this.dayStats.push(stats);
