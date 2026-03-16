@@ -197,7 +197,7 @@
 let sim = null;
 let explosions = [];
 let paused = false;
-let showHud = true;
+let showHud = window.innerWidth > 768;
 
 // UI elements
 let sliders = {};
@@ -211,6 +211,9 @@ let selectedId = null;
 // Touch state for double-tap detection
 let lastTapTime = 0;
 const DOUBLE_TAP_DELAY = 300;
+
+// Mobile zoom: render at higher resolution so everything appears smaller
+const MOBILE_ZOOM = window.innerWidth <= 768 ? 2.5 : 1;
 
 // Time-series graph state
 let timeSeriesRange = 100; // 100 or 1000 days
@@ -233,7 +236,14 @@ let CFG = {
 // ========================
 
 function setup() {
-  createCanvas(windowWidth, windowHeight);
+  pixelDensity(1);
+  const cw = Math.floor(windowWidth * MOBILE_ZOOM);
+  const ch = Math.floor(windowHeight * MOBILE_ZOOM);
+  let cnv = createCanvas(cw, ch);
+  if (MOBILE_ZOOM > 1) {
+    cnv.style('width', windowWidth + 'px');
+    cnv.style('height', windowHeight + 'px');
+  }
   colorMode(HSB, 360, 100, 100, 1);
   noStroke();
   initUI();
@@ -243,7 +253,16 @@ function setup() {
 }
 
 function windowResized() {
-  resizeCanvas(windowWidth, windowHeight);
+  const cw = Math.floor(windowWidth * MOBILE_ZOOM);
+  const ch = Math.floor(windowHeight * MOBILE_ZOOM);
+  resizeCanvas(cw, ch);
+  if (MOBILE_ZOOM > 1) {
+    const cnv = document.querySelector('canvas');
+    if (cnv) {
+      cnv.style.width = windowWidth + 'px';
+      cnv.style.height = windowHeight + 'px';
+    }
+  }
 }
 
 function initSimulation() {
@@ -498,9 +517,9 @@ function drawHUD() {
   const inCrisis = sim.agents.filter(a => a.crisisState).length;
   const avgMaturity = sim.agents.length ? (sim.agents.reduce((s, a) => s + a.crisisCount, 0) / sim.agents.length) : 0;
 
-  // Responsive HUD sizing
-  const isMobile = width < 768;
-  const hudWidth = isMobile ? Math.min(width - 20, 280) : 350;
+  // Responsive HUD sizing (width is canvas pixels, check CSS viewport)
+  const isMobile = (width / MOBILE_ZOOM) < 768;
+  const hudWidth = isMobile ? Math.min(width * 0.45, 450) : 350;
   const timeSeriesHeight = isMobile ? 130 : 180;
   const baseHudHeight = isMobile ? 155 : 175;
   const hudHeight = baseHudHeight + timeSeriesHeight + 10;
@@ -1082,7 +1101,7 @@ function keyPressed() {
 }
 
 function mousePressed() {
-  handlePointerPress(mouseX, mouseY);
+  handlePointerPress(mouseX * MOBILE_ZOOM, mouseY * MOBILE_ZOOM);
 }
 
 function touchStarted() {
@@ -1105,8 +1124,8 @@ function touchStarted() {
       return true; // Allow default behavior for toggle button
     }
 
-    // Touch is on canvas - handle it
-    handlePointerPress(touchX, touchY);
+    // Touch is on canvas - handle it (scale CSS coords to canvas coords)
+    handlePointerPress(touchX * MOBILE_ZOOM, touchY * MOBILE_ZOOM);
     return false; // Prevent default only for canvas touches
   }
   return true;
@@ -1115,7 +1134,7 @@ function touchStarted() {
 function handlePointerPress(x, y) {
   // Double-tap detection for mobile (pause/resume)
   const currentTime = millis();
-  if (currentTime - lastTapTime < DOUBLE_TAP_DELAY && width <= 768) {
+  if (currentTime - lastTapTime < DOUBLE_TAP_DELAY && (width / MOBILE_ZOOM) <= 768) {
     paused = !paused;
     btnPause.html(paused ? "Resume" : "Pause");
     lastTapTime = 0; // Reset to prevent triple-tap
