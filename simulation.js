@@ -103,14 +103,17 @@ const DEFAULT_CFG = {
   principleGenChance: 0.35,
   principleGenSolveBoost: 0.12,
 
-  // Void Ecology - drifting spectral hotspots
+  // Void Ecology - Perlin noise landscape
   enableVoidEcology: true,
-  numHotspots: 4,
-  hotspotSpread: 30,
-  hotspotDriftRate: 2,
-  hotspotLifespanMin: 20,
-  hotspotLifespanMax: 60,
-  hotspotBias: 0.70
+  noiseScale: 0.004,          // spatial frequency of noise (lower = larger blobs)
+  noiseDriftSpeed: 0.06,      // how fast the landscape evolves per day
+  noiseOctaves: 3,            // fractal detail layers
+  noiseDensityThreshold: 0.1, // density noise must exceed for void placement (rejection sampling)
+  noiseSpectrumScale: 0.003,  // separate scale for the value-mapping layer
+  noiseSpectrumOffset: 100,   // offset so density and spectrum layers differ
+  disruptionChance: 0.08,     // per-void chance of spawning outside the landscape
+  disruptionClusterSize: 3,   // when disruption fires, spawn a small cluster
+  disruptionDuration: 3       // how many days a disruption region lingers
 };
 
 // ========================
@@ -132,6 +135,73 @@ function circSignedDiff(a, b, mod = 360) {
   let d = ((a - b) % mod + mod) % mod;
   if (d > mod / 2) d -= mod;
   return d;
+}
+
+// ========================
+// Perlin Noise (standalone, no p5.js dependency)
+// ========================
+
+const _perlin = (() => {
+  // Classic 2D/3D Perlin noise with permutation table
+  const perm = new Uint8Array(512);
+  const grad3 = [
+    [1,1,0],[-1,1,0],[1,-1,0],[-1,-1,0],
+    [1,0,1],[-1,0,1],[1,0,-1],[-1,0,-1],
+    [0,1,1],[0,-1,1],[0,1,-1],[0,-1,-1]
+  ];
+
+  // Seed with a shuffled 0-255
+  function seed(s) {
+    const p = new Uint8Array(256);
+    for (let i = 0; i < 256; i++) p[i] = i;
+    // Fisher-Yates with simple LCG seeded by s
+    let rng = (s * 16807 + 0) % 2147483647;
+    const next = () => { rng = (rng * 16807) % 2147483647; return rng / 2147483647; };
+    for (let i = 255; i > 0; i--) {
+      const j = Math.floor(next() * (i + 1));
+      [p[i], p[j]] = [p[j], p[i]];
+    }
+    for (let i = 0; i < 512; i++) perm[i] = p[i & 255];
+  }
+
+  seed(42); // deterministic default seed
+
+  function fade(t) { return t * t * t * (t * (t * 6 - 15) + 10); }
+  function lerp(a, b, t) { return a + t * (b - a); }
+  function dot3(g, x, y, z) { return g[0] * x + g[1] * y + g[2] * z; }
+
+  function noise3(x, y, z) {
+    const X = Math.floor(x) & 255;
+    const Y = Math.floor(y) & 255;
+    const Z = Math.floor(z) & 255;
+    x -= Math.floor(x); y -= Math.floor(y); z -= Math.floor(z);
+    const u = fade(x), v = fade(y), w = fade(z);
+    const A  = perm[X] + Y,     AA = perm[A] + Z,     AB = perm[A + 1] + Z;
+    const B  = perm[X + 1] + Y, BA = perm[B] + Z,     BB = perm[B + 1] + Z;
+    return lerp(
+      lerp(lerp(dot3(grad3[perm[AA] % 12], x, y, z),
+                 dot3(grad3[perm[BA] % 12], x - 1, y, z), u),
+           lerp(dot3(grad3[perm[AB] % 12], x, y - 1, z),
+                dot3(grad3[perm[BB] % 12], x - 1, y - 1, z), u), v),
+      lerp(lerp(dot3(grad3[perm[AA + 1] % 12], x, y, z - 1),
+                 dot3(grad3[perm[BA + 1] % 12], x - 1, y, z - 1), u),
+           lerp(dot3(grad3[perm[AB + 1] % 12], x, y - 1, z - 1),
+                dot3(grad3[perm[BB + 1] % 12], x - 1, y - 1, z - 1), u), v), w);
+  }
+
+  return { noise3, seed };
+})();
+
+// Octave noise for richer patterns: sum of multiple noise layers
+function fractalNoise(x, y, z, octaves = 3, lacunarity = 2, persistence = 0.5) {
+  let val = 0, amp = 1, freq = 1, max = 0;
+  for (let i = 0; i < octaves; i++) {
+    val += amp * _perlin.noise3(x * freq, y * freq, z * freq);
+    max += amp;
+    amp *= persistence;
+    freq *= lacunarity;
+  }
+  return val / max; // normalized to roughly [-1, 1]
 }
 
 function rollDice(n, d) {
@@ -1081,7 +1151,6 @@ class Simulation {
     this.dayStats = [];
     this.currentDayStats = null;
     this.lastExplosions = [];
-    this.hotspots = [];
   }
 
   init() {
@@ -1095,13 +1164,9 @@ class Simulation {
     this.dayStats = [];
     this.lastExplosions = [];
 
-    // Initialize spectral hotspots
-    this.hotspots = [];
-    if (this.cfg.enableVoidEcology) {
-      for (let i = 0; i < this.cfg.numHotspots; i++) {
-        this.hotspots.push(this.createHotspot());
-      }
-    }
+    // Perlin noise landscape state
+    this.noiseTime = 0;          // evolves each day
+    this.disruptions = [];       // active disruption zones
 
     for (let i = 0; i < this.cfg.initialAgents; i++) {
       this.agents.push(new Agent(this.cfg, this, this.nextAgentId++));
@@ -1116,29 +1181,100 @@ class Simulation {
     this.startDayStats();
   }
 
-  createHotspot() {
-    return {
-      center: Math.floor(Math.random() * 360),
-      spread: this.cfg.hotspotSpread + randInt(-10, 10),
-      lifespan: randInt(this.cfg.hotspotLifespanMin, this.cfg.hotspotLifespanMax),
-      age: 0
-    };
+  // --- Perlin noise landscape ---
+
+  // Density field: where voids are likely to appear
+  voidDensity(x, y) {
+    const cfg = this.cfg;
+    const s = cfg.noiseScale;
+    const t = this.noiseTime;
+    // Returns ~[-1, 1], higher = more likely to spawn
+    return fractalNoise(x * s, y * s, t, cfg.noiseOctaves);
   }
 
-  sampleVoidValEcology() {
-    if (this.hotspots.length > 0 && Math.random() < this.cfg.hotspotBias) {
-      const h = this.hotspots[Math.floor(Math.random() * this.hotspots.length)];
-      return wrap(h.center + symmetricNoise(Math.ceil(h.spread / 5), 5), 360);
+  // Spectrum field: what value a void gets based on its position
+  voidSpectrumAt(x, y) {
+    const cfg = this.cfg;
+    const s = cfg.noiseSpectrumScale;
+    const t = this.noiseTime;
+    // Use offset so this layer is independent from density
+    const n = fractalNoise(
+      x * s + cfg.noiseSpectrumOffset,
+      y * s + cfg.noiseSpectrumOffset,
+      t + cfg.noiseSpectrumOffset
+    );
+    // Map [-1, 1] → [0, 360) with some noise for variety
+    return wrap(Math.floor((n + 1) * 180 + symmetricNoise(2, 3)), 360);
+  }
+
+  // Sample a position biased by the density field (rejection sampling)
+  sampleNoisePosition() {
+    const cfg = this.cfg;
+    const threshold = cfg.noiseDensityThreshold;
+    for (let attempt = 0; attempt < 80; attempt++) {
+      const x = Math.random() * cfg.arenaSize;
+      const y = Math.random() * cfg.arenaSize;
+      const d = this.voidDensity(x, y);
+      // Accept with probability proportional to density
+      // Remap density from [-1,1] to [0,1] for acceptance probability
+      const prob = (d + 1) / 2;
+      if (prob > threshold && Math.random() < prob) {
+        return { x, y };
+      }
     }
-    return sampleVoidVal();
+    // Fallback: random position (prevents infinite loops)
+    return { x: Math.random() * cfg.arenaSize, y: Math.random() * cfg.arenaSize };
   }
 
   spawnVoid() {
     const cfg = this.cfg;
     const v = new VoidObj(cfg, this.nextVoidId++);
-    if (cfg.enableVoidEcology) {
-      v.val = this.sampleVoidValEcology();
+
+    if (!cfg.enableVoidEcology) return v;
+
+    // Check for disruption: rare void in an unusual place
+    if (Math.random() < cfg.disruptionChance) {
+      // Spawn in a LOW-density area (invert the density field)
+      for (let attempt = 0; attempt < 40; attempt++) {
+        const x = Math.random() * cfg.arenaSize;
+        const y = Math.random() * cfg.arenaSize;
+        const d = this.voidDensity(x, y);
+        if (d < -cfg.noiseDensityThreshold) {
+          v.x = x;
+          v.y = y;
+          // Give it a value that's far from what the landscape would predict
+          const landscapeVal = this.voidSpectrumAt(x, y);
+          v.val = wrap(landscapeVal + 180 + randInt(-30, 30), 360);
+          v.isDisruption = true;
+          // Register disruption zone for potential cluster spawning
+          this.disruptions.push({
+            x, y, val: v.val, ttl: cfg.disruptionDuration, spawned: 1
+          });
+          return v;
+        }
+      }
+      // If no good low-density spot found, fall through to normal spawn
     }
+
+    // Check for active disruption clusters that need more voids
+    for (const dis of this.disruptions) {
+      if (dis.spawned < cfg.disruptionClusterSize && dis.ttl > 0) {
+        v.x = dis.x + randInt(-60, 60);
+        v.y = dis.y + randInt(-60, 60);
+        v.x = clamp(v.x, 0, cfg.arenaSize);
+        v.y = clamp(v.y, 0, cfg.arenaSize);
+        v.val = wrap(dis.val + randInt(-10, 10), 360);
+        v.isDisruption = true;
+        dis.spawned++;
+        return v;
+      }
+    }
+
+    // Normal spawn: position from density field, value from spectrum field
+    const pos = this.sampleNoisePosition();
+    v.x = pos.x;
+    v.y = pos.y;
+    v.val = this.voidSpectrumAt(v.x, v.y);
     return v;
   }
 
@@ -1297,16 +1433,14 @@ class Simulation {
       }
     }
 
-    // Hotspot lifecycle: drift, age, rebirth
+    // Perlin noise landscape evolution
     if (cfg.enableVoidEcology) {
-      for (let i = 0; i < this.hotspots.length; i++) {
-        const h = this.hotspots[i];
-        h.age++;
-        h.center = wrap(h.center + randInt(-cfg.hotspotDriftRate, cfg.hotspotDriftRate), 360);
-        if (h.age >= h.lifespan) {
-          this.hotspots[i] = this.createHotspot();
-        }
-      }
+      this.noiseTime += cfg.noiseDriftSpeed;
+      // Age and prune disruption zones
+      this.disruptions = this.disruptions.filter(d => {
+        d.ttl--;
+        return d.ttl > 0;
+      });
     }
 
     this.finalizeDayStats();
