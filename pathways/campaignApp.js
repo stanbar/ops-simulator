@@ -16,69 +16,7 @@
     }
 
     const state = campaignOrState.domains ? campaignOrState : (campaignOrState.getSnapshot ? campaignOrState.getSnapshot() : {});
-    const targetDomain = action.targetDomain && state.domains ? state.domains[action.targetDomain] : null;
-    const profile = state.focalProfile || { observerCoin: "Oe", deciderCoin: "Di", primaryAxis: "observer" };
-
-    const projectedEffects = [];
-    const warnings = [];
-    let cost = action.cost || {};
-
-    if (action.type === "recruit_collaborator") {
-      cost = { materials: 25, trust: 15 };
-      projectedEffects.push("Recruits Alex (autonomous collaborator)");
-      projectedEffects.push("+35% autonomous output or maintenance capacity");
-      projectedEffects.push("Ongoing overhead: 2 materials & 1 trust / turn");
-    } else if (action.type === "assign_collaborator_role") {
-      cost = { attention: 0 };
-      projectedEffects.push(`Sets collaborator focus to ${action.role || 'production'}`);
-    } else if (action.type === "animal_operation" && action.animal) {
-      cost = CampaignEngine.calculateAnimalCost(action.animal, profile, action.cost);
-      const animalName = action.animal;
-
-      if (targetDomain) {
-        if (animalName === "Consume") {
-          if (targetDomain.evidenceCoverage >= 0.8) {
-            warnings.push("Over-exploration penalty: evidence coverage is high (≥80%). Diminishing returns apply.");
-            projectedEffects.push("+0.05 Evidence Coverage (diminished)");
-            projectedEffects.push("+4 Evidence Resource");
-          } else {
-            projectedEffects.push("+0.20 Evidence Coverage");
-            projectedEffects.push("+0.15 Evidence Confidence");
-            projectedEffects.push("+15 Evidence Resource");
-          }
-        } else if (animalName === "Sleep") {
-          if (targetDomain.evidenceConfidence < 0.4) {
-            warnings.push("Premature consolidation warning: evidence confidence is low (<40%). Incurs epistemic debt and increases volatility.");
-          }
-          projectedEffects.push("+0.15 Personal Pathway Quality");
-          projectedEffects.push("+15.0 Condition Buffer");
-        } else if (animalName === "Play") {
-          if (targetDomain.evidenceCoverage >= 0.8) {
-            warnings.push("Over-exploration warning: high evidence coverage applies minor opportunity cost.");
-          }
-          projectedEffects.push("+0.10 Shared Pathway Quality");
-          projectedEffects.push("+15 Trust Resource");
-        } else if (animalName === "Blast") {
-          if (targetDomain.evidenceConfidence < 0.4) {
-            warnings.push("Premature consolidation warning: publishing weak evidence amplifies error and volatility.");
-          }
-          projectedEffects.push("+0.20 Shared Pathway Quality");
-        }
-      }
-    } else if (action.type === "maintain" && targetDomain) {
-      cost = { attention: 2, vitality: 1 };
-      projectedEffects.push("+25.0 Condition Buffer");
-    } else if (action.type === "acquire" && targetDomain) {
-      cost = { attention: 4, materials: 3 };
-      projectedEffects.push("+0.20 Domain Level");
-      projectedEffects.push("+5.0 Condition Buffer");
-    }
-
-    return {
-      cost: cost,
-      projectedEffects: projectedEffects,
-      warnings: warnings
-    };
+    return CampaignEngine.previewAction(state, action);
   }
 
   function renderSnapshot(snapshot) {
@@ -98,7 +36,8 @@
         tier: tier,
         tierLabel: `Tier ${tier}`,
         conditionBuffer: domain.conditionBuffer,
-        conditionHealthPercent: Math.min(100, Math.round((domain.conditionBuffer / 100.0) * 100)),
+        maxCondition: domain.maxCondition,
+        conditionHealthPercent: Math.min(100, Math.round((domain.conditionBuffer / domain.maxCondition) * 100)),
         evidenceCoveragePercent: Math.round((domain.evidenceCoverage || 0) * 100),
         evidenceConfidencePercent: Math.round((domain.evidenceConfidence || 0) * 100),
         personalPathwayPercent: Math.round((domain.personalPathwayQuality || 0) * 100),
@@ -119,7 +58,14 @@
         assignedRole: c.assignedRole,
         alignmentPercent: Math.round((c.alignment || 0) * 100),
         compensationRate: c.compensationRate,
-        lastAutonomousAction: c.lastAutonomousAction || "Joined campaign"
+        lastAutonomousAction: c.lastAutonomousAction || "Joined campaign",
+        lastDecisionReason: c.lastDecision && c.lastDecision.reason,
+        goals: c.goals,
+        needs: c.needs,
+        capabilities: c.capabilities,
+        infrastructurePriority: c.infrastructurePriority,
+        resourceAllowance: c.resourceAllowance,
+        commitments: c.commitments
       };
     } else {
       const eligibility = CampaignEngine.checkRecruitmentEligibility(snapshot);
@@ -135,6 +81,12 @@
       phase: snapshot.phase,
       origin: snapshot.origin,
       shockSchedule: snapshot.shockSchedule,
+      mission: snapshot.mission,
+      horizon: snapshot.horizon,
+      era: snapshot.era,
+      completed: snapshot.completed,
+      outcome: snapshot.outcome,
+      diagnostics: snapshot.diagnostics,
       resources: snapshot.resources,
       polarityPressures: snapshot.polarityPressures || CampaignEngine.calculatePolarityPressures(snapshot),
       domains: domainViews,

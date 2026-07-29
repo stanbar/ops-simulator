@@ -89,3 +89,31 @@ See `BALANCE_BASELINE.md` for the superseded issue #10 one-ascent measurements. 
 `engine.js` is a pure seeded simulation module usable from the browser or CommonJS tests. `balance-benchmark.js` exercises that public engine without browser state. `app.js` owns DOM and SVG rendering. UI code must not alter simulation outcomes or reveal terrain ground truth before debrief.
 
 Observation, weather, and traffic use separate deterministic random streams. Weather is fixed by round; traffic shocks are fixed by demand leg and attempt number. This prevents one policy from reassigning later weather or traffic luck merely by consuming more random draws.
+
+## Persistent campaign mode
+
+`campaign.html` is a separate 60-turn strategic model for the broader life-domain
+metaphor. It is not a larger rendering of the expedition game. The campaign
+tracks six domain levels and condition buffers, and distinguishes the expensive
+work of acquiring a level from the cheaper recurring work of preserving it.
+Dependencies, obligations, automation staleness, and seeded shocks make gains in
+one domain capable of supporting or destabilizing another.
+
+Consume refreshes private evidence, Sleep turns credible experience into personal
+repeatability, Blast publishes credible personal knowledge into shared pathways,
+and Play reconciles evidence with an actual collaborator. These operations affect
+later acquisition and maintenance; they are not four interchangeable score
+buttons. Oi/Oe and Di/De remain binary coins on every profile, while the
+Observer/Decider setting determines which axis carries the larger cost polarity.
+
+The browser obtains costs and projections from the engine's public preview API.
+It cannot grant levels or bypass resource costs. `strategic-benchmark.js` runs
+matched counterfactual campaigns through the same engine for the full horizon.
+
+```bash
+node pathways/campaignEngine.test.js
+node pathways/campaignRecovery.test.js
+node pathways/campaignApp.test.js
+node pathways/strategic-benchmark.test.js
+node pathways/strategic-benchmark.js
+```

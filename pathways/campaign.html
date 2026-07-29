@@ -216,6 +216,48 @@
   </header>
 
   <main id="app">
+    <section class="debrief-panel" id="campaignSetup" style="margin-bottom:24px;">
+      <h2 style="font-size:18px; margin-bottom:12px;">Campaign Setup</h2>
+      <div class="setup-grid" style="display:grid; grid-template-columns:repeat(auto-fit,minmax(150px,1fr)); gap:10px;">
+        <label class="form-group">Origin
+          <select id="originSelect">
+            <option value="balanced-starter">Balanced Starter</option>
+            <option value="struggling-body">Struggling Body</option>
+            <option value="asset-rich-isolated">Asset Rich & Isolated</option>
+            <option value="scholar-monk">Scholar Monk</option>
+          </select>
+        </label>
+        <label class="form-group">Mission
+          <select id="missionSelect">
+            <option value="entrepreneurship">Entrepreneurship</option>
+            <option value="scholarship">Scholarship</option>
+            <option value="family-stewardship">Family Stewardship</option>
+            <option value="holistic-resilience">Holistic Resilience</option>
+          </select>
+        </label>
+        <label class="form-group">World
+          <select id="shockSelect">
+            <option value="stable-horizon">Stable Horizon</option>
+            <option value="volatile-shift">Volatile Shift</option>
+            <option value="crisis-cascade">Crisis Cascade</option>
+          </select>
+        </label>
+        <label class="form-group">Seed
+          <input id="seedInput" type="number" value="42" style="width:100%; padding:9px; border-radius:8px; border:1px solid var(--line); background:var(--surface-3); color:var(--text);">
+        </label>
+        <label class="form-group">Observer Savior
+          <select id="observerCoinSelect"><option value="Oe">Oe</option><option value="Oi">Oi</option></select>
+        </label>
+        <label class="form-group">Decider Savior
+          <select id="deciderCoinSelect"><option value="Di">Di</option><option value="De">De</option></select>
+        </label>
+        <label class="form-group">Polarized Axis
+          <select id="primaryAxisSelect"><option value="observer">Observer</option><option value="decider">Decider</option></select>
+        </label>
+      </div>
+      <button type="button" class="submit-btn" id="startCampaignBtn" style="margin-top:12px;">Start / Restart Campaign</button>
+    </section>
+
     <div class="campaign-header-bar">
       <div>
         <h1 style="font-size: 28px; margin: 0;" id="missionTitle">Entrepreneurship Launch Campaign</h1>
@@ -227,6 +269,8 @@
     <!-- Polarity Pressures -->
     <h2 style="font-size: 18px; margin-bottom: 12px;">Active Polarity Pressures</h2>
     <div class="pressure-panel" id="pressureBar"></div>
+
+    <section class="debrief-panel" id="missionPanel" style="margin-bottom:28px;"></section>
 
     <!-- Autonomous Collaborator Section -->
     <h2 style="font-size: 20px; margin-bottom: 14px;">Autonomous Collaborator Network</h2>
@@ -240,6 +284,16 @@
     <div class="inspector-section">
       <section class="action-picker-panel">
         <h2 style="font-size: 18px; margin-bottom: 12px;">Focal Action Allocation</h2>
+
+        <div class="form-group">
+          <label for="actionTypeSelect" style="font-size:12px; color:var(--muted);">Action Type</label>
+          <select id="actionTypeSelect">
+            <option value="animal_operation">Animal Operation</option>
+            <option value="acquire">Develop Domain Level</option>
+            <option value="maintain">Direct Maintenance</option>
+            <option value="set_maintenance_policy">Install Maintenance Policy</option>
+          </select>
+        </div>
         
         <div class="animal-btn-group" id="animalSelector">
           <button type="button" class="animal-btn active" data-animal="Consume">Consume<br><small style="font-weight:normal;">Oe + Di</small></button>
@@ -257,6 +311,16 @@
             <option value="family-belonging">Family & Belonging</option>
             <option value="understanding-judgment" selected>Understanding & Judgment</option>
             <option value="meaning-contribution">Meaning & Contribution</option>
+          </select>
+        </div>
+
+        <div class="form-group" id="pathwayTargetGroup">
+          <label for="pathwayTargetSelect" style="font-size:12px; color:var(--muted);">Pathway Target</label>
+          <select id="pathwayTargetSelect">
+            <option value="evidence">Evidence / Map</option>
+            <option value="personal">Personal Capability</option>
+            <option value="shared">Shared Infrastructure</option>
+            <option value="condition">Condition / Maintenance</option>
           </select>
         </div>
 
@@ -281,21 +345,72 @@
   <script src="campaignApp.js"></script>
   <script>
     document.addEventListener("DOMContentLoaded", function () {
-      const app = PathwaysCampaignApp.createApp({ seed: 42, origin: "balanced-starter", mission: "entrepreneurship" });
+      let app = null;
 
       let selectedAnimal = "Consume";
       let selectedDomain = "understanding-judgment";
+      let selectedActionType = "animal_operation";
+      let selectedPathwayTarget = "evidence";
 
       const animalBtns = document.querySelectorAll("#animalSelector .animal-btn");
       const domainSelect = document.getElementById("domainTargetSelect");
+      const actionTypeSelect = document.getElementById("actionTypeSelect");
+      const pathwayTargetSelect = document.getElementById("pathwayTargetSelect");
+      const pathwayTargetGroup = document.getElementById("pathwayTargetGroup");
       const submitBtn = document.getElementById("submitTurnBtn");
+
+      function buildAction() {
+        if (selectedActionType === "animal_operation") {
+          return { type: selectedActionType, animal: selectedAnimal, targetDomain: selectedDomain, pathwayTarget: selectedPathwayTarget };
+        }
+        return { type: selectedActionType, targetDomain: selectedDomain, pathwayTarget: selectedPathwayTarget, enabled: true };
+      }
+
+      function syncPathwayTargets() {
+        const labels = {
+          evidence: "Evidence / Map",
+          personal: "Personal Capability",
+          shared: "Shared Infrastructure",
+          condition: "Condition / Recovery"
+        };
+        const targets = PathwaysCampaignEngine.ANIMAL_PATHWAY_TARGETS[selectedAnimal];
+        pathwayTargetSelect.innerHTML = targets.map(target => `<option value="${target}">${labels[target]}</option>`).join("");
+        if (!targets.includes(selectedPathwayTarget)) selectedPathwayTarget = targets[0];
+        pathwayTargetSelect.value = selectedPathwayTarget;
+        pathwayTargetGroup.style.display = selectedActionType === "animal_operation" ? "flex" : "none";
+      }
+
+      function startCampaign() {
+        app = PathwaysCampaignApp.createApp({
+          seed: Number(document.getElementById("seedInput").value) || 42,
+          origin: document.getElementById("originSelect").value,
+          mission: document.getElementById("missionSelect").value,
+          shockSchedule: document.getElementById("shockSelect").value,
+          focalProfile: {
+            observerCoin: document.getElementById("observerCoinSelect").value,
+            deciderCoin: document.getElementById("deciderCoinSelect").value,
+            primaryAxis: document.getElementById("primaryAxisSelect").value
+          }
+        });
+        updateUI();
+      }
 
       function updateUI() {
         const snapshot = app.getSnapshot();
         const renderData = PathwaysCampaignApp.renderSnapshot(snapshot);
 
         // Update Turn Counter
-        document.getElementById("turnCounter").textContent = `Turn ${renderData.turn} — Phase: ${renderData.phase}`;
+        document.getElementById("missionTitle").textContent = `${renderData.mission.name} Campaign`;
+        document.getElementById("turnCounter").textContent = `Turn ${Math.min(renderData.turn, renderData.horizon)} / ${renderData.horizon} — ${renderData.era} era${renderData.completed ? " — complete" : ""}`;
+
+        const diagnostics = renderData.diagnostics;
+        document.getElementById("missionPanel").innerHTML = `
+          <h2 style="font-size:18px; margin-bottom:8px;">Mission Progress</h2>
+          <p style="margin:0 0 8px; color:var(--muted);">${renderData.mission.description}</p>
+          <strong>${Math.round(diagnostics.missionProgress * 100)}% targets reached</strong>
+          <span style="margin-left:12px; color:${diagnostics.viabilityCompliance.isViable ? 'var(--teal)' : 'var(--danger)'};">${diagnostics.viabilityCompliance.isViable ? 'Viability intact' : diagnostics.viabilityCompliance.violations.join('; ')}</span>
+          ${renderData.completed ? `<div class="${diagnostics.success ? '' : 'warning-box'}" style="margin-top:10px;">Campaign ${diagnostics.success ? 'accomplished its mission' : 'ended with unmet mission targets or viability costs'}.</div>` : ''}
+        `;
 
         // Render Resource Header Bar
         document.getElementById("resourceBar").innerHTML = Object.entries(renderData.resources)
@@ -331,6 +446,7 @@
                   <h3 style="margin:0; font-size:16px;">${collab.name} <small style="color:var(--accent); font-weight:normal;">(${collab.profileLabel})</small></h3>
                   <p style="margin:4px 0 0; font-size:12px; color:var(--muted);">Alignment: ${collab.alignmentPercent}% | Overhead: ${collab.compensationRate} materials & 1 trust / turn</p>
                   <p style="margin:4px 0 0; font-size:12px; color:var(--teal);">Last action: ${collab.lastAutonomousAction}</p>
+                  <p style="margin:4px 0 0; font-size:11px; color:var(--muted);">Decision: ${collab.lastDecisionReason || 'No decision recorded'}</p>
                 </div>
                 <div style="display:flex; align-items:center; gap:8px;">
                   <label style="font-size:12px; color:var(--muted);">Role Focus:</label>
@@ -339,6 +455,13 @@
                     <option value="maintenance" ${collab.assignedRole === 'maintenance' ? 'selected' : ''}>Maintenance</option>
                     <option value="exploration" ${collab.assignedRole === 'exploration' ? 'selected' : ''}>Exploration</option>
                   </select>
+                  <label style="font-size:12px; color:var(--muted);">Priority:</label>
+                  <select id="collabPrioritySelect" style="padding:6px 10px; border-radius:8px; background:var(--surface-3); color:var(--text); border:1px solid var(--line);">
+                    ${Object.values(renderData.domains).map(domain => `<option value="${domain.id}" ${collab.infrastructurePriority === domain.id ? 'selected' : ''}>${domain.name}</option>`).join('')}
+                  </select>
+                  <label style="font-size:12px; color:var(--muted);">Materials:</label>
+                  <input id="collabAllowanceInput" type="number" min="0" max="25" value="${collab.resourceAllowance ? collab.resourceAllowance.materials : 5}" style="width:58px; padding:6px; border-radius:8px; background:var(--surface-3); color:var(--text); border:1px solid var(--line);">
+                  <button type="button" id="applyCollabConfigBtn" class="animal-btn">Apply</button>
                 </div>
               </div>
             `;
@@ -349,6 +472,12 @@
                 updateUI();
               });
             }
+            document.getElementById("applyCollabConfigBtn").addEventListener("click", function () {
+              const priority = document.getElementById("collabPrioritySelect").value;
+              const materials = Number(document.getElementById("collabAllowanceInput").value) || 0;
+              app.dispatchTurn([{ type: "configure_collaborator", infrastructurePriority: priority, resourceAllowance: { materials }, commitments: [priority] }]);
+              updateUI();
+            });
           } else {
             const canRecruit = collab && collab.eligible;
             collabEl.innerHTML = `
@@ -380,7 +509,7 @@
               </div>
               <div class="stat-row">
                 <span>Level ${d.levelFormatted}</span>
-                <span>Buffer ${Math.round(d.conditionBuffer)}/100</span>
+                <span>Buffer ${Math.round(d.conditionBuffer)}/${Math.round(d.maxCondition)}</span>
               </div>
               <div class="meter-bar">
                 <div class="meter-fill" style="width: ${d.conditionHealthPercent}%; background: var(--teal);"></div>
@@ -393,11 +522,8 @@
           `).join("");
 
         // Update Preview Inspector
-        const preview = app.calculatePreview({
-          type: "animal_operation",
-          animal: selectedAnimal,
-          targetDomain: selectedDomain
-        });
+        const action = buildAction();
+        const preview = app.calculatePreview(action);
 
         let costHtml = Object.entries(preview.cost)
           .map(([r, c]) => `<span style="color: var(--accent); margin-right: 8px;">${c} ${r}</span>`)
@@ -413,7 +539,7 @@
 
         document.getElementById("previewContent").innerHTML = `
           <p style="font-size: 13px; margin-bottom: 8px;">
-            <strong>Operation:</strong> ${selectedAnimal} on <em>${selectedDomain}</em>
+            <strong>Operation:</strong> ${selectedActionType === 'animal_operation' ? selectedAnimal : selectedActionType.replaceAll('_', ' ')} on <em>${selectedDomain}</em>
           </p>
           <div style="font-size: 13px; margin-bottom: 10px;">
             <strong>Required Cost:</strong> ${costHtml || "None"}
@@ -422,6 +548,8 @@
           <ul style="margin: 0 0 10px 18px; padding: 0;">${effectsHtml || "None"}</ul>
           ${warningsHtml}
         `;
+        submitBtn.disabled = renderData.completed || !preview.affordable;
+        submitBtn.textContent = renderData.completed ? "Campaign Complete" : preview.affordable ? "Submit Focal Action & End Turn" : "Insufficient Resources";
 
         // Render Event Log / Causal Debrief
         const history = snapshot.history || [];
@@ -448,6 +576,8 @@
           animalBtns.forEach(b => b.classList.remove("active"));
           this.classList.add("active");
           selectedAnimal = this.getAttribute("data-animal");
+          selectedPathwayTarget = { Consume: "evidence", Sleep: "personal", Play: "evidence", Blast: "shared" }[selectedAnimal];
+          syncPathwayTargets();
           updateUI();
         });
       });
@@ -457,14 +587,27 @@
         updateUI();
       });
 
-      submitBtn.addEventListener("click", function () {
-        app.dispatchTurn([
-          { type: "animal_operation", animal: selectedAnimal, targetDomain: selectedDomain }
-        ]);
+      actionTypeSelect.addEventListener("change", function () {
+        selectedActionType = this.value;
+        document.getElementById("animalSelector").style.opacity = selectedActionType === "animal_operation" ? "1" : "0.45";
+        syncPathwayTargets();
         updateUI();
       });
 
-      updateUI();
+      pathwayTargetSelect.addEventListener("change", function () {
+        selectedPathwayTarget = this.value;
+        updateUI();
+      });
+
+      submitBtn.addEventListener("click", function () {
+        if (!app || app.getSnapshot().completed) return;
+        app.dispatchTurn([buildAction()]);
+        updateUI();
+      });
+
+      document.getElementById("startCampaignBtn").addEventListener("click", startCampaign);
+      syncPathwayTargets();
+      startCampaign();
     });
   </script>
 </body>

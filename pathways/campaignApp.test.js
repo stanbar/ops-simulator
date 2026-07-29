@@ -27,12 +27,24 @@ console.log("Running Pathways Campaign App UI tests...");
   assert(consumePreview.cost, "Preview should contain cost object");
   assert(typeof consumePreview.cost.attention === "number", "Cost should have attention number");
   assert(Array.isArray(consumePreview.projectedEffects), "Preview should contain projectedEffects array");
+  assert.deepStrictEqual(
+    consumePreview.cost,
+    CampaignEngine.getActionCost(campaign, { type: "animal_operation", animal: "Consume", targetDomain: "understanding-judgment" }),
+    "UI preview must use the engine's authoritative action cost"
+  );
 
   // Test Recruitment Preview (Issue #25)
   const recruitPreview = CampaignApp.calculateActionPreview(campaign, {
     type: "recruit_collaborator"
   });
   assert.strictEqual(recruitPreview.cost.materials, 25, "Recruitment preview should reflect material cost");
+
+  const acquire = { type: "acquire", targetDomain: "livelihood-money" };
+  assert.deepStrictEqual(
+    CampaignApp.calculateActionPreview(campaign, acquire).cost,
+    CampaignEngine.getActionCost(campaign, acquire),
+    "acquisition preview and resolution must not drift"
+  );
 }
 
 // 3. Snapshot Rendering & Collaborator View Model (Issue #25)
@@ -72,6 +84,7 @@ console.log("Running Pathways Campaign App UI tests...");
 
   const snapshot = app.getSnapshot();
   assert.strictEqual(snapshot.worldRng, undefined, "Snapshot should not expose internal worldRng");
+  assert(snapshot.mission && snapshot.horizon === 60, "Browser snapshot must expose mission and campaign horizon");
 }
 
 console.log("All Pathways Campaign App UI tests passed successfully!");

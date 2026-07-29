@@ -24,7 +24,16 @@ It models:
 - conditional payoff cells where the useful animal changes with bottleneck and horizon;
 - stress, neglected reality, and bounded within-run adaptation.
 
-The engine is in `pathways/engine.js`; the SVG application is in `pathways/app.js`.
+The tactical engine is in `pathways/engine.js`; the SVG application is in `pathways/app.js`.
+
+`/pathways/campaign.html` is the persistent strategy campaign. It models six
+independently developing life domains, acquisition versus cheaper recurring
+maintenance, domain dependencies, explicit resources, world shocks, OPS
+polarity pressures, four-animal operations, automation, and one autonomous
+collaborator. Campaigns have a seeded 60-turn horizon and mission-specific
+targets and viability floors. The campaign engine is in
+`pathways/campaignEngine.js`; `pathways/campaignApp.js` adapts immutable engine
+snapshots for the DOM renderer owned by `pathways/campaign.html`.
 
 ### Spectrum
 
@@ -45,12 +54,22 @@ The Spectrum page loads p5.js from a CDN. Pathways has no runtime dependencies.
 ```bash
 node pathways/engine.test.js
 node pathways/balance-benchmark.test.js
+node pathways/campaignEngine.test.js
+node pathways/campaignRecovery.test.js
+node pathways/campaignApp.test.js
+node pathways/strategic-benchmark.test.js
 node simulation.test.js
 ```
 
 The Pathways suite covers deterministic replay, coin-derived cost ordering, action availability, counterfactual coin flips, repeated traffic, delayed pathway returns, destination/terrain/origin independence, conditional payoff cells, false consensus, and benchmark execution.
 
 Run `node pathways/balance-benchmark.js` for the fixed-cohort policy and horizon report. The obsolete one-ascent measurements from issue #10 are retained as historical context in `pathways/BALANCE_BASELINE.md`; they are not a gate for the logistics model.
+
+Run `node pathways/strategic-benchmark.js` for full 60-turn campaign results.
+It compares fixed policies under matched seeds, origins, missions, shocks, and
+horizons. Mission progress, viability, shock resilience, maintenance efficiency,
+and delayed pathway returns are reported separately; equal allocation receives
+no bonus merely for being balanced.
 
 ## Future fusion boundary
 
