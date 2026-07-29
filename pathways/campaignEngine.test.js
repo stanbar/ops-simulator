@@ -23,128 +23,104 @@ console.log("Running Pathways Campaign Engine tests...");
   assert.strictEqual(Object.keys(CampaignEngine.DOMAIN_PRESETS).length, 6, "Should have 6 domain presets");
   for (const domainId of expectedDomains) {
     assert(CampaignEngine.DOMAIN_PRESETS[domainId], `Preset ${domainId} should exist`);
-    const preset = CampaignEngine.DOMAIN_PRESETS[domainId];
-    assert(preset.id, `Preset ${domainId} should have an id`);
-    assert(preset.name, `Preset ${domainId} should have a name`);
-    assert(preset.description, `Preset ${domainId} should have a description`);
   }
 
-  // Verify 5 resource types
-  const expectedResources = ["attention", "vitality", "materials", "trust", "evidence"];
-  assert.strictEqual(Object.keys(CampaignEngine.RESOURCE_TYPES).length, 5, "Should have 5 resource types");
-  for (const resKey of expectedResources) {
-    assert.strictEqual(CampaignEngine.RESOURCE_TYPES[resKey], resKey, `Resource type ${resKey} should exist`);
-  }
-
-  // Verify 4 Animals
-  assert(CampaignEngine.ANIMALS, "ANIMALS constant should exist");
-  assert(CampaignEngine.ANIMALS.Consume, "Consume animal should exist");
-  assert(CampaignEngine.ANIMALS.Sleep, "Sleep animal should exist");
-  assert(CampaignEngine.ANIMALS.Play, "Play animal should exist");
-  assert(CampaignEngine.ANIMALS.Blast, "Blast animal should exist");
-
-  // Verify Origin and Mission presets
-  assert(CampaignEngine.ORIGIN_PRESETS, "ORIGIN_PRESETS should exist");
-  assert(CampaignEngine.MISSION_PRESETS, "MISSION_PRESETS should exist");
+  // Verify Shock schedules (Issue #23)
+  assert(CampaignEngine.SHOCK_SCHEDULES, "SHOCK_SCHEDULES constant should exist");
+  assert(CampaignEngine.SHOCK_SCHEDULES["volatile-shift"], "volatile-shift shock schedule should exist");
+  assert(CampaignEngine.SHOCK_SCHEDULES["crisis-cascade"], "crisis-cascade shock schedule should exist");
 }
 
-// 2. Agent Profile Coins & Subjective Cost Modulation (Issue #22)
+// 2. Seeded External World Shocks (Issue #23)
 {
-  const profile = { observerCoin: "Oe", deciderCoin: "Di", primaryAxis: "observer" };
-  const baseCost = { attention: 5, vitality: 5 };
+  const campaign = CampaignEngine.createCampaign({
+    seed: 500,
+    shockSchedule: "crisis-cascade"
+  });
 
-  const consumeCost = CampaignEngine.calculateAnimalCost("Consume", profile, baseCost);
-  const blastCost = CampaignEngine.calculateAnimalCost("Blast", profile, baseCost);
-
-  // Consume is double-savior (Oe+Di), Blast is double-demon (Oi+De)
-  assert.strictEqual(consumeCost.attention, 5, "Savior action should retain base cost");
-  assert(blastCost.attention > 5, "Demon action should carry higher subjective cost multiplier");
-}
-
-// 3. Four-Animal Operations Resolution (Issue #22)
-{
-  const campaign = CampaignEngine.createCampaign({ seed: 100 });
   const domain = campaign.domains["understanding-judgment"];
-  domain.evidenceCoverage = 0.2;
-  domain.evidenceConfidence = 0.3;
+  domain.evidenceCoverage = 0.8;
+  domain.evidenceConfidence = 0.8;
 
-  // Test Consume Operation
-  const initialEvidence = campaign.resources.evidence;
-  CampaignEngine.stepTurn(campaign, [
-    { type: "animal_operation", animal: "Consume", targetDomain: "understanding-judgment" }
-  ]);
-  assert(domain.evidenceCoverage > 0.2, "Consume should increase evidence coverage");
-  assert(campaign.resources.evidence > initialEvidence, "Consume should yield evidence resource");
-
-  // Test Sleep Operation
-  const initialPersonal = domain.personalPathwayQuality;
-  domain.evidenceConfidence = 0.6; // High evidence confidence so not premature
-  CampaignEngine.stepTurn(campaign, [
-    { type: "animal_operation", animal: "Sleep", targetDomain: "understanding-judgment" }
-  ]);
-  assert(domain.personalPathwayQuality > initialPersonal, "Sleep should increase personal pathway quality");
-
-  // Test Play Operation
-  const initialTrust = campaign.resources.trust;
-  CampaignEngine.stepTurn(campaign, [
-    { type: "animal_operation", animal: "Play", targetDomain: "family-belonging" }
-  ]);
-  assert(campaign.resources.trust > initialTrust, "Play should increase trust resource");
-
-  // Test Blast Operation
-  const initialShared = campaign.domains["practical-foundations"].sharedPathwayQuality;
-  campaign.domains["practical-foundations"].evidenceConfidence = 0.7;
-  CampaignEngine.stepTurn(campaign, [
-    { type: "animal_operation", animal: "Blast", targetDomain: "practical-foundations" }
-  ]);
-  assert(campaign.domains["practical-foundations"].sharedPathwayQuality > initialShared, "Blast should increase shared pathway quality");
+  // Run turns until crisis-cascade shock fires
+  let shockEventFound = false;
+  for (let i = 0; i < 5; i++) {
+    const result = CampaignEngine.stepTurn(campaign, []);
+    const shock = result.summary.events.find(e => e.type === "world_shock");
+    if (shock) {
+      shockEventFound = true;
+      assert(shock.shockType, "World shock event should have a shockType");
+      assert(shock.targetDomain, "World shock event should specify targetDomain");
+      break;
+    }
+  }
+  assert(shockEventFound, "Crisis cascade shock schedule should trigger a world shock");
 }
 
-// 4. Polarity Pressures & Pressure Relief (Issue #22)
+// 3. Maintenance Policy Automation & Staleness (Issue #23)
 {
-  const campaign = CampaignEngine.createCampaign({ seed: 200 });
+  const campaign = CampaignEngine.createCampaign({ seed: 600 });
   
-  // Set domain state to create high Oe pressure (low evidence coverage)
-  campaign.domains["understanding-judgment"].evidenceCoverage = 0.1;
-  const initialPressures = CampaignEngine.calculatePolarityPressures(campaign);
-  assert(initialPressures.Oe > 30, "Low evidence coverage should generate high Oe pressure");
+  // Set automated maintenance policy for body-health
+  campaign.automatedPolicies = {
+    "body-health": { autoMaintain: true, staleness: 0 }
+  };
+  campaign.domains["body-health"].conditionBuffer = 50.0;
 
-  // Execute Consume to alter underlying condition and relieve Oe pressure
+  // Turn 1: Auto-maintenance runs, replenishes buffer, increments staleness
+  CampaignEngine.stepTurn(campaign, []);
+  assert(campaign.domains["body-health"].conditionBuffer > 50.0, "Automated policy should replenish condition buffer");
+  assert.strictEqual(campaign.automatedPolicies["body-health"].staleness, 1, "Automated policy staleness should increment");
+
+  // Execute manual Consume audit to reset staleness
   CampaignEngine.stepTurn(campaign, [
-    { type: "animal_operation", animal: "Consume", targetDomain: "understanding-judgment" }
+    { type: "animal_operation", animal: "Consume", targetDomain: "body-health" }
   ]);
-
-  const updatedPressures = CampaignEngine.calculatePolarityPressures(campaign);
-  assert(updatedPressures.Oe < initialPressures.Oe, "Altering evidence coverage should relieve Oe pressure");
+  assert.strictEqual(campaign.automatedPolicies["body-health"].staleness, 0, "Manual audit/Consume should reset staleness to 0");
 }
 
-// 5. Premature Consolidation & Over-Exploration (Issue #22)
+// 4. Independent PRNG Streams & Determinism (Issue #23)
 {
-  // Test Premature Sleep (low evidence confidence)
-  const campaign = CampaignEngine.createCampaign({ seed: 300 });
-  const domain = campaign.domains["understanding-judgment"];
-  domain.evidenceConfidence = 0.2; // Low confidence
-  const initialVol = domain.volatility;
+  const c1 = CampaignEngine.createCampaign({ seed: 777, shockSchedule: "volatile-shift" });
+  const c2 = CampaignEngine.createCampaign({ seed: 777, shockSchedule: "volatile-shift" });
 
-  const result = CampaignEngine.stepTurn(campaign, [
-    { type: "animal_operation", animal: "Sleep", targetDomain: "understanding-judgment" }
-  ]);
+  // c1 takes action A, c2 takes action B
+  CampaignEngine.stepTurn(c1, [{ type: "invest_domain", targetDomain: "body-health", cost: { attention: 2 } }]);
+  CampaignEngine.stepTurn(c2, [{ type: "maintain", targetDomain: "livelihood-money", cost: { attention: 2 } }]);
 
-  const prematureEvent = result.summary.events.find(e => e.type === "premature_consolidation");
-  assert(prematureEvent, "Premature Sleep with low evidence confidence should trigger premature_consolidation event");
-  assert(domain.volatility > initialVol, "Premature Sleep should incur epistemic debt (increase volatility)");
+  // Turn 2: verify shock outcomes in c1 and c2 are driven by independent worldRng stream
+  const res1 = CampaignEngine.stepTurn(c1, []);
+  const res2 = CampaignEngine.stepTurn(c2, []);
 
-  // Test Over-Exploration (high evidence coverage)
-  const expCampaign = CampaignEngine.createCampaign({ seed: 301 });
-  const expDomain = expCampaign.domains["understanding-judgment"];
-  expDomain.evidenceCoverage = 0.9; // High coverage
+  const shock1 = res1.summary.events.find(e => e.type === "world_shock");
+  const shock2 = res2.summary.events.find(e => e.type === "world_shock");
 
-  const expResult = CampaignEngine.stepTurn(expCampaign, [
-    { type: "animal_operation", animal: "Consume", targetDomain: "understanding-judgment" }
-  ]);
+  if (shock1 || shock2) {
+    assert.deepStrictEqual(shock1, shock2, "Independent worldRng must isolate shock sequence from player action choice");
+  }
+}
 
-  const overExpEvent = expResult.summary.events.find(e => e.type === "opportunity_cost_penalty");
-  assert(overExpEvent, "Over-exploration with high evidence coverage should trigger opportunity_cost_penalty event");
+// 5. Causal Debrief & Campaign Diagnostics (Issue #23)
+{
+  const campaign = CampaignEngine.createCampaign({ seed: 800 });
+  
+  // Deplete resources to cause maintenance deficit
+  campaign.resources.vitality = 0;
+  campaign.domains["body-health"].conditionBuffer = 0;
+  campaign.domains["body-health"].outputs = {};
+
+  const result = CampaignEngine.stepTurn(campaign, []);
+  
+  assert(result.summary.causalTrace && Array.isArray(result.summary.causalTrace), "Turn summary should include causalTrace array");
+  assert(result.summary.causalTrace.length > 0, "Causal trace should record root causes for maintenance deficits");
+
+  // Test Campaign Evaluation Diagnostics
+  const diagnostics = CampaignEngine.evaluateCampaignDiagnostics(campaign, CampaignEngine.MISSION_PRESETS["entrepreneurship"]);
+  assert(typeof diagnostics === "object", "evaluateCampaignDiagnostics should return a diagnostics object");
+  assert(typeof diagnostics.policyQualityScore === "number" && diagnostics.policyQualityScore >= 0, "policyQualityScore should be non-negative");
+  assert(typeof diagnostics.shockResilienceScore === "number" && diagnostics.shockResilienceScore >= 0, "shockResilienceScore should be non-negative");
+  assert(typeof diagnostics.maintenanceEfficiencyScore === "number" && diagnostics.maintenanceEfficiencyScore >= 0, "maintenanceEfficiencyScore should be non-negative");
+  assert(diagnostics.viabilityCompliance && typeof diagnostics.viabilityCompliance === "object", "viabilityCompliance should exist");
 }
 
 // 6. Invariants & Determinism

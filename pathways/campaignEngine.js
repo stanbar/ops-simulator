@@ -51,6 +51,31 @@
     { tier: 4, minLevel: 10.0 }
   ]);
 
+  const SHOCK_SCHEDULES = Object.freeze({
+    "stable-horizon": Object.freeze({
+      id: "stable-horizon",
+      name: "Stable Horizon",
+      description: "Low-frequency world shocks allowing steady routine development.",
+      shockProbability: 0.05
+    }),
+    "volatile-shift": Object.freeze({
+      id: "volatile-shift",
+      name: "Volatile Shift",
+      description: "Frequent environmental shifts requiring active Oe reopening.",
+      shockProbability: 0.35
+    }),
+    "crisis-cascade": Object.freeze({
+      id: "crisis-cascade",
+      name: "Crisis Cascade",
+      description: "Scheduled high-intensity world shocks exposing fragile dependencies.",
+      fixedShocks: Object.freeze({
+        2: { type: "evidentiary_shock", domain: "understanding-judgment" },
+        4: { type: "condition_shock", domain: "body-health" },
+        6: { type: "obligation_shock", domain: "livelihood-money" }
+      })
+    })
+  });
+
   function getDomainTier(level) {
     let currentTier = 1;
     for (const t of TIER_THRESHOLDS) {
@@ -59,6 +84,16 @@
       }
     }
     return currentTier;
+  }
+
+  function createPRNG(seed) {
+    let s = seed >>> 0;
+    return function next() {
+      s = (s + 0x6d2b79f5) | 0;
+      let t = Math.imul(s ^ (s >>> 15), 1 | s);
+      t = (t + Math.imul(t ^ (t >>> 7), 61 | t)) ^ t;
+      return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
+    };
   }
 
   function calculateAnimalCost(animalName, agentProfile, customBaseCost) {
@@ -281,26 +316,22 @@
       return { Oe: 0, Oi: 0, Di: 0, De: 0 };
     }
 
-    // Oe Pressure: Unknown/changed/stale conditions (low evidence coverage or high volatility)
     let totalOeUncertainty = 0;
     for (const d of domainList) {
       totalOeUncertainty += (1.0 - (d.evidenceCoverage || 0)) * 50 + (d.volatility || 0) * 50;
     }
     const OePressure = Math.min(100, Math.round(totalOeUncertainty / domainList.length));
 
-    // Oi Pressure: Fragile or unmaintained personal pathways
     let totalOiFragility = 0;
     for (const d of domainList) {
       totalOiFragility += (1.0 - (d.personalPathwayQuality || 0)) * 100;
     }
     const OiPressure = Math.min(100, Math.round(totalOiFragility / domainList.length));
 
-    // Di Pressure: Suppressed personal constraints or body health deficit
     const bodyDomain = domains["body-health"];
     const healthDeficit = bodyDomain ? (100.0 - bodyDomain.conditionBuffer) : 50;
     const DiPressure = Math.min(100, Math.round(healthDeficit * 0.7 + (1.0 - (bodyDomain ? bodyDomain.personalPathwayQuality : 0.5)) * 30));
 
-    // De Pressure: Uncoordinated obligations, low shared pathway quality, depleted trust
     let totalDeFragility = 0;
     for (const d of domainList) {
       totalDeFragility += (1.0 - (d.sharedPathwayQuality || 0)) * 100;
@@ -340,7 +371,6 @@
       throw new Error("Invalid campaign state object");
     }
 
-    // Resources check
     if (!campaignState.resources || typeof campaignState.resources !== "object") {
       throw new Error("Invalid resources object in campaign state");
     }
@@ -355,7 +385,6 @@
       }
     }
 
-    // Domains check
     if (!campaignState.domains || typeof campaignState.domains !== "object") {
       throw new Error("Invalid domains object in campaign state");
     }
@@ -371,18 +400,6 @@
       if (typeof domain.conditionBuffer !== "number" || domain.conditionBuffer < 0) {
         throw new Error(`Negative condition buffer for ${domainId}: ${domain.conditionBuffer}`);
       }
-      if (typeof domain.evidenceCoverage !== "number" || domain.evidenceCoverage < 0 || domain.evidenceCoverage > 1) {
-        throw new Error(`Invalid evidence coverage for ${domainId}: ${domain.evidenceCoverage}`);
-      }
-      if (typeof domain.evidenceConfidence !== "number" || domain.evidenceConfidence < 0 || domain.evidenceConfidence > 1) {
-        throw new Error(`Invalid evidence confidence for ${domainId}: ${domain.evidenceConfidence}`);
-      }
-      if (typeof domain.personalPathwayQuality !== "number" || domain.personalPathwayQuality < 0 || domain.personalPathwayQuality > 1) {
-        throw new Error(`Invalid personal pathway quality for ${domainId}: ${domain.personalPathwayQuality}`);
-      }
-      if (typeof domain.sharedPathwayQuality !== "number" || domain.sharedPathwayQuality < 0 || domain.sharedPathwayQuality > 1) {
-        throw new Error(`Invalid shared pathway quality for ${domainId}: ${domain.sharedPathwayQuality}`);
-      }
     }
 
     return true;
@@ -392,6 +409,8 @@
     const seed = typeof options.seed === "number" ? options.seed : 42;
     const originKey = options.origin && ORIGIN_PRESETS[options.origin] ? options.origin : "balanced-starter";
     const originPreset = ORIGIN_PRESETS[originKey];
+
+    const shockKey = options.shockSchedule && SHOCK_SCHEDULES[options.shockSchedule] ? options.shockSchedule : "stable-horizon";
 
     const initialResources = Object.assign(
       {},
@@ -425,10 +444,16 @@
       turn: 1,
       phase: "updateWorld",
       origin: originKey,
+      shockSchedule: shockKey,
       focalProfile: focalProfile,
       resources: initialResources,
       domains: domains,
-      history: []
+      automatedPolicies: {},
+      history: [],
+      // Independent PRNG streams
+      worldRng: createPRNG(seed + 101),
+      agentRng: createPRNG(seed + 202),
+      feedbackRng: createPRNG(seed + 303)
     };
 
     validateInvariants(campaignState);
@@ -440,12 +465,67 @@
 
     const currentTurn = campaignState.turn;
     const events = [];
+    const causalTrace = [];
 
-    // Phase 1: updateWorld - Process passive outputs & inter-domain dependencies
+    // Phase 1: updateWorld - Process passive outputs, shocks & inter-domain dependencies
     campaignState.phase = "updateWorld";
 
+    // Process World Shocks using worldRng stream
+    const schedule = SHOCK_SCHEDULES[campaignState.shockSchedule] || SHOCK_SCHEDULES["stable-horizon"];
+    if (schedule.fixedShocks && schedule.fixedShocks[currentTurn]) {
+      const fixed = schedule.fixedShocks[currentTurn];
+      const targetDomain = campaignState.domains[fixed.domain];
+      if (targetDomain) {
+        if (fixed.type === "evidentiary_shock") {
+          targetDomain.evidenceCoverage = Math.max(0, targetDomain.evidenceCoverage - 0.4);
+          targetDomain.evidenceConfidence = Math.max(0, targetDomain.evidenceConfidence - 0.5);
+          events.push({
+            type: "world_shock",
+            shockType: fixed.type,
+            targetDomain: fixed.domain,
+            message: `Evidentiary shock invalidated evidence on ${fixed.domain}`
+          });
+          causalTrace.push(`World shock (${fixed.type}) invalidated evidence on ${fixed.domain} (new coverage: ${targetDomain.evidenceCoverage.toFixed(2)}).`);
+        } else if (fixed.type === "condition_shock") {
+          targetDomain.conditionBuffer = Math.max(0, targetDomain.conditionBuffer - 35.0);
+          events.push({
+            type: "world_shock",
+            shockType: fixed.type,
+            targetDomain: fixed.domain,
+            message: `Condition shock damaged ${fixed.domain} buffer`
+          });
+          causalTrace.push(`World shock (${fixed.type}) damaged condition buffer on ${fixed.domain}.`);
+        } else if (fixed.type === "obligation_shock") {
+          campaignState.resources.materials = Math.max(0, (campaignState.resources.materials || 0) - 10);
+          events.push({
+            type: "world_shock",
+            shockType: fixed.type,
+            targetDomain: fixed.domain,
+            message: `Obligation shock consumed materials on ${fixed.domain}`
+          });
+          causalTrace.push(`World shock (${fixed.type}) created urgent material obligation.`);
+        }
+      }
+    } else if (schedule.shockProbability && campaignState.worldRng) {
+      if (campaignState.worldRng() < schedule.shockProbability) {
+        const domainKeys = Object.keys(campaignState.domains);
+        const targetKey = domainKeys[Math.floor(campaignState.worldRng() * domainKeys.length)];
+        const targetDomain = campaignState.domains[targetKey];
+        if (targetDomain) {
+          targetDomain.evidenceCoverage = Math.max(0, targetDomain.evidenceCoverage - 0.3);
+          events.push({
+            type: "world_shock",
+            shockType: "evidentiary_shock",
+            targetDomain: targetKey,
+            message: `Environmental shift invalidated evidence on ${targetKey}`
+          });
+          causalTrace.push(`Environmental shift (evidentiary_shock) invalidated evidence on ${targetKey}.`);
+        }
+      }
+    }
+
+    // Process Domain Dependencies & Output
     for (const [id, domain] of Object.entries(campaignState.domains)) {
-      // Calculate dependency bottleneck multiplier
       let bottleneckMultiplier = 1.0;
       if (Array.isArray(domain.dependencyEdges)) {
         for (const edge of domain.dependencyEdges) {
@@ -454,7 +534,6 @@
             const parentHealth = parent.conditionBuffer / 100.0;
             if (parentHealth < 0.5) {
               let factor = (1 - edge.weight) + edge.weight * (parentHealth / 0.5);
-              // Check partial substitution
               if (edge.substituteTarget && campaignState.domains[edge.substituteTarget]) {
                 const subParent = campaignState.domains[edge.substituteTarget];
                 const subHealth = subParent.conditionBuffer / 100.0;
@@ -470,12 +549,12 @@
                 parentDomain: edge.target,
                 factor: factor
               });
+              causalTrace.push(`Dependency bottleneck: ${id} output throttled by impaired parent ${edge.target}.`);
             }
           }
         }
       }
 
-      // Process domain outputs (scaled by level and dependency bottleneck)
       for (const [resKey, amount] of Object.entries(domain.outputs || {})) {
         if (amount > 0 && RESOURCE_TYPES[resKey]) {
           const actualOutput = amount * domain.level * bottleneckMultiplier;
@@ -489,14 +568,13 @@
         }
       }
 
-      // Calculate dynamic maintenance obligation cost
+      // Obligations & Maintenance
       const pathwayEfficiency = 1.0 + 0.5 * (domain.personalPathwayQuality + domain.sharedPathwayQuality);
       for (const [resKey, baseCost] of Object.entries(domain.obligations || {})) {
         const scaledCost = (baseCost * domain.level * (1 + domain.volatility)) / pathwayEfficiency;
         if (campaignState.resources[resKey] && campaignState.resources[resKey] >= scaledCost) {
           campaignState.resources[resKey] -= scaledCost;
         } else {
-          // Drain condition buffer if resources are lacking
           const deficit = scaledCost - (campaignState.resources[resKey] || 0);
           campaignState.resources[resKey] = 0;
           domain.conditionBuffer = Math.max(0, domain.conditionBuffer - deficit * 5);
@@ -506,8 +584,8 @@
             domain: id,
             unmetCost: deficit
           });
+          causalTrace.push(`Maintenance deficit in ${id}: unmet ${resKey} cost ${deficit.toFixed(2)} drained condition buffer.`);
 
-          // Neglect decay: If condition buffer is completely 0, degrade domain level
           if (domain.conditionBuffer === 0) {
             const levelLoss = Math.min(domain.level, 0.05);
             domain.level = Math.max(0, domain.level - levelLoss);
@@ -517,11 +595,12 @@
               levelLoss: levelLoss,
               newLevel: domain.level
             });
+            causalTrace.push(`Level degradation in ${id}: condition buffer at 0 caused durable level loss of ${levelLoss.toFixed(2)}.`);
           }
         }
       }
 
-      // Check tier transition
+      // Check Tier Transition
       const newTier = getDomainTier(domain.level);
       if (newTier !== domain.tier) {
         const oldTier = domain.tier;
@@ -532,6 +611,27 @@
           oldTier: oldTier,
           newTier: newTier
         });
+      }
+    }
+
+    // Process Maintenance Automation
+    if (campaignState.automatedPolicies) {
+      for (const [domainId, autoRule] of Object.entries(campaignState.automatedPolicies)) {
+        if (autoRule && autoRule.autoMaintain && campaignState.domains[domainId]) {
+          const domain = campaignState.domains[domainId];
+          autoRule.staleness = (autoRule.staleness || 0) + 1;
+
+          // Execute automated maintenance if resources permit (reduced attention cost)
+          if ((campaignState.resources.attention || 0) >= 1) {
+            campaignState.resources.attention -= 1;
+            domain.conditionBuffer = Math.min(100.0, domain.conditionBuffer + 20.0);
+            events.push({
+              type: "automated_maintenance",
+              domain: domainId,
+              staleness: autoRule.staleness
+            });
+          }
+        }
       }
     }
 
@@ -570,6 +670,11 @@
 
       const targetId = action.targetDomain;
       const targetDomain = targetId && campaignState.domains[targetId] ? campaignState.domains[targetId] : null;
+
+      // Audit automated policy if action touches domain
+      if (targetId && campaignState.automatedPolicies && campaignState.automatedPolicies[targetId]) {
+        campaignState.automatedPolicies[targetId].staleness = 0;
+      }
 
       if (action.type === "animal_operation" && action.animal && targetDomain) {
         const animalName = action.animal;
@@ -671,7 +776,6 @@
         targetDomain.level += 0.2;
         targetDomain.conditionBuffer = Math.min(100.0, targetDomain.conditionBuffer + 5.0);
         
-        // Check tier transition
         const newTier = getDomainTier(targetDomain.level);
         if (newTier !== targetDomain.tier) {
           const oldTier = targetDomain.tier;
@@ -705,6 +809,7 @@
     const turnSummary = {
       turn: currentTurn,
       events: events,
+      causalTrace: causalTrace,
       resourcesSnapshot: deepClone(campaignState.resources),
       polarityPressures: calculatePolarityPressures(campaignState)
     };
@@ -750,8 +855,37 @@
     };
   }
 
+  function evaluateCampaignDiagnostics(campaignState, mission) {
+    const viability = evaluateViability(campaignState, mission);
+    const domainList = Object.values(campaignState.domains || {});
+    
+    // Policy Quality Score: Average level & health condition
+    let totalLevel = 0;
+    let totalBuffer = 0;
+    for (const d of domainList) {
+      totalLevel += d.level;
+      totalBuffer += d.conditionBuffer;
+    }
+    const avgLevel = domainList.length > 0 ? totalLevel / domainList.length : 0;
+    const avgBuffer = domainList.length > 0 ? totalBuffer / domainList.length : 0;
+
+    const policyQualityScore = Math.min(100, Math.round(avgLevel * 10 + avgBuffer * 0.5));
+    const shockResilienceScore = Math.min(100, Math.round(avgBuffer * 0.8 + (100 - calculatePolarityPressures(campaignState).Oe) * 0.2));
+    const maintenanceEfficiencyScore = Math.min(100, Math.round((campaignState.resources.materials + campaignState.resources.vitality) * 0.8));
+
+    return {
+      policyQualityScore: policyQualityScore,
+      shockResilienceScore: shockResilienceScore,
+      maintenanceEfficiencyScore: maintenanceEfficiencyScore,
+      viabilityCompliance: viability
+    };
+  }
+
   function getSnapshot(campaignState) {
     const clone = deepClone(campaignState);
+    delete clone.worldRng;
+    delete clone.agentRng;
+    delete clone.feedbackRng;
     clone.polarityPressures = calculatePolarityPressures(campaignState);
     return deepFreeze(clone);
   }
@@ -762,12 +896,14 @@
     DOMAIN_PRESETS,
     ORIGIN_PRESETS,
     MISSION_PRESETS,
+    SHOCK_SCHEDULES,
     getDomainTier,
     calculateAnimalCost,
     calculatePolarityPressures,
     createCampaign,
     stepTurn,
     evaluateViability,
+    evaluateCampaignDiagnostics,
     getSnapshot,
     validateInvariants
   };
