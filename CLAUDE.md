@@ -95,3 +95,17 @@ Pathways separates destination demands, terrain, origin state, private belief, p
 - Agent diversity evolves via genetic mutation - expect non-uniform populations
 - All configuration is in the `CFG` object at the top of the script
 - Keep the two engines independent until a shared causal-state bridge has explicit tests. See `README.md` for likely future fusion points.
+
+## Agent skills
+
+### Issue tracker
+
+GitHub issues (`https://github.com/stanbar/ops-simulator.git`). See `docs/agents/issue-tracker.md`.
+
+### Triage labels
+
+Canonical triage label vocabulary (`needs-triage`, `needs-info`, `ready-for-agent`, `ready-for-human`, `wontfix`). See `docs/agents/triage-labels.md`.
+
+### Domain docs
+
+Single-context (`CONTEXT.md` and `docs/adr/`). See `docs/agents/domain.md`.
