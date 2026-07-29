@@ -103,7 +103,7 @@ h3 { font-size: 15px; }
 }
 .setup-panel { padding: 24px; }
 .scenario-panel { grid-row: span 2; }
-.goals-panel { grid-column: 1 / -1; }
+.destination-panel, .goals-panel { grid-column: 1 / -1; }
 .section-heading, .panel-heading { display: flex; align-items: flex-start; justify-content: space-between; gap: 16px; }
 .section-heading { margin-bottom: 20px; }
 .section-heading > div { flex: 1; }
@@ -111,7 +111,7 @@ h3 { font-size: 15px; }
 .step-number { display: grid; flex: 0 0 auto; width: 34px; height: 34px; place-items: center; border: 1px solid var(--line-strong); border-radius: 50%; color: var(--accent); font: 700 11px/1 ui-monospace, monospace; }
 
 .scenario-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px; }
-.scenario-card, .goal-card {
+.scenario-card, .goal-card, .profile-card {
   position: relative;
   min-height: 120px;
   padding: 16px;
@@ -122,11 +122,14 @@ h3 { font-size: 15px; }
   cursor: pointer;
   transition: border-color 140ms ease, transform 140ms ease, background 140ms ease;
 }
-.scenario-card:hover, .goal-card:hover { transform: translateY(-2px); border-color: var(--line-strong); }
-.scenario-card.selected, .goal-card.selected { border-color: var(--accent); background: rgba(247, 203, 103, 0.08); }
-.scenario-card strong, .goal-card strong { display: block; margin-bottom: 7px; font-size: 14px; }
-.scenario-card span, .goal-card span { display: block; color: var(--muted); font-size: 11px; line-height: 1.45; }
+.scenario-card:hover, .goal-card:hover, .profile-card:hover { transform: translateY(-2px); border-color: var(--line-strong); }
+.scenario-card.selected, .goal-card.selected, .profile-card.selected { border-color: var(--accent); background: rgba(247, 203, 103, 0.08); }
+.scenario-card strong, .goal-card strong, .profile-card strong { display: block; margin-bottom: 7px; font-size: 14px; }
+.scenario-card span, .goal-card span, .profile-card span { display: block; color: var(--muted); font-size: 11px; line-height: 1.45; }
 .scenario-card small { position: absolute; top: 14px; right: 14px; color: var(--teal); font: 700 9px/1 ui-monospace, monospace; text-transform: uppercase; }
+.profile-grid { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 10px; }
+.profile-card { min-height: 105px; padding: 14px; }
+.origin-grid { grid-template-columns: repeat(3, minmax(0, 1fr)); }
 
 .custom-controls { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 14px 24px; margin-top: 18px; padding-top: 18px; border-top: 1px solid var(--line); }
 .custom-controls label { display: grid; grid-template-columns: 1fr auto; gap: 5px 10px; color: var(--muted); font-size: 11px; }
@@ -242,12 +245,18 @@ h3 { font-size: 15px; }
 .agent-reason { margin: 8px 0 0; color: #b9c7c2; font-size: 9px; line-height: 1.4; }
 
 .traffic-demand-list { display: grid; grid-template-columns: repeat(5, minmax(0, 1fr)); gap: 8px; padding: 0 16px 16px; }
+.destination-brief { display: grid; grid-template-columns: 1.1fr 1fr 1fr; gap: 8px; padding: 0 16px 12px; }
+.destination-brief > div { display: grid; gap: 4px; padding: 10px; border: 1px solid var(--line); border-radius: 9px; background: rgba(0, 0, 0, 0.13); }
+.destination-brief small { color: var(--teal); font: 700 8px/1 ui-monospace, monospace; letter-spacing: 0.08em; text-transform: uppercase; }
+.destination-brief strong { font-size: 10px; line-height: 1.45; }
+.destination-brief span { color: var(--muted); font-size: 9px; }
 .traffic-demand { display: grid; gap: 9px; min-height: 100px; padding: 11px; border: 1px solid var(--line); border-radius: 10px; background: rgba(255, 255, 255, 0.025); }
 .traffic-demand > div:first-child { display: grid; gap: 4px; }
 .traffic-demand strong { font-size: 10px; line-height: 1.35; }
 .traffic-demand span { color: var(--muted); font-size: 8px; }
 .traffic-demand.queued { opacity: 0.58; }
 .traffic-demand.completed { border-color: rgba(121, 214, 194, 0.42); background: rgba(121, 214, 194, 0.07); }
+.traffic-demand.awaiting-feedback { border-color: rgba(247, 203, 103, 0.42); background: rgba(247, 203, 103, 0.06); }
 .traffic-demand.overdue { border-color: rgba(240, 123, 134, 0.55); }
 .traffic-meta { align-self: end; display: flex; flex-wrap: wrap; gap: 4px; }
 .traffic-meta span, .traffic-meta b { padding: 4px 5px; border-radius: 5px; background: rgba(0, 0, 0, 0.2); font: 8px/1 ui-monospace, monospace; }
@@ -307,10 +316,10 @@ dialog::backdrop { background: rgba(2, 7, 9, 0.78); backdrop-filter: blur(8px); 
 
 @media (max-width: 1120px) {
   .setup-grid { grid-template-columns: 1fr; }
-  .scenario-panel, .goals-panel { grid-column: auto; grid-row: auto; }
+  .scenario-panel, .destination-panel, .goals-panel { grid-column: auto; grid-row: auto; }
   .game-layout { grid-template-columns: 1fr; }
   .agent-list { grid-template-columns: repeat(2, 1fr); max-height: none; }
-  .traffic-demand-list { grid-template-columns: repeat(3, 1fr); }
+  .traffic-demand-list, .profile-grid { grid-template-columns: repeat(2, 1fr); }
   .action-grid { grid-template-columns: repeat(2, 1fr); }
 }
 
@@ -318,7 +327,7 @@ dialog::backdrop { background: rgba(2, 7, 9, 0.78); backdrop-filter: blur(8px); 
   .site-header { position: static; padding: 10px 14px; }
   .brand small, .site-header nav a { display: none; }
   main { padding: 18px 12px 40px; }
-  .scenario-grid, .goal-grid, .custom-controls { grid-template-columns: 1fr; }
+  .scenario-grid, .goal-grid, .profile-grid, .custom-controls, .destination-brief { grid-template-columns: 1fr; }
   .game-status { grid-template-columns: repeat(2, 1fr); }
   .game-status > div { border-right: 0; border-bottom: 1px solid var(--line); }
   .game-status button { grid-column: 1 / -1; }

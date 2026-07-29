@@ -15,10 +15,12 @@
   const state = {
     config: {
       scenarioId: "uncharted",
+      destinationId: "expedition-logistics",
+      originId: "base-camp",
       profile: { observer: "Oi", decider: "Di", polarity: "Observer" },
       goalId: null,
       seed: "pathways-001",
-      customScenario: { uncertainty: 0.5, volatility: 0.5, interdependence: 0.5, disagreement: 0.5 }
+      customScenario: { uncertainty: 0.5, volatility: 0.5, branching: 0.5, observability: 0.5, interdependence: 0.5, routeRecurrence: 0.5, disagreement: 0.5 }
     },
     game: null,
     snapshot: null,
@@ -38,15 +40,16 @@
 
   function cacheElements() {
     [
-      "startScreen", "gameScreen", "scenarioGrid", "customControls", "goalGrid", "seedInput",
+      "startScreen", "gameScreen", "scenarioGrid", "destinationGrid", "originGrid", "customControls", "goalGrid", "seedInput",
       "tutorialInput", "startButton", "animalOrder", "uncertaintyInput", "volatilityInput",
-      "interdependenceInput", "disagreementInput", "uncertaintyOutput", "volatilityOutput",
-      "interdependenceOutput", "disagreementOutput", "roundStatus", "weatherStatus", "supplyStatus",
+      "branchingInput", "observabilityInput", "interdependenceInput", "routeRecurrenceInput", "disagreementInput",
+      "uncertaintyOutput", "volatilityOutput", "branchingOutput", "observabilityOutput",
+      "interdependenceOutput", "routeRecurrenceOutput", "disagreementOutput", "roundStatus", "weatherStatus", "supplyStatus",
       "summitStatus", "deliveryStatus", "scenarioEyebrow", "mapAgentSelect", "edgeLayer", "nodeLayer",
       "agentLayer", "agentList", "actionGrid", "playerState", "timeline", "tutorialBar", "tutorialCount",
       "tutorialTitle", "tutorialCopy", "skipTutorialButton", "restartButton", "aboutButton", "aboutDialog",
       "debriefDialog", "debriefContent", "mapCallout", "mountainSvg", "payloadLayer",
-      "trafficDemandList", "mapZoomIn", "mapZoomOut"
+      "trafficDemandList", "destinationBrief", "mapZoomIn", "mapZoomOut"
     ].forEach((id) => { elements[id] = byId(id); });
   }
 
@@ -86,6 +89,23 @@
     elements.customControls.hidden = state.config.scenarioId !== "custom";
   }
 
+  function renderProfiles(container, profiles, selectedId, attribute) {
+    container.innerHTML = Object.values(profiles).map((profile) => `
+      <button class="profile-card ${profile.id === selectedId ? "selected" : ""}" type="button" data-${attribute}="${profile.id}">
+        <strong>${escapeHtml(profile.name)}</strong>
+        <span>${escapeHtml(profile.description)}</span>
+      </button>
+    `).join("");
+  }
+
+  function renderDestinations() {
+    renderProfiles(elements.destinationGrid, Engine.DESTINATION_PROFILES, state.config.destinationId, "destination");
+  }
+
+  function renderOrigins() {
+    renderProfiles(elements.originGrid, Engine.ORIGIN_PROFILES, state.config.originId, "origin");
+  }
+
   function renderGoals() {
     const choices = Engine.goalChoices(state.config.seed);
     if (!choices.some((goal) => goal.id === state.config.goalId)) state.config.goalId = choices[0].id;
@@ -107,6 +127,8 @@
     const preview = new Engine.Game({
       seed: state.config.seed,
       scenarioId: state.config.scenarioId,
+      destinationId: state.config.destinationId,
+      originId: state.config.originId,
       customScenario: state.config.customScenario,
       playerProfile: state.config.profile,
       playerGoalId: state.config.goalId
@@ -125,7 +147,10 @@
     const pairs = [
       ["uncertainty", elements.uncertaintyInput, elements.uncertaintyOutput],
       ["volatility", elements.volatilityInput, elements.volatilityOutput],
+      ["branching", elements.branchingInput, elements.branchingOutput],
+      ["observability", elements.observabilityInput, elements.observabilityOutput],
       ["interdependence", elements.interdependenceInput, elements.interdependenceOutput],
+      ["routeRecurrence", elements.routeRecurrenceInput, elements.routeRecurrenceOutput],
       ["disagreement", elements.disagreementInput, elements.disagreementOutput]
     ];
     pairs.forEach(([key, input, output]) => {
@@ -135,11 +160,27 @@
   }
 
   function bindSetupEvents() {
+    elements.destinationGrid.addEventListener("click", (event) => {
+      const card = event.target.closest("[data-destination]");
+      if (!card) return;
+      state.config.destinationId = card.dataset.destination;
+      renderDestinations();
+      renderCoinControls();
+    });
+
     elements.scenarioGrid.addEventListener("click", (event) => {
       const card = event.target.closest("[data-scenario]");
       if (!card) return;
       state.config.scenarioId = card.dataset.scenario;
       renderScenarios();
+      renderCoinControls();
+    });
+
+    elements.originGrid.addEventListener("click", (event) => {
+      const card = event.target.closest("[data-origin]");
+      if (!card) return;
+      state.config.originId = card.dataset.origin;
+      renderOrigins();
       renderCoinControls();
     });
 
@@ -167,7 +208,8 @@
       renderCoinControls();
     });
 
-    [elements.uncertaintyInput, elements.volatilityInput, elements.interdependenceInput, elements.disagreementInput]
+    [elements.uncertaintyInput, elements.volatilityInput, elements.branchingInput, elements.observabilityInput,
+      elements.interdependenceInput, elements.routeRecurrenceInput, elements.disagreementInput]
       .forEach((input) => input.addEventListener("input", () => {
         updateCustomControls();
         renderCoinControls();
@@ -192,6 +234,8 @@
     state.game = new Engine.Game({
       seed: state.config.seed,
       scenarioId: state.config.scenarioId,
+      destinationId: state.config.destinationId,
+      originId: state.config.originId,
       customScenario: state.config.customScenario,
       playerProfile: state.config.profile,
       playerGoalId: state.config.goalId
@@ -217,6 +261,8 @@
     elements.startScreen.hidden = false;
     elements.seedInput.value = state.config.seed;
     renderScenarios();
+    renderDestinations();
+    renderOrigins();
     renderGoals();
     renderCoinControls();
     window.scrollTo({ top: 0, behavior: "smooth" });
@@ -226,6 +272,8 @@
     const params = new URLSearchParams({
       seed: state.config.seed,
       scenario: state.config.scenarioId,
+      destination: state.config.destinationId,
+      origin: state.config.originId,
       observer: state.config.profile.observer,
       decider: state.config.profile.decider,
       polarity: state.config.profile.polarity,
@@ -238,6 +286,8 @@
     const params = new URLSearchParams(location.search);
     if (params.has("seed")) state.config.seed = params.get("seed") || state.config.seed;
     if (params.has("scenario") && (Engine.SCENARIOS[params.get("scenario")] || params.get("scenario") === "custom")) state.config.scenarioId = params.get("scenario");
+    if (Engine.DESTINATION_PROFILES[params.get("destination")]) state.config.destinationId = params.get("destination");
+    if (Engine.ORIGIN_PROFILES[params.get("origin")]) state.config.originId = params.get("origin");
     if (["Oi", "Oe"].includes(params.get("observer"))) state.config.profile.observer = params.get("observer");
     if (["Di", "De"].includes(params.get("decider"))) state.config.profile.decider = params.get("decider");
     if (["Observer", "Decider"].includes(params.get("polarity"))) state.config.profile.polarity = params.get("polarity");
@@ -265,13 +315,22 @@
     elements.roundStatus.textContent = `${snapshot.round} / ${snapshot.roundLimit}`;
     elements.weatherStatus.textContent = `${snapshot.weather.label} · ${Math.round(snapshot.weather.severity * 100)}%`;
     elements.supplyStatus.textContent = String(snapshot.supplies);
-    elements.summitStatus.textContent = `${completed} / ${snapshot.trafficDemands.length}`;
-    elements.deliveryStatus.textContent = `${snapshot.deliveredPayload} / 2`;
-    elements.scenarioEyebrow.textContent = snapshot.scenario.name;
+    elements.summitStatus.textContent = `${completed} / ${state.game.successRequirements().completedDemands}`;
+    elements.deliveryStatus.textContent = `${snapshot.deliveredPayload} / ${state.game.successRequirements().payloads}`;
+    elements.scenarioEyebrow.textContent = `${snapshot.destination.name} · ${snapshot.scenario.name} · ${snapshot.origin.name}`;
   }
 
   function renderTraffic() {
     const snapshot = state.snapshot;
+    const bottlenecks = state.game.currentBottlenecks("player").slice(0, 3);
+    const demandEntries = Object.entries(snapshot.destination.demands).sort((a, b) => b[1] - a[1]).slice(0, 3);
+    const requirements = state.game.successRequirements();
+    const earliestSuccessRound = Math.ceil(snapshot.roundLimit * 2 / 3);
+    elements.destinationBrief.innerHTML = `
+      <div><small>Destination</small><strong>${escapeHtml(snapshot.destination.name)}</strong><span>${escapeHtml(snapshot.destination.description)} Target: ${requirements.completedDemands} demands and ${requirements.payloads} payload${requirements.payloads === 1 ? "" : "s"}; earliest completion R${earliestSuccessRound}.</span></div>
+      <div><small>Strongest demands</small><strong>${demandEntries.map(([key, value]) => `${escapeHtml(demandLabel(key))} ${Math.round(value * 100)}%`).join(" · ")}</strong></div>
+      <div><small>Current bottlenecks</small><strong>${bottlenecks.map((entry) => `${escapeHtml(entry.label)} ${Math.round(entry.score * 100)}%`).join(" · ")}</strong></div>
+    `;
     elements.trafficDemandList.innerHTML = snapshot.trafficDemands.map((demand) => {
       const agent = snapshot.agents.find((candidate) => candidate.id === demand.assignedAgentId);
       const overdue = !demand.completed && snapshot.round > demand.deadline;
@@ -287,6 +346,10 @@
         </article>
       `;
     }).join("");
+  }
+
+  function demandLabel(key) {
+    return key.replace(/([A-Z])/g, " $1").replace(/^./, (letter) => letter.toUpperCase());
   }
 
   function renderTutorial() {
@@ -323,6 +386,7 @@
       const belief = selectedAgent.beliefs[edge.id];
       const shared = edge.infrastructure > 0;
       const intended = selectedAgent.movementIntent && selectedAgent.movementIntent.pathEdgeIds.includes(edge.id);
+      if (!state.revealTruth && !belief && !shared && !intended) return;
       const intentIndex = intended ? selectedAgent.movementIntent.pathEdgeIds.indexOf(edge.id) : -1;
       const displayFromId = intended ? selectedAgent.movementIntent.pathNodeIds[intentIndex] : edge.from;
       const displayToId = intended ? selectedAgent.movementIntent.pathNodeIds[intentIndex + 1] : edge.to;
@@ -494,6 +558,7 @@
           <h3>${escapeHtml(option.label)}</h3>
           <div class="action-target">${escapeHtml(option.targetName)}${option.partnerName ? ` · with ${escapeHtml(option.partnerName)}` : ""}</div>
           <div class="action-target">Then traffic: ${escapeHtml(option.demandName)} · expected route use ${option.expectedFutureUses}</div>
+          <div class="action-target">Addresses ${escapeHtml(option.bottleneckAddressed.label)} · ex-ante value ${option.exAnteValue.toFixed(2)}</div>
           <p class="action-rationale">${escapeHtml(option.rationale)}</p>
           <div class="action-costs">
             <span class="cost-chip">Subjective ${option.subjectiveCost.toFixed(1)}</span>
@@ -546,8 +611,8 @@
       </header>
       <div class="debrief-body">
         <div class="metric-grid">
-          ${metric("Demands completed", `${summary.completedDemands} / ${summary.totalDemands}`)}
-          ${metric("Payload delivered", `${summary.payloadThroughput} / 2`)}
+          ${metric("Demands completed", `${summary.completedDemands} / ${summary.successRequirements.completedDemands}`)}
+          ${metric("Payload delivered", `${summary.payloadThroughput} / ${summary.successRequirements.payloads}`)}
           ${metric("Edges explored", summary.exploredEdges)}
           ${metric("Repeat traversals", summary.repeatTraversals)}
           ${metric("Personal mastery returns", summary.personalMasteryUses)}
@@ -555,8 +620,18 @@
           ${metric("Route materials", summary.remainingMaterials)}
           ${metric("Final stress", summary.playerStress.toFixed(1))}
           ${metric("Final stamina", summary.playerStamina.toFixed(1))}
+          ${metric("Decision quality", `${Math.round(summary.playerDecisionQuality * 100)}%`)}
+          ${metric("Destination outcome", `${Math.round(summary.destinationOutcomeScore * 100)}%`)}
+          ${metric("Feedback pending", summary.pendingFeedback)}
           ${metric("Rounds used", `${summary.rounds} / ${state.snapshot.roundLimit}`)}
         </div>
+        <section class="debrief-section">
+          <h3>Why this destination behaved this way</h3>
+          <p class="agent-goal">${escapeHtml(summary.destination.name)} began from ${escapeHtml(summary.origin.name)} in ${escapeHtml(summary.terrain.name)}. Its strongest demands were ${Object.entries(summary.destination.demands).sort((a, b) => b[1] - a[1]).slice(0, 3).map(([key]) => escapeHtml(demandLabel(key))).join(", ")}.</p>
+          <div class="pressure-list">
+            ${summary.bottlenecks.slice(0, 4).map((entry) => `<div class="pressure-item"><span>${escapeHtml(entry.label)}</span><strong>${Math.round(entry.score * 100)}%</strong></div>`).join("")}
+          </div>
+        </section>
         ${comparison}
         <div class="debrief-columns">
           <section class="debrief-section">
@@ -584,7 +659,7 @@
             <button class="quiet-button" type="button" data-debrief-action="setup">New expedition setup</button>
           </div>
         </section>
-        <div class="model-notice"><strong>Run-specific result.</strong> This debrief explains behavior inside this simulation. It does not infer your real personality or establish that OPS describes human cognition.</div>
+        <div class="model-notice"><strong>Run-specific result.</strong> Domains have no inherent animal in this model. The useful operation depends on destination demands, terrain, origin, current pathway state, and horizon. This debrief does not infer your real personality or establish that OPS describes human cognition.</div>
       </div>
     `;
     if (!elements.debriefDialog.open) elements.debriefDialog.showModal();
@@ -675,6 +750,8 @@
     readUrl();
     elements.seedInput.value = state.config.seed;
     renderScenarios();
+    renderDestinations();
+    renderOrigins();
     renderGoals();
     renderCoinControls();
     updateCustomControls();

@@ -20,6 +20,8 @@ It models:
 - personal mastery and shared infrastructure as separate pathway layers;
 - private evidence from Consume and joint evidence from Play;
 - delayed personal returns from Sleep and delayed shared returns from Blast;
+- independent destination demands, terrain conditions, and origin state;
+- conditional payoff cells where the useful animal changes with bottleneck and horizon;
 - stress, neglected reality, and bounded within-run adaptation.
 
 The engine is in `pathways/engine.js`; the SVG application is in `pathways/app.js`.
@@ -46,7 +48,7 @@ node pathways/balance-benchmark.test.js
 node simulation.test.js
 ```
 
-The Pathways suite covers deterministic replay, coin-derived cost ordering, action availability, counterfactual coin flips, repeated traffic, delayed pathway returns, false consensus, and benchmark scenario execution.
+The Pathways suite covers deterministic replay, coin-derived cost ordering, action availability, counterfactual coin flips, repeated traffic, delayed pathway returns, destination/terrain/origin independence, conditional payoff cells, false consensus, and benchmark execution.
 
 Run `node pathways/balance-benchmark.js` for the fixed-cohort policy and horizon report. The obsolete one-ascent measurements from issue #10 are retained as historical context in `pathways/BALANCE_BASELINE.md`; they are not a gate for the logistics model.
 

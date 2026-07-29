@@ -15,10 +15,122 @@
   const ANIMAL_ORDER = Object.freeze(["Sleep", "Consume", "Blast", "Play"]);
 
   const SCENARIOS = Object.freeze({
-    uncharted: { id: "uncharted", name: "Uncharted Range", description: "The terrain is stable, but most viable routes are still unknown.", uncertainty: 0.86, volatility: 0.12, interdependence: 0.42, disagreement: 0.28, initialMaterials: 18, stormLabel: "whiteout" },
-    melting: { id: "melting", name: "Melting Pass", description: "Useful trails change as warming ice and rockfall reshape the mountain.", uncertainty: 0.52, volatility: 0.82, interdependence: 0.55, disagreement: 0.35, initialMaterials: 20, stormLabel: "ice break" },
-    convoy: { id: "convoy", name: "Supply Convoy", description: "The mountain is legible, but repeated payload traffic needs shared capacity.", uncertainty: 0.34, volatility: 0.2, interdependence: 0.9, disagreement: 0.45, initialMaterials: 24, stormLabel: "supply window closes" },
-    wrong: { id: "wrong", name: "Confidently Wrong", description: "Most maps agree on a route that one expedition member doubts.", uncertainty: 0.58, volatility: 0.3, interdependence: 0.74, disagreement: 0.86, initialMaterials: 20, stormLabel: "rescue window closes", falseConsensus: true }
+    uncharted: { id: "uncharted", name: "Uncharted Range", description: "The terrain is stable, but most viable routes are still unknown.", uncertainty: 0.86, volatility: 0.12, branching: 0.88, observability: 0.32, interdependence: 0.42, routeRecurrence: 0.55, disagreement: 0.28, initialMaterials: 18, stormLabel: "whiteout" },
+    melting: { id: "melting", name: "Melting Pass", description: "Useful trails change as warming ice and rockfall reshape the mountain.", uncertainty: 0.52, volatility: 0.82, branching: 0.68, observability: 0.58, interdependence: 0.55, routeRecurrence: 0.72, disagreement: 0.35, initialMaterials: 20, stormLabel: "ice break" },
+    convoy: { id: "convoy", name: "Supply Convoy", description: "The mountain is legible, but repeated payload traffic needs shared capacity.", uncertainty: 0.34, volatility: 0.2, branching: 0.48, observability: 0.82, interdependence: 0.9, routeRecurrence: 0.95, disagreement: 0.45, initialMaterials: 24, stormLabel: "supply window closes" },
+    wrong: { id: "wrong", name: "Confidently Wrong", description: "Most maps agree on a route that one expedition member doubts.", uncertainty: 0.58, volatility: 0.3, branching: 0.62, observability: 0.78, interdependence: 0.74, routeRecurrence: 0.68, disagreement: 0.86, initialMaterials: 20, stormLabel: "rescue window closes", falseConsensus: true }
+  });
+
+  const DESTINATION_PROFILES = Object.freeze({
+    "expedition-logistics": {
+      id: "expedition-logistics",
+      name: "Expedition Logistics",
+      domain: "mountain operations",
+      description: "Move people and payload through a mixed private and shared route network.",
+      demands: { privateDiscovery: 0.55, privateRepeatability: 0.55, sharedExploration: 0.5, sharedStandardization: 0.65, repeatedTraffic: 0.55, feedbackLatency: 0.2, costOfError: 0.55 }
+    },
+    "health-practice": {
+      id: "health-practice",
+      name: "Health Practice",
+      domain: "health and fitness",
+      description: "Build a personally repeatable routine while retaining enough evidence to correct it.",
+      demands: { privateDiscovery: 0.45, privateRepeatability: 0.95, sharedExploration: 0.25, sharedStandardization: 0.3, repeatedTraffic: 0.9, feedbackLatency: 0.65, costOfError: 0.8 }
+    },
+    "entrepreneurship-launch": {
+      id: "entrepreneurship-launch",
+      name: "Entrepreneurship Launch",
+      domain: "entrepreneurship",
+      description: "Discover demand, coordinate changing partners, and turn learning into delivery.",
+      demands: { privateDiscovery: 0.7, privateRepeatability: 0.35, sharedExploration: 0.85, sharedStandardization: 0.65, repeatedTraffic: 0.55, feedbackLatency: 0.25, costOfError: 0.55 }
+    },
+    "production-system": {
+      id: "production-system",
+      name: "Production System",
+      domain: "productivity and production",
+      description: "Create reliable shared throughput from sufficiently understood work.",
+      demands: { privateDiscovery: 0.3, privateRepeatability: 0.55, sharedExploration: 0.35, sharedStandardization: 0.95, repeatedTraffic: 0.95, feedbackLatency: 0.2, costOfError: 0.65 }
+    },
+    "research-frontier": {
+      id: "research-frontier",
+      name: "Research Frontier",
+      domain: "research and knowledge",
+      description: "Expand evidence under uncertainty before conclusions become expensive.",
+      demands: { privateDiscovery: 1, privateRepeatability: 0.15, sharedExploration: 0.3, sharedStandardization: 0.1, repeatedTraffic: 0.15, feedbackLatency: 0.45, costOfError: 0.4 }
+    },
+    "judgment-calibration": {
+      id: "judgment-calibration",
+      name: "Judgment Calibration",
+      domain: "judgment",
+      description: "Compare private evidence with external correction before repeating a decision rule.",
+      demands: { privateDiscovery: 0.75, privateRepeatability: 0.5, sharedExploration: 0.75, sharedStandardization: 0.3, repeatedTraffic: 0.45, feedbackLatency: 0.75, costOfError: 0.9 }
+    },
+    "taste-development": {
+      id: "taste-development",
+      name: "Taste Development",
+      domain: "taste",
+      description: "Accumulate private discrimination while testing it against varied perspectives.",
+      demands: { privateDiscovery: 0.8, privateRepeatability: 0.65, sharedExploration: 0.65, sharedStandardization: 0.15, repeatedTraffic: 0.5, feedbackLatency: 0.7, costOfError: 0.35 }
+    },
+    "wisdom-stewardship": {
+      id: "wisdom-stewardship",
+      name: "Wisdom Stewardship",
+      domain: "wisdom",
+      description: "Integrate slow feedback, repeatable practice, and transmissible safeguards.",
+      demands: { privateDiscovery: 0.65, privateRepeatability: 0.8, sharedExploration: 0.6, sharedStandardization: 0.65, repeatedTraffic: 0.7, feedbackLatency: 0.95, costOfError: 0.95 }
+    }
+  });
+
+  const ORIGIN_PROFILES = Object.freeze({
+    "base-camp": {
+      id: "base-camp",
+      name: "Base Camp Start",
+      description: "A clustered team with a small amount of local route evidence.",
+      state: { priorEvidence: 0.12, initialMastery: 0, sharedInfrastructure: 0, agentDistribution: 0, resources: 0.5, startingProximity: 0 }
+    },
+    "fresh-start": {
+      id: "fresh-start",
+      name: "Fresh Start",
+      description: "Sparse evidence, no established capability, and limited materials.",
+      state: { priorEvidence: 0.04, initialMastery: 0, sharedInfrastructure: 0, agentDistribution: 0, resources: 0.2, startingProximity: 0 }
+    },
+    "informed-base": {
+      id: "informed-base",
+      name: "Informed Base",
+      description: "Useful prior observations exist, but they have not yet become dependable pathways.",
+      state: { priorEvidence: 0.38, initialMastery: 0.08, sharedInfrastructure: 0.05, agentDistribution: 0.12, resources: 0.6, startingProximity: 0.08 }
+    },
+    "established-network": {
+      id: "established-network",
+      name: "Established Network",
+      description: "Strong evidence, practiced routes, shared capacity, and a distributed team already exist.",
+      state: { priorEvidence: 0.68, initialMastery: 0.5, sharedInfrastructure: 0.58, agentDistribution: 0.72, resources: 0.9, startingProximity: 0.48 }
+    },
+    "distributed-team": {
+      id: "distributed-team",
+      name: "Distributed Team",
+      description: "Agents begin near different route segments with uneven local evidence.",
+      state: { priorEvidence: 0.28, initialMastery: 0.18, sharedInfrastructure: 0.18, agentDistribution: 0.95, resources: 0.62, startingProximity: 0.35 }
+    },
+    "lucky-route": {
+      id: "lucky-route",
+      name: "Lucky Initial Route",
+      description: "A route chosen without robust comparison happens to be high quality on this mountain.",
+      state: { priorEvidence: 0.08, initialMastery: 0.8, sharedInfrastructure: 0.08, agentDistribution: 0.08, resources: 0.48, startingProximity: 0.05 },
+      luckyRoute: true
+    },
+    "sampled-route": {
+      id: "sampled-route",
+      name: "Unconditioned Initial Route",
+      description: "The same starting capability is placed on a route sampled without conditioning on its hidden quality.",
+      state: { priorEvidence: 0.08, initialMastery: 0.8, sharedInfrastructure: 0.08, agentDistribution: 0.08, resources: 0.48, startingProximity: 0.05 },
+      sampledRoute: true
+    }
+  });
+
+  const EVIDENCE_STATE_PROFILES = Object.freeze({
+    inherited: { id: "inherited", name: "Inherited Evidence", coverageAdjustment: 0, confidenceMultiplier: 1 },
+    sparse: { id: "sparse", name: "Sparse Current Evidence", coverageAdjustment: -0.18, confidenceMultiplier: 0.72 },
+    verified: { id: "verified", name: "Verified Current Evidence", coverageAdjustment: 0.18, confidenceMultiplier: 1.14 }
   });
 
   const GOALS = Object.freeze([
@@ -41,6 +153,7 @@
   ]);
 
   const DEFAULT_ROUNDS = 32;
+  const MAX_ROUTE_SLOTS = 62;
   const HORIZON_LABELS = Object.freeze(["early", "middle", "final"]);
 
   function clamp(value, min, max) {
@@ -118,13 +231,40 @@
         description: "A custom balance of terrain uncertainty and social interdependence.",
         uncertainty: clamp(setting(input.uncertainty), 0, 1),
         volatility: clamp(setting(input.volatility), 0, 1),
+        branching: clamp(setting(input.branching), 0, 1),
+        observability: clamp(setting(input.observability), 0, 1),
         interdependence: clamp(setting(input.interdependence), 0, 1),
+        routeRecurrence: clamp(setting(input.routeRecurrence), 0, 1),
         disagreement: clamp(setting(input.disagreement), 0, 1),
         initialMaterials: 20,
         stormLabel: "weather window closes"
       };
     }
     return clone(SCENARIOS[id] || SCENARIOS.uncharted);
+  }
+
+  function destinationConfig(id, overrides) {
+    const base = clone(DESTINATION_PROFILES[id] || DESTINATION_PROFILES["expedition-logistics"]);
+    const input = overrides || {};
+    const demandOverrides = input.demands || input;
+    for (const dimension of Object.keys(base.demands)) {
+      if (Number.isFinite(Number(demandOverrides[dimension]))) base.demands[dimension] = clamp(Number(demandOverrides[dimension]), 0, 1);
+    }
+    return base;
+  }
+
+  function originConfig(id, overrides) {
+    const base = clone(ORIGIN_PROFILES[id] || ORIGIN_PROFILES["base-camp"]);
+    const input = overrides || {};
+    const stateOverrides = input.state || input;
+    for (const dimension of Object.keys(base.state)) {
+      if (Number.isFinite(Number(stateOverrides[dimension]))) base.state[dimension] = clamp(Number(stateOverrides[dimension]), 0, 1);
+    }
+    return base;
+  }
+
+  function evidenceStateConfig(id) {
+    return clone(EVIDENCE_STATE_PROFILES[id] || EVIDENCE_STATE_PROFILES.inherited);
   }
 
   function createMountain(rng, scenario) {
@@ -147,14 +287,17 @@
     for (let level = 1; level < 7; level += 1) {
       const current = [`l${level}a`, `l${level}b`, `l${level}c`];
       const next = [`l${level + 1}a`, `l${level + 1}b`, `l${level + 1}c`];
-      pairs.push(
-        [current[0], next[0]], [current[0], next[1]],
-        [current[1], next[0]], [current[1], next[1]], [current[1], next[2]],
-        [current[2], next[1]], [current[2], next[2]],
+      pairs.push([current[0], next[0]], [current[1], next[1]], [current[2], next[2]]);
+      const optional = [
+        [current[0], next[1]], [current[1], next[0]],
+        [current[1], next[2]], [current[2], next[1]],
         [current[0], current[1]], [current[1], current[2]]
-      );
+      ];
+      optional.forEach((pair) => { if (rng.next() < scenario.branching) pairs.push(pair); });
     }
-    pairs.push(["l7a", "summit"], ["l7b", "summit"], ["l7c", "summit"], ["l7a", "l7b"], ["l7b", "l7c"]);
+    pairs.push(["l7a", "summit"], ["l7b", "summit"], ["l7c", "summit"]);
+    if (rng.next() < scenario.branching) pairs.push(["l7a", "l7b"]);
+    if (rng.next() < scenario.branching) pairs.push(["l7b", "l7c"]);
 
     const nodeById = Object.fromEntries(nodes.map((node) => [node.id, node]));
     const edges = pairs.map(([from, to], index) => {
@@ -194,15 +337,24 @@
     return { nodes, edges, falseConsensusEdgeId };
   }
 
-  function createTrafficDemands(roundLimit) {
-    return [
+  function createTrafficDemands(roundLimit, destination, terrain) {
+    const profile = destination || DESTINATION_PROFILES["expedition-logistics"];
+    const demands = profile.demands;
+    const terrainProfile = terrain || SCENARIOS.uncharted;
+    const feedbackDelay = Math.round(demands.feedbackLatency * 4);
+    const recurrence = (demands.repeatedTraffic + terrainProfile.routeRecurrence) / 2;
+    const repeatCycles = Math.max(1, Math.round(1 + recurrence * 2));
+    const privateLevel = Math.max(2, Math.min(6, Math.round(2 + demands.privateDiscovery * 4)));
+    const sharedLevel = Math.max(3, Math.min(7, Math.round(3 + demands.sharedStandardization * 4)));
+    const repeatStops = (target, cycles) => Array.from({ length: cycles }, () => [target, "base"]).flat();
+    const result = [
       {
         id: "survey-loop",
         type: "survey-return",
         name: "Survey Central Camp 4 and report back",
         source: "base",
-        destination: "l4b",
-        stops: ["l4b", "base"],
+        destination: profile.id === "expedition-logistics" ? "l4b" : `l${privateLevel}b`,
+        stops: profile.id === "expedition-logistics" ? ["l4b", "base"] : repeatStops(`l${privateLevel}b`, Math.max(1, Math.round(repeatCycles * demands.privateRepeatability))),
         stopIndex: 0,
         subject: { kind: "agent", id: "player", label: "You" },
         assignedAgentId: "player",
@@ -214,7 +366,10 @@
         completed: false,
         completedRound: null,
         status: "active",
-        legsCompleted: 0
+        legsCompleted: 0,
+        feedbackDelay,
+        costOfError: demands.costOfError,
+        demandDimensions: ["privateDiscovery", "privateRepeatability", "repeatedTraffic"]
       },
       {
         id: "payload-alpha",
@@ -234,7 +389,10 @@
         completed: false,
         completedRound: null,
         status: "active",
-        legsCompleted: 0
+        legsCompleted: 0,
+        feedbackDelay,
+        costOfError: demands.costOfError,
+        demandDimensions: ["sharedStandardization", "repeatedTraffic"]
       },
       {
         id: "payload-beta",
@@ -254,15 +412,18 @@
         completed: false,
         completedRound: null,
         status: "queued",
-        legsCompleted: 0
+        legsCompleted: 0,
+        feedbackDelay,
+        costOfError: demands.costOfError,
+        demandDimensions: ["sharedStandardization", "repeatedTraffic"]
       },
       {
         id: "relay-loop",
         type: "relay-return",
         name: "Inspect East Camp 5 and return equipment",
         source: "base",
-        destination: "l5c",
-        stops: ["l5c", "base"],
+        destination: profile.id === "expedition-logistics" ? "l5c" : `l${sharedLevel}c`,
+        stops: profile.id === "expedition-logistics" ? ["l5c", "base"] : repeatStops(`l${sharedLevel}c`, Math.max(1, Math.round(repeatCycles * demands.sharedExploration))),
         stopIndex: 0,
         subject: { kind: "agent", id: "a3", label: "Noor" },
         assignedAgentId: "a3",
@@ -274,7 +435,10 @@
         completed: false,
         completedRound: null,
         status: "queued",
-        legsCompleted: 0
+        legsCompleted: 0,
+        feedbackDelay,
+        costOfError: demands.costOfError,
+        demandDimensions: ["sharedExploration", "repeatedTraffic"]
       },
       {
         id: "rescue-loop",
@@ -294,9 +458,14 @@
         completed: false,
         completedRound: null,
         status: "queued",
-        legsCompleted: 0
+        legsCompleted: 0,
+        feedbackDelay,
+        costOfError: demands.costOfError,
+        demandDimensions: ["costOfError", "sharedExploration"]
       }
     ];
+    result.forEach((demand) => { demand.destinationProfileId = profile.id; });
+    return result;
   }
 
   function axisForPole(pole) {
@@ -351,6 +520,9 @@
       personalProgress: 0,
       personalMasteryUses: 0,
       sharedInfrastructureUses: 0,
+      jointEvidenceEvents: 0,
+      decisionQualityTotal: 0,
+      decisionCount: 0,
       completedDemandIds: []
     };
   }
@@ -359,13 +531,22 @@
     constructor(options = {}) {
       this.seed = String(options.seed || "pathways-001");
       this.scenario = scenarioConfig(options.scenarioId || "uncharted", options.customScenario);
+      this.destination = destinationConfig(options.destinationId || "expedition-logistics", options.destinationDemands || options.destinationOverrides);
+      this.origin = originConfig(options.originId || "base-camp", options.originState || options.originOverrides);
+      this.evidenceState = evidenceStateConfig(options.evidenceStateId || "inherited");
+      this.originRouteSample = Number.isInteger(options.originRouteSample) ? options.originRouteSample : null;
       this.roundLimit = Number(options.roundLimit) || DEFAULT_ROUNDS;
       this.rng = new RNG(`${this.seed}:${this.scenario.id}`);
       this.mountain = createMountain(this.rng, this.scenario);
+      this.observationRng = new RNG(`${this.seed}:${this.scenario.id}:observations`);
+      this.weatherRng = new RNG(`${this.seed}:${this.scenario.id}:weather`);
+      this.trafficRng = {
+        next: (key) => new RNG(`${this.seed}:${this.scenario.id}:traffic:${key}`).next()
+      };
       this.nodeById = Object.fromEntries(this.mountain.nodes.map((node) => [node.id, node]));
       this.edgeById = Object.fromEntries(this.mountain.edges.map((edge) => [edge.id, edge]));
       this.round = 0;
-      this.materials = this.scenario.initialMaterials;
+      this.materials = Math.round(10 + this.origin.state.resources * 16);
       this.supplies = this.materials;
       this.deliveredPayload = 0;
       this.deliveredSupplies = 0;
@@ -377,6 +558,7 @@
       this.finished = false;
       this.success = false;
       this.finishReason = null;
+      this.originLuck = null;
 
       const playerProfile = normalizeProfile(options.playerProfile || PROFILE_PRESETS[0]);
       const requestedGoal = GOALS.find((goal) => goal.id === options.playerGoalId);
@@ -390,7 +572,15 @@
         this.agents.push(createAgent(`a${index}`, names[index], profilePool[(index - 1) % profilePool.length], goalPool[(index - 1) % goalPool.length], colors[index]));
       }
       this.agentById = Object.fromEntries(this.agents.map((agent) => [agent.id, agent]));
-      this.trafficDemands = clone(options.trafficDemands || createTrafficDemands(this.roundLimit));
+      this.applyOriginPositions();
+      this.trafficDemands = clone(options.trafficDemands || createTrafficDemands(this.roundLimit, this.destination, this.scenario));
+      this.trafficDemands.forEach((demand) => {
+        const agent = this.agentById[demand.assignedAgentId];
+        if (agent) {
+          demand.source = agent.position;
+          demand.currentNode = agent.position;
+        }
+      });
       this.initializeBeliefs();
       this.activateDemands();
       this.updateMovementIntents();
@@ -415,12 +605,52 @@
       return this.agents.filter((agent) => agent.position === nodeId && !agent.stranded);
     }
 
-    initializeBeliefs() {
-      const baseEdges = this.connectedEdges("base");
+    applyOriginPositions() {
+      const proximityLevel = Math.min(3, Math.round(this.origin.state.startingProximity * 3));
+      const spread = this.origin.state.agentDistribution;
       this.agents.forEach((agent, index) => {
-        const shuffled = new RNG(`${this.seed}:beliefs:${agent.id}`).shuffle(baseEdges);
-        const knownCount = this.scenario.uncertainty > 0.7 ? 1 : 2;
-        shuffled.slice(0, knownCount).forEach((edge) => this.observe(agent, edge, 0.68, false));
+        if (proximityLevel === 0 && spread < 0.2) return;
+        const levelOffset = index === 0 ? 0 : Math.round(spread * (index % 3));
+        const level = Math.min(7, Math.max(0, proximityLevel + levelOffset));
+        if (level === 0) return;
+        const lane = String.fromCharCode(97 + (index + Math.round(spread * 2)) % 3);
+        agent.position = `l${level}${lane}`;
+      });
+    }
+
+    initializeBeliefs() {
+      this.agents.forEach((agent, index) => {
+        const local = this.connectedEdges(agent.position);
+        const shuffled = new RNG(`${this.seed}:beliefs:${agent.id}`).shuffle(this.mountain.edges);
+        const candidates = [...local, ...shuffled.filter((edge) => !local.some((candidate) => candidate.id === edge.id))];
+        const legacyCount = this.scenario.uncertainty > 0.7 ? 1 : 2;
+        let knownCount = this.origin.id === "base-camp"
+          ? legacyCount
+          : Math.max(1, Math.round(this.mountain.edges.length * this.origin.state.priorEvidence * (0.45 + this.scenario.observability * 0.55)));
+        knownCount = Math.max(1, Math.min(this.mountain.edges.length, Math.round(knownCount + this.mountain.edges.length * this.evidenceState.coverageAdjustment)));
+        const initialConfidence = (0.5 + this.scenario.observability * 0.38) * this.evidenceState.confidenceMultiplier;
+        candidates.slice(0, knownCount).forEach((edge) => this.observe(agent, edge, initialConfidence, false));
+        if ((this.origin.luckyRoute || this.origin.sampledRoute) && local.length) {
+          const selectedRoute = this.origin.luckyRoute
+            ? local.slice().sort((left, right) => (
+              left.trueCost + left.trueRisk * 3 - (right.trueCost + right.trueRisk * 3)
+            ) || left.id.localeCompare(right.id))[0]
+            : this.originRouteSample === null
+              ? new RNG(`${this.seed}:origin-route:${agent.id}`).shuffle(local)[0]
+              : local.slice().sort((left, right) => left.id.localeCompare(right.id))[this.originRouteSample % local.length];
+          const routeBurden = round(selectedRoute.trueCost + selectedRoute.trueRisk * 3, 3);
+          const median = local.map((edge) => edge.trueCost + edge.trueRisk * 3).sort((left, right) => left - right)[Math.floor(local.length / 2)];
+          this.observe(agent, selectedRoute, 0.92, true);
+          agent.mastery[selectedRoute.id] = this.origin.state.initialMastery;
+          agent.masteryInvestedRound[selectedRoute.id] = 0;
+          if (agent.id === "player") this.originLuck = { routeId: selectedRoute.id, realizedBurden: routeBurden, favorable: routeBurden <= median, conditioned: Boolean(this.origin.luckyRoute) };
+        }
+        Object.keys(agent.beliefs).forEach((edgeId) => {
+          if (!agent.mastery[edgeId] && this.origin.state.initialMastery > 0) {
+            agent.mastery[edgeId] = round(this.origin.state.initialMastery);
+            agent.masteryInvestedRound[edgeId] = 0;
+          }
+        });
         if (this.scenario.falseConsensus && this.mountain.falseConsensusEdgeId) {
           const trap = this.edgeById[this.mountain.falseConsensusEdgeId];
           if (index < 4) {
@@ -430,19 +660,35 @@
           }
         }
       });
+      if (this.origin.state.sharedInfrastructure > 0) {
+        const knownEdgeIds = new Set(this.agents.flatMap((agent) => Object.keys(agent.beliefs)));
+        const count = Math.max(1, Math.round(this.mountain.edges.length * this.origin.state.sharedInfrastructure * 0.22));
+        [...knownEdgeIds].slice(0, count).forEach((edgeId) => {
+          const edge = this.edgeById[edgeId];
+          if (!edge) return;
+          edge.infrastructure = round(this.origin.state.sharedInfrastructure);
+          edge.infrastructureBuiltRound = 0;
+          edge.infrastructureBuilderId = "origin";
+          edge.infrastructureContributions.origin = edge.infrastructure;
+          edge.infrastructureAvailableRoundByBuilder.origin = 0;
+        });
+      }
     }
 
     observe(agent, edge, confidence = 0.78, precise = false) {
-      const noiseScale = precise ? 0 : (1 - confidence) * 0.55;
-      const noise = (this.rng.next() * 2 - 1) * noiseScale;
+      const observability = this.scenario.observability;
+      const effectiveConfidence = clamp(confidence * (0.55 + observability * 0.45), 0.2, 1);
+      const directlyReadable = precise && observability >= 0.45;
+      const noiseScale = directlyReadable ? 0 : (1 - effectiveConfidence) * 0.55;
+      const noise = (this.observationRng.next() * 2 - 1) * noiseScale;
       agent.beliefs[edge.id] = {
         known: true,
         estimatedCost: round(clamp(edge.trueCost + noise * 2, 0.5, 6)),
         estimatedRisk: round(clamp(edge.trueRisk + noise, 0.01, 0.99)),
-        blocked: precise ? edge.blocked : (edge.blocked && confidence > 0.82),
-        confidence: round(confidence),
+        blocked: directlyReadable ? edge.blocked : (edge.blocked && effectiveConfidence > 0.82),
+        confidence: round(effectiveConfidence),
         lastObserved: this.round,
-        source: precise ? "direct inspection" : "field observation"
+        source: directlyReadable ? "direct inspection" : "field observation"
       };
       agent.discoveries += 1;
     }
@@ -459,7 +705,15 @@
 
     activateDemands() {
       for (const demand of this.trafficDemands) {
-        if (!demand.completed && this.round >= demand.releaseRound) demand.status = "active";
+        if (!demand.completed && demand.status === "queued" && this.round >= demand.releaseRound) demand.status = "active";
+      }
+    }
+
+    resolveFeedback() {
+      for (const demand of this.trafficDemands) {
+        if (demand.status !== "awaiting-feedback" || demand.feedbackDueRound > this.round) continue;
+        const agent = this.agentById[demand.assignedAgentId];
+        this.completeDemand(demand, agent);
       }
     }
 
@@ -541,6 +795,28 @@
       for (const agent of this.agents) agent.movementIntent = this.movementIntentFor(agent);
     }
 
+    currentBottlenecks(agentId = "player") {
+      const agent = this.agentById[agentId];
+      const demands = this.destination.demands;
+      const edgeCount = MAX_ROUTE_SLOTS;
+      const evidenceCoverage = Object.keys(agent.beliefs).length / edgeCount;
+      const masteryCoverage = Object.values(agent.mastery).reduce((total, value) => total + value, 0) / edgeCount;
+      const sharedCapacity = this.mountain.edges.reduce((total, edge) => total + edge.infrastructure, 0) / edgeCount;
+      const activeDemand = this.demandForAgent(agentId);
+      const pendingFeedback = this.trafficDemands.filter((demand) => demand.status === "awaiting-feedback").length / Math.max(1, this.trafficDemands.length);
+      const perceivedHighRisk = Object.values(agent.beliefs).filter((belief) => belief.blocked || belief.estimatedRisk >= 0.65).length / edgeCount;
+      const entries = [
+        { dimension: "privateDiscovery", label: "Private evidence gap", score: demands.privateDiscovery * (1 - evidenceCoverage), explanation: "Relevant route evidence is still missing from the acting agent's map." },
+        { dimension: "privateRepeatability", label: "Personal repeatability gap", score: demands.privateRepeatability * (1 - masteryCoverage), explanation: "Known work has not yet become dependable personal capability." },
+        { dimension: "sharedExploration", label: "Shared reconciliation gap", score: demands.sharedExploration * (0.45 + this.scenario.disagreement * 0.55) * (1 - evidenceCoverage), explanation: "Agents need reciprocal evidence or correction across private maps." },
+        { dimension: "sharedStandardization", label: "Shared production gap", score: demands.sharedStandardization * (1 - sharedCapacity), explanation: "Future followers or payload lack established shared capacity." },
+        { dimension: "repeatedTraffic", label: "Traffic recurrence pressure", score: demands.repeatedTraffic * (activeDemand ? 1 : 0.25), explanation: "Declared traffic will reuse route segments across the horizon." },
+        { dimension: "feedbackLatency", label: "Delayed feedback", score: demands.feedbackLatency * (0.35 + pendingFeedback), explanation: "Outcome feedback arrives too slowly to make every early result informative." },
+        { dimension: "costOfError", label: "Error exposure", score: demands.costOfError * perceivedHighRisk, explanation: "Visible evidence suggests that a wrong commitment may be expensive under the active destination." }
+      ];
+      return entries.map((entry) => ({ ...entry, score: round(entry.score, 3) })).sort((left, right) => right.score - left.score || left.dimension.localeCompare(right.dimension));
+    }
+
     maturePathwayInvestments() {
       for (const agent of this.agents) {
         for (const [edgeId, amount] of Object.entries(agent.pendingMastery)) {
@@ -590,6 +866,10 @@
       const cost = animalCost(agent, animalName);
       const pressureKey = animal.observer !== agent.profile.observer ? animal.observer : (animal.decider !== agent.profile.decider ? animal.decider : null);
       const demand = this.demandForAgent(agent.id);
+      const expectedFutureUses = target ? this.expectedFutureUses(target.id, agent.id) : 0;
+      const exAnteValue = target ? this.actionOpportunity(agent, animalName, target, partner, expectedFutureUses) : 0;
+      const bottleneckByAnimal = { Consume: "privateDiscovery", Sleep: "privateRepeatability", Play: "sharedExploration", Blast: "sharedStandardization" };
+      const bottleneck = this.currentBottlenecks(agent.id).find((entry) => entry.dimension === bottleneckByAnimal[animalName]);
       return {
         animal: animalName,
         observer: animal.observer,
@@ -601,7 +881,9 @@
         targetName: target ? target.name : "No relevant route",
         demandId: demand ? demand.id : null,
         demandName: demand ? demand.name : "No active traffic demand",
-        expectedFutureUses: target ? this.expectedFutureUses(target.id, agent.id) : 0,
+        expectedFutureUses,
+        exAnteValue,
+        bottleneckAddressed: bottleneck ? clone(bottleneck) : null,
         partnerId: partner ? partner.id : null,
         partnerName: partner ? partner.name : null,
         subjectiveCost: cost,
@@ -612,6 +894,21 @@
         enabled: Boolean(target),
         rationale: this.optionRationale(agent, animalName, target, partner, demand)
       };
+    }
+
+    actionOpportunity(agent, animalName, edge, partner, futureUses) {
+      const demands = this.destination.demands;
+      const belief = agent.beliefs[edge.id];
+      const confidence = belief ? belief.confidence : 0;
+      const evidenceGap = 1 - confidence;
+      const perceivedSafety = belief ? clamp(1 - belief.estimatedRisk, 0.05, 1) : 0.3;
+      const recurrence = 1 + futureUses * demands.repeatedTraffic * 0.35;
+      let value = 0;
+      if (animalName === "Consume") value = demands.privateDiscovery * evidenceGap * (1 + this.scenario.uncertainty) * 5;
+      if (animalName === "Sleep") value = demands.privateRepeatability * confidence * perceivedSafety * recurrence * 5;
+      if (animalName === "Blast") value = demands.sharedStandardization * confidence * perceivedSafety * (1 + futureUses * this.scenario.interdependence * 0.45) * 5;
+      if (animalName === "Play") value = demands.sharedExploration * evidenceGap * (partner ? 1 : 0.12) * (1 + this.scenario.disagreement) * 5;
+      return round(value, 3);
     }
 
     expectedFutureUses(edgeId, excludingAgentId) {
@@ -652,6 +949,8 @@
       if (option.animal === "Sleep") benefit = (belief ? masteryGap * (1 + futureUses) : -1.8) * agent.goal.safety;
       if (option.animal === "Blast") benefit = (belief ? sharedGap * (1 + futureUses * this.scenario.interdependence) : -2) * agent.goal.group;
       if (option.animal === "Play") benefit = (unknown + stale + (option.partnerId ? 1 : 0.1)) * (1 + this.scenario.disagreement) * agent.goal.group;
+      benefit += option.exAnteValue * 0.75;
+      if (option.animal === "Blast" && this.materials <= 0) benefit -= 4;
       return round(benefit - option.staminaCost - option.materialCost * 0.35 * agent.goal.economy - option.subjectiveCost * (0.25 + agent.stress * 0.025));
     }
 
@@ -668,11 +967,17 @@
       this.round += 1;
       this.maturePathwayInvestments();
       this.activateDemands();
+      this.resolveFeedback();
       this.updateWeather();
       this.updateMovementIntents();
       const playerAction = this.getActionOptions("player").find((option) => option.animal === playerAnimal && option.enabled);
       if (!playerAction) throw new Error(`Unavailable player action: ${playerAnimal}`);
       const actions = [playerAction, ...this.agents.slice(1).map((agent) => this.chooseAutonomousAction(agent))];
+      actions.forEach((action, index) => {
+        const alternatives = this.getActionOptions(this.agents[index].id);
+        const best = Math.max(0.001, ...alternatives.map((option) => option.exAnteValue));
+        action.decisionQuality = round(action.exAnteValue / best, 3);
+      });
       this.commitments = {};
       for (const action of actions) {
         if (action && action.decider === "De" && action.targetEdgeId) this.commitments[action.targetEdgeId] = (this.commitments[action.targetEdgeId] || 0) + 1;
@@ -701,6 +1006,8 @@
           targetName: action.targetName,
           demandId: action.demandId,
           subjectiveCost: action.subjectiveCost,
+          exAnteValue: action.exAnteValue,
+          decisionQuality: action.decisionQuality,
           reason: this.agents[index].lastReason
         })),
         actions: actions.map((action, index) => ({ agentId: this.agents[index].id, agentName: this.agents[index].name, animal: action.animal, targetEdgeId: action.targetEdgeId, targetName: action.targetName })),
@@ -718,6 +1025,8 @@
       }
       const edge = this.edgeById[action.targetEdgeId];
       agent.moveCounts[action.animal] += 1;
+      agent.decisionQualityTotal = round(agent.decisionQualityTotal + action.decisionQuality, 3);
+      agent.decisionCount += 1;
       agent.stamina = round(clamp(agent.stamina - action.staminaCost, 0, 14));
       agent.stress = round(clamp(agent.stress + Math.max(0, action.subjectiveCost - 2.2) * 0.25, 0, 10));
       let effect = "prepared no durable pathway state";
@@ -755,6 +1064,8 @@
           this.observe(partner, edge, 0.78, true);
           this.shareBelief(agent, partner, edge, 0.94);
           this.shareBelief(partner, agent, edge, 0.94);
+          agent.jointEvidenceEvents += 1;
+          partner.jointEvidenceEvents += 1;
           effect = `reconciled route evidence with ${partner.name}`;
         } else {
           effect = "could not create joint evidence without a reciprocal partner";
@@ -780,7 +1091,12 @@
       if (agent.stamina < 2) chance -= 0.12;
       chance = clamp(chance, 0.04, 0.97);
       if (edge.blocked) chance = 0;
-      const success = this.rng.next() < chance;
+      demand.attemptsByLeg = demand.attemptsByLeg || {};
+      const legKey = String(demand.stopIndex);
+      const attemptNumber = demand.attemptsByLeg[legKey] || 0;
+      demand.attemptsByLeg[legKey] = attemptNumber + 1;
+      const trafficKey = `${agent.id}:${demand.id}:${legKey}:${attemptNumber}`;
+      const success = this.trafficRng.next(trafficKey) < chance;
       const staminaCost = round(clamp(0.45 + edge.trueCost * 0.12 - mastery * 0.18 - infrastructure * 0.12, 0.16, 1.2));
       agent.stamina = round(clamp(agent.stamina - staminaCost, 0, 14));
       const masteryUsed = success && mastery > 0 && agent.masteryInvestedRound[edge.id] <= this.round;
@@ -814,7 +1130,8 @@
           });
         }
       } else {
-        agent.stress = round(clamp(agent.stress + 0.4 + edge.trueRisk * 0.45, 0, 10));
+        agent.stress = round(clamp(agent.stress + 0.4 + edge.trueRisk * 0.45 + demand.costOfError * 0.8, 0, 10));
+        this.objectiveValue = round(Math.max(0, this.objectiveValue - demand.costOfError * 0.25));
         if (!belief) this.observe(agent, edge, 0.62, false);
       }
       return {
@@ -849,29 +1166,37 @@
           demand.destination = demand.stops[demand.stopIndex];
           demand.currentNode = agent.position;
         } else {
-          demand.completed = true;
-          demand.completedRound = this.round;
-          demand.status = "completed";
-          this.objectiveValue += demand.value;
-          agent.completedDemandIds.push(demand.id);
-          if (demand.subject.kind === "payload") {
-            this.deliveredPayload += 1;
-            this.deliveredSupplies = this.deliveredPayload;
-          }
+          demand.physicallyCompletedRound = this.round;
+          if (demand.feedbackDelay > 0) {
+            demand.status = "awaiting-feedback";
+            demand.feedbackDueRound = this.round + demand.feedbackDelay;
+          } else this.completeDemand(demand, agent);
         }
       }
     }
 
+    completeDemand(demand, agent) {
+      demand.completed = true;
+      demand.completedRound = this.round;
+      demand.status = "completed";
+      this.objectiveValue = round(this.objectiveValue + demand.value);
+      if (agent && !agent.completedDemandIds.includes(demand.id)) agent.completedDemandIds.push(demand.id);
+      if (demand.subject.kind === "payload") {
+        this.deliveredPayload += 1;
+        this.deliveredSupplies = this.deliveredPayload;
+      }
+    }
+
     updateWeather() {
-      const severity = clamp(0.06 + this.scenario.volatility * (0.2 + this.rng.next() * 0.55) + this.round / this.roundLimit * 0.14, 0, 1);
+      const severity = clamp(0.06 + this.scenario.volatility * (0.2 + this.weatherRng.next() * 0.55) + this.round / this.roundLimit * 0.14, 0, 1);
       const labels = severity < 0.32 ? ["clear", "light wind", "high cloud"] : severity < 0.68 ? ["crosswind", "freezing rain", "moving fog"] : ["rockfall", "ice fracture", "whiteout"];
       const changedEdges = [];
       const changes = severity > 0.58 ? 2 : 1;
       for (let index = 0; index < changes; index += 1) {
-        const edge = this.rng.pick(this.mountain.edges);
-        if (this.rng.next() < edge.volatility * this.scenario.volatility) {
-          edge.trueRisk = round(clamp(edge.trueRisk + (this.rng.next() * 2 - 0.75) * 0.2, 0.04, 0.96));
-          if (!this.scenario.falseConsensus || edge.id !== this.mountain.falseConsensusEdgeId) edge.blocked = edge.trueRisk > 0.92 && this.rng.next() < 0.25;
+        const edge = this.weatherRng.pick(this.mountain.edges);
+        if (this.weatherRng.next() < edge.volatility * this.scenario.volatility) {
+          edge.trueRisk = round(clamp(edge.trueRisk + (this.weatherRng.next() * 2 - 0.75) * 0.2, 0.04, 0.96));
+          if (!this.scenario.falseConsensus || edge.id !== this.mountain.falseConsensusEdgeId) edge.blocked = edge.trueRisk > 0.92 && this.weatherRng.next() < 0.25;
           if (edge.infrastructure > 0 && severity > 0.65) {
             const before = edge.infrastructure;
             const after = round(clamp(before - severity * 0.08, 0, 1));
@@ -884,7 +1209,7 @@
           changedEdges.push(edge.id);
         }
       }
-      this.weather = { label: this.rng.pick(labels), severity: round(severity), changedEdges };
+      this.weather = { label: this.weatherRng.pick(labels), severity: round(severity), changedEdges };
     }
 
     updatePressures() {
@@ -959,8 +1284,9 @@
 
     checkFinish() {
       const completed = this.trafficDemands.filter((demand) => demand.completed).length;
+      const requirements = this.successRequirements();
       const middleReached = this.round >= Math.ceil(this.roundLimit * 2 / 3);
-      if (middleReached && completed >= 3 && this.deliveredPayload >= 2) {
+      if (middleReached && completed >= requirements.completedDemands && this.deliveredPayload >= requirements.payloads) {
         this.finished = true;
         this.success = true;
         this.finishReason = `${completed} logistics demands completed with ${this.deliveredPayload} payloads delivered.`;
@@ -969,6 +1295,13 @@
         this.success = false;
         this.finishReason = `The ${this.scenario.stormLabel} with ${completed} demands and ${this.deliveredPayload} payloads completed.`;
       }
+    }
+
+    successRequirements() {
+      return {
+        completedDemands: Math.min(this.trafficDemands.length, 3 + (this.destination.demands.costOfError >= 0.9 ? 1 : 0)),
+        payloads: this.destination.demands.sharedStandardization >= 0.55 ? 2 : 1
+      };
     }
 
     summary() {
@@ -980,11 +1313,37 @@
       const reliable = this.mountain.edges.filter((edge) => edge.infrastructure >= 0.55).length;
       const repeatTraversals = this.mountain.edges.reduce((total, edge) => total + edge.repeatTraversals, 0);
       const sharedInfrastructureUses = this.mountain.edges.reduce((total, edge) => total + edge.sharedInfrastructureUses, 0);
+      const requirements = this.successRequirements();
+      const evidenceCoverage = Object.keys(player.beliefs).length / Math.max(1, this.mountain.edges.length);
+      const demandScores = {
+        privateDiscovery: evidenceCoverage,
+        privateRepeatability: Math.min(1, player.personalMasteryUses / 8),
+        sharedExploration: Math.min(1, player.jointEvidenceEvents / 8),
+        sharedStandardization: Math.min(1, player.sharedInfrastructureUses / 8),
+        repeatedTraffic: Math.min(1, repeatTraversals / 16),
+        feedbackLatency: completed / Math.max(1, completed + this.trafficDemands.filter((demand) => demand.status === "awaiting-feedback").length),
+        costOfError: clamp(1 - player.stress / 10, 0, 1)
+      };
+      const totalDemandWeight = Object.values(this.destination.demands).reduce((total, value) => total + value, 0);
+      const capabilityScore = Object.entries(this.destination.demands).reduce((total, [dimension, weight]) => total + demandScores[dimension] * weight, 0) / Math.max(0.001, totalDemandWeight);
+      const throughputScore = clamp(
+        completed / Math.max(1, requirements.completedDemands) * 0.7
+        + this.deliveredPayload / Math.max(1, requirements.payloads) * 0.3,
+        0,
+        1
+      );
+      const capabilityWeight = 0.5 + this.destination.demands.privateDiscovery * 0.3;
+      const destinationOutcomeScore = round(clamp(throughputScore * (1 - capabilityWeight) + capabilityScore * capabilityWeight, 0, 1), 3);
       const checkpoints = clone(this.checkpoints);
       for (const label of HORIZON_LABELS) if (!checkpoints[label]) checkpoints[label] = this.checkpointMetrics();
       return {
         success: this.success,
         reason: this.finishReason,
+        destination: clone(this.destination),
+        terrain: clone(this.scenario),
+        origin: clone(this.origin),
+        evidenceState: clone(this.evidenceState),
+        originLuck: clone(this.originLuck),
         rounds: this.round,
         arrived,
         stranded: this.agents.filter((agent) => agent.stranded).length,
@@ -1000,9 +1359,16 @@
         personalMasteryUses: player.personalMasteryUses,
         sharedInfrastructureUses,
         playerSharedInfrastructureUses: player.sharedInfrastructureUses,
+        playerJointEvidenceEvents: player.jointEvidenceEvents,
         completedDemands: completed,
         totalDemands: this.trafficDemands.length,
         objectiveValue: this.objectiveValue,
+        successRequirements: requirements,
+        pendingFeedback: this.trafficDemands.filter((demand) => demand.status === "awaiting-feedback").length,
+        playerDecisionQuality: round(player.decisionQualityTotal / Math.max(1, player.decisionCount), 3),
+        firstDecision: this.timeline.length ? clone(this.timeline[0].operations.find((operation) => operation.agentId === "player")) : null,
+        destinationOutcomeScore,
+        bottlenecks: clone(this.currentBottlenecks()),
         checkpoints,
         playerMoves: clone(player.moveCounts),
         playerStress: round(player.stress),
@@ -1018,6 +1384,11 @@
       return {
         seed: this.seed,
         scenario: clone(this.scenario),
+        destination: clone(this.destination),
+        terrain: clone(this.scenario),
+        origin: clone(this.origin),
+        evidenceState: clone(this.evidenceState),
+        originLuck: clone(this.originLuck),
         round: this.round,
         roundLimit: this.roundLimit,
         materials: this.materials,
@@ -1059,6 +1430,9 @@
     ANIMALS,
     ANIMAL_ORDER,
     SCENARIOS,
+    DESTINATION_PROFILES,
+    ORIGIN_PROFILES,
+    EVIDENCE_STATE_PROFILES,
     GOALS,
     PROFILE_PRESETS,
     DEFAULT_ROUNDS,
@@ -1068,6 +1442,9 @@
     animalCost,
     animalCosts,
     goalChoices,
+    destinationConfig,
+    originConfig,
+    evidenceStateConfig,
     normalizeProfile,
     autoplay,
     hashSeed

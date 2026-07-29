@@ -48,7 +48,7 @@ pathways/engine.test.js       - Deterministic and behavioral tests
 pathways/README.md            - Model contract and epistemic boundary
 ```
 
-Pathways separates terrain, private belief, personal mastery, and shared infrastructure. Each round separates an animal operation from traffic movement. Do not reveal true terrain in the UI before debrief. Animal costs are derived from `Oi/Oe`, `Di/De`, and Observer/Decider polarity; no action may be hard-locked because it is a demon.
+Pathways separates destination demands, terrain, origin state, private belief, personal mastery, and shared infrastructure. Each round separates an animal operation from traffic movement. Do not reveal true terrain in the UI before debrief. Animal costs are derived from `Oi/Oe`, `Di/De`, and Observer/Decider polarity; no action may be hard-locked because it is a demon. Domain presets are parameter bundles, never inherent animal assignments.
 
 ### Spectrum Core Mechanics
 

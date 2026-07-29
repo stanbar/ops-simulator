@@ -2,12 +2,14 @@ const assert = require("node:assert/strict");
 const {
   BALANCE_ENVELOPE,
   FIXED_COHORT,
+  CONDITIONAL_CELL_DEFINITIONS,
   HORIZON_POLICY_NAMES,
   MATERIAL_DIVERGENCE,
   POLICY_NAMES,
   PROTOTYPE_BALANCE_ENVELOPE,
   PURE_POLICIES,
   evaluateBalance,
+  formatReport,
   materiallyDiverges,
   runBenchmark
 } = require("./balance-benchmark.js");
@@ -34,8 +36,11 @@ test("fixed cohort covers every scenario, controlled goal, and representative pr
     "oi-de-decider",
     "oe-de-observer"
   ]));
-  assert.equal(FIXED_COHORT.length, 40);
+  assert.equal(FIXED_COHORT.length, 45);
   assert.equal(new Set(FIXED_COHORT.map((run) => run.id)).size, FIXED_COHORT.length);
+  assert.deepEqual(new Set(FIXED_COHORT.map((run) => run.destinationId)), new Set(CONDITIONAL_CELL_DEFINITIONS.map((cell) => cell.destinationId)));
+  assert.deepEqual(new Set(FIXED_COHORT.map((run) => run.originId)), new Set(CONDITIONAL_CELL_DEFINITIONS.map((cell) => cell.originId)));
+  assert.ok(FIXED_COHORT.every((run) => run.cellId && run.destinationId && run.originId && run.evidenceStateId));
 });
 
 test("benchmark reports every policy and required expedition metric", () => {
@@ -45,13 +50,82 @@ test("benchmark reports every policy and required expedition metric", () => {
     const result = report.policies[policy];
     assert.equal(result.runs, 8);
     assert.equal(typeof result.successRate, "number");
-    for (const metric of ["arrived", "deliveredSupplies", "reliableEdges", "stranded", "playerStress", "playerStamina", "rounds", "repeatTraversals", "personalMasteryUses", "sharedInfrastructureUses", "playerSharedInfrastructureUses", "completedDemands", "payloadThroughput"]) {
+    for (const metric of ["arrived", "deliveredSupplies", "reliableEdges", "stranded", "playerStress", "playerStamina", "rounds", "repeatTraversals", "personalMasteryUses", "sharedInfrastructureUses", "playerSharedInfrastructureUses", "completedDemands", "payloadThroughput", "playerDecisionQuality", "destinationOutcomeScore"]) {
       assert.equal(typeof result.averages[metric], "number", `${policy} should report ${metric}`);
     }
     assert.deepEqual(Object.keys(result.horizons), ["early", "middle", "final"]);
     assert.equal(typeof result.horizons.early.averages.frontierEvidence, "number");
     assert.equal(typeof result.dominantFailureReason, "string");
   }
+});
+
+test("benchmark makes conditional cells primary across destination terrain origin horizon and policy", () => {
+  const cohort = FIXED_COHORT.slice(0, 10);
+  const report = runBenchmark({ cohort });
+  assert.equal(report.aggregateIsSecondary, true);
+  assert.ok(Object.keys(report.conditionalCells).length >= 2);
+  for (const cell of Object.values(report.conditionalCells)) {
+    assert.ok(cell.dimensions.destinationId);
+    assert.ok(cell.dimensions.terrainId);
+    assert.ok(cell.dimensions.originId);
+    assert.ok(cell.dimensions.evidenceStateId);
+    assert.ok(cell.dimensions.horizonRounds);
+    assert.deepEqual(Object.keys(cell.policies), POLICY_NAMES);
+    assert.deepEqual(Object.keys(cell.policies.Sleep.horizons), ["early", "middle", "final"]);
+  }
+});
+
+test("route-lottery diagnostics separate favorable outcomes from policy robustness", () => {
+  const lottery = FIXED_COHORT.filter((run) => run.originId === "lucky-route");
+  const report = runBenchmark({ cohort: lottery });
+  assert.ok(report.luckDiagnostics.length > 0);
+  assert.ok(report.luckDiagnostics.some((entry) => entry.success && entry.favorableRoute && entry.luckyOutcomeLift > 0.05 && entry.policyRobustness < entry.outcomeScore));
+  assert.ok(report.luckDiagnostics.some((entry) => entry.success && entry.favorableRoute && entry.decisionQuality < 0.2), "a favorable route can produce success from a weak ex-ante policy");
+  assert.ok(report.luckDiagnostics.every((entry) => typeof entry.counterfactualSuccessRate === "number"));
+  assert.ok(report.luckDiagnostics.every((entry) => typeof entry.counterfactualOutcomeScore === "number"));
+  const adaptiveRobustness = report.luckDiagnostics.filter((entry) => entry.policy === "Adaptive").map((entry) => entry.policyRobustness);
+  assert.ok(new Set(adaptiveRobustness).size > 1, "same-state route robustness should remain paired to each hidden mountain");
+});
+
+test("text report includes every policy and horizon inside each conditional cell", () => {
+  const report = runBenchmark({ cohort: FIXED_COHORT.slice(0, 5) });
+  const output = formatReport(report);
+  POLICY_NAMES.forEach((policy) => assert.match(output, new RegExp(`  ${policy}:`)));
+  for (const marker of ["E progress", "M progress", "F progress"]) assert.match(output, new RegExp(marker));
+});
+
+test("benchmark varies evidence state while destination terrain and origin stay fixed", () => {
+  const paired = FIXED_COHORT.filter((run) => ["shared-production", "production-evidence-sparse"].includes(run.cellId));
+  const report = runBenchmark({ cohort: paired });
+  const verified = report.conditionalCells["shared-production"];
+  const sparse = report.conditionalCells["production-evidence-sparse"];
+  assert.deepEqual(
+    [verified.dimensions.destinationId, verified.dimensions.terrainId, verified.dimensions.originId],
+    [sparse.dimensions.destinationId, sparse.dimensions.terrainId, sparse.dimensions.originId]
+  );
+  assert.notEqual(verified.dimensions.evidenceStateId, sparse.dimensions.evidenceStateId);
+  assert.notEqual(verified.policies.Consume.horizons.early.averages.frontierEvidence, sparse.policies.Consume.horizons.early.averages.frontierEvidence);
+});
+
+test("conditional cells reward the operation matching the active bottleneck", () => {
+  const report = runBenchmark();
+  const research = report.conditionalCells["sparse-research"].policies;
+  assert.ok(research.Consume.horizons.early.averages.frontierEvidence > research.Sleep.horizons.early.averages.frontierEvidence);
+  assert.ok(research.Consume.averages.playerDecisionQuality > research.Sleep.averages.playerDecisionQuality);
+  assert.ok(research.Consume.averages.destinationOutcomeScore > research.Sleep.averages.destinationOutcomeScore);
+  assert.ok(research.Consume.averages.destinationOutcomeScore > research.Blast.averages.destinationOutcomeScore);
+
+  const practice = report.conditionalCells["private-practice"].policies;
+  assert.ok(practice.Sleep.averages.personalMasteryUses > practice.Consume.averages.personalMasteryUses);
+  assert.ok(practice.Sleep.averages.destinationOutcomeScore > practice.Consume.averages.destinationOutcomeScore);
+
+  const production = report.conditionalCells["shared-production"].policies;
+  assert.ok(production.Blast.averages.playerSharedInfrastructureUses > production.Sleep.averages.playerSharedInfrastructureUses);
+  assert.ok(production.Blast.averages.playerDecisionQuality > production.Play.averages.playerDecisionQuality);
+
+  const social = report.conditionalCells["sparse-social"].policies;
+  assert.ok(social.Play.successRate >= social.Sleep.successRate);
+  assert.ok(social.Play.averages.destinationOutcomeScore > social.Consume.averages.destinationOutcomeScore);
 });
 
 test("material divergence uses the ticket's observable outcome boundary", () => {

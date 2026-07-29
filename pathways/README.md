@@ -38,6 +38,12 @@ An animal's subjective cost is derived from its component coins. Two saviors are
 3. Personal mastery: how reliably that agent can use an edge.
 4. Shared pathway: infrastructure and protocol available to the expedition.
 
+## Destination, terrain, and origin
+
+These are independent causal inputs. A destination declares demand for private discovery, private repeatability, shared exploration, shared standardization, repeated traffic, feedback latency, and cost of error. Terrain separately declares uncertainty, volatility, branching, observability, interdependence, and route recurrence. Origin separately declares prior evidence, initial mastery, shared infrastructure, agent distribution, resources, and starting proximity. Current evidence state can then adjust evidence coverage and confidence without changing those three inputs.
+
+Domain presets are explicit parameter bundles, not animal assignments. Health can favor Sleep when private repeatability and recurrence dominate, but a health destination with sparse evidence can rationally favor Consume first. The useful sequence depends on destination demands, terrain, origin, current pathway state, and horizon.
+
 ## Pressure and growth
 
 Neglected pressure must come from unresolved world conditions:
@@ -51,7 +57,7 @@ Selecting a demon move does not reduce pressure by itself. The move must address
 
 ## Scenario objective and traffic
 
-Five agents have independent goal cards and private maps. A scenario creates recurring traffic demands with a source, destination, subject, priority, deadline, value, and optional assigned agent. Demands include summit payload deliveries and return trips between base and intermediate camps. The default logistics objective succeeds after at least three demands and two payloads are completed within a 32-round horizon.
+Five agents have independent goal cards and private maps. A destination and terrain create recurring traffic demands with a source, destination, subject, priority, deadline, feedback delay, value, and optional assigned agent. Demands include summit payload deliveries and return trips between base and intermediate camps. Success requirements vary with destination demands within a 32-round horizon.
 
 Each round has two explicit phases. The selected animal performs a pathway operation first; then traffic advances along a bidirectional route. Consume collects private evidence, Play collects reciprocal evidence, Sleep consolidates personal mastery, and Blast builds shared infrastructure. Sleep and Blast only report a return when a later traversal uses the investment: Sleep benefits its owner, while Blast can benefit another agent or shared payload.
 
@@ -66,9 +72,9 @@ The map has eight ascent stages plus lateral links, so traffic can ascend, desce
 
 ## Balance benchmark
 
-`balance-benchmark.js` runs a committed 40-case cohort against Sleep-only, Consume-only, Blast-only, Play-only, and a state-responsive Adaptive policy. It also compares five horizon policies: Oe Opening, Oi Opening, Continued Oe, Continued Oi, and Oe to Oi. It reports completed demands, payload throughput, repeated traversals, personal and shared delayed returns, stress, stamina, rounds, and early/middle/final checkpoints.
+`balance-benchmark.js` runs a committed 45-case cohort against Sleep-only, Consume-only, Blast-only, Play-only, and a state-responsive Adaptive policy. It also compares five horizon policies: Oe Opening, Oi Opening, Continued Oe, Continued Oi, and Oe to Oi. Destination × terrain × origin × evidence-state cells are primary; aggregate rates across unlike cells are secondary. It reports completed demands, payload throughput, repeated traversals, personal and shared delayed returns, decision quality, destination outcome, stress, stamina, rounds, and early/middle/final checkpoints.
 
-The Adaptive policy uses only visible pressure, stamina, stress, scenario uncertainty, and interdependence. It does not inspect hidden terrain truth. Paired comparisons preserve seed, scenario, profile, goal, terrain, and other-agent initialization while changing only the player policy.
+The Adaptive policy uses visible stress, goals, profile-derived costs, destination demands, scenario settings, beliefs, personal mastery, shared infrastructure, partner availability, materials, declared traffic, and visible movement intents. It does not inspect hidden terrain truth. Paired comparisons preserve seed, destination, terrain, origin, evidence state, horizon, profile, goal, traffic demands, and other-agent initialization while changing only the player policy. Lucky-route diagnostics compare favorable outcomes with matched non-lucky counterfactual worlds to distinguish ex-post success from ex-ante policy robustness.
 
 ```bash
 node pathways/balance-benchmark.js
@@ -81,3 +87,5 @@ See `BALANCE_BASELINE.md` for the superseded issue #10 one-ascent measurements. 
 ## Technical boundary
 
 `engine.js` is a pure seeded simulation module usable from the browser or CommonJS tests. `balance-benchmark.js` exercises that public engine without browser state. `app.js` owns DOM and SVG rendering. UI code must not alter simulation outcomes or reveal terrain ground truth before debrief.
+
+Observation, weather, and traffic use separate deterministic random streams. Weather is fixed by round; traffic shocks are fixed by demand leg and attempt number. This prevents one policy from reassigning later weather or traffic luck merely by consuming more random draws.

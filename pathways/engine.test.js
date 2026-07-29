@@ -1,6 +1,9 @@
 const assert = require("node:assert/strict");
 const {
   ANIMAL_ORDER,
+  DESTINATION_PROFILES,
+  EVIDENCE_STATE_PROFILES,
+  ORIGIN_PROFILES,
   PROFILE_PRESETS,
   SCENARIOS,
   Game,
@@ -76,6 +79,27 @@ test("all animal moves remain available under exhaustion and high stress", () =>
   const options = game.getActionOptions();
   assert.deepEqual(options.map((option) => option.animal), ANIMAL_ORDER);
   assert.ok(options.every((option) => option.enabled));
+});
+
+test("traffic shocks are keyed to the event rather than policy call order", () => {
+  const left = new Game({ seed: "keyed-traffic" });
+  const right = new Game({ seed: "keyed-traffic" });
+  const leftA = left.trafficRng.next("1:player:survey:0:base:l1a");
+  const leftB = left.trafficRng.next("1:a1:payload:0:base:l1b");
+  const rightB = right.trafficRng.next("1:a1:payload:0:base:l1b");
+  const rightA = right.trafficRng.next("1:player:survey:0:base:l1a");
+  assert.equal(leftA, rightA);
+  assert.equal(leftB, rightB);
+});
+
+test("missing materials lowers Blast utility without locking the action", () => {
+  const game = new Game({ seed: "material-aware-blast", originId: "established-network" });
+  const blast = game.getActionOptions().find((option) => option.animal === "Blast");
+  const fundedScore = game.scoreOption(game.agentById.player, blast);
+  game.materials = 0;
+  const unfundedBlast = game.getActionOptions().find((option) => option.animal === "Blast");
+  assert.equal(unfundedBlast.enabled, true);
+  assert.ok(game.scoreOption(game.agentById.player, unfundedBlast) < fundedScore);
 });
 
 test("flipping a coin preserves terrain and independently assigned goals", () => {
@@ -161,6 +185,205 @@ test("default expedition exposes a bidirectional logistics graph and declared tr
   }
 });
 
+test("destination demands are explicit and independent from terrain and agent configuration", () => {
+  const privatePractice = new Game({
+    seed: "destination-independence",
+    scenarioId: "melting",
+    destinationId: "health-practice",
+    originId: "fresh-start",
+    playerProfile: PROFILE_PRESETS[3],
+    playerGoalId: "safety"
+  });
+  const evidenceExpansion = new Game({
+    seed: "destination-independence",
+    scenarioId: "melting",
+    destinationId: "research-frontier",
+    originId: "fresh-start",
+    playerProfile: PROFILE_PRESETS[3],
+    playerGoalId: "safety"
+  });
+  const dimensions = [
+    "privateDiscovery",
+    "privateRepeatability",
+    "sharedExploration",
+    "sharedStandardization",
+    "repeatedTraffic",
+    "feedbackLatency",
+    "costOfError"
+  ];
+  assert.ok(Object.keys(DESTINATION_PROFILES).length >= 4);
+  for (const destination of Object.values(DESTINATION_PROFILES)) {
+    assert.ok(dimensions.every((dimension) => Number.isFinite(destination.demands[dimension])));
+    assert.equal(destination.animal, undefined, "domain presets must not encode an animal assignment");
+    assert.equal(destination.preferredAnimal, undefined, "domain presets must not encode a preferred animal");
+  }
+  assert.deepEqual(privatePractice.mountain, evidenceExpansion.mountain);
+  assert.deepEqual(privatePractice.scenario, evidenceExpansion.scenario);
+  assert.deepEqual(privatePractice.origin, evidenceExpansion.origin);
+  assert.deepEqual(privatePractice.agentById.player.profile, evidenceExpansion.agentById.player.profile);
+  assert.deepEqual(privatePractice.agentById.player.goal, evidenceExpansion.agentById.player.goal);
+  assert.notDeepEqual(privatePractice.destination, evidenceExpansion.destination);
+  assert.notDeepEqual(privatePractice.trafficDemands, evidenceExpansion.trafficDemands);
+});
+
+test("live bottlenecks use visible beliefs rather than hidden terrain truth", () => {
+  const original = new Game({ seed: "visible-bottleneck", destinationId: "judgment-calibration", scenarioId: "uncharted" });
+  const alteredTruth = new Game({ seed: "visible-bottleneck", destinationId: "judgment-calibration", scenarioId: "uncharted" });
+  alteredTruth.mountain.edges.forEach((edge) => {
+    edge.trueRisk = edge.trueRisk > 0.5 ? 0.05 : 0.95;
+    edge.blocked = !edge.blocked;
+  });
+  assert.deepEqual(alteredTruth.currentBottlenecks(), original.currentBottlenecks());
+});
+
+test("terrain and origin expose independent causal controls", () => {
+  const sparse = new Game({
+    seed: "factor-independence",
+    scenarioId: "custom",
+    customScenario: { uncertainty: 0.8, volatility: 0.15, branching: 0.25, observability: 0.35, interdependence: 0.4, routeRecurrence: 0.3 },
+    destinationId: "production-system",
+    originId: "fresh-start"
+  });
+  const established = new Game({
+    seed: "factor-independence",
+    scenarioId: "custom",
+    customScenario: { uncertainty: 0.8, volatility: 0.15, branching: 0.25, observability: 0.35, interdependence: 0.4, routeRecurrence: 0.3 },
+    destinationId: "production-system",
+    originId: "established-network"
+  });
+  const branched = new Game({
+    seed: "factor-independence",
+    scenarioId: "custom",
+    customScenario: { uncertainty: 0.8, volatility: 0.15, branching: 0.95, observability: 0.9, interdependence: 0.4, routeRecurrence: 0.8 },
+    destinationId: "production-system",
+    originId: "fresh-start"
+  });
+  const terrainDimensions = ["uncertainty", "volatility", "branching", "observability", "interdependence", "routeRecurrence"];
+  const originDimensions = ["priorEvidence", "initialMastery", "sharedInfrastructure", "agentDistribution", "resources", "startingProximity"];
+  assert.ok(terrainDimensions.every((dimension) => Number.isFinite(sparse.scenario[dimension])));
+  assert.ok(Object.keys(ORIGIN_PROFILES).length >= 4);
+  assert.ok(Object.values(ORIGIN_PROFILES).every((origin) => originDimensions.every((dimension) => Number.isFinite(origin.state[dimension]))));
+  assert.deepEqual(ORIGIN_PROFILES["lucky-route"].state, ORIGIN_PROFILES["sampled-route"].state, "luck counterfactuals must preserve origin resources and capability");
+
+  const terrainTruth = (game) => game.mountain.edges.map((edge) => ({ id: edge.id, from: edge.from, to: edge.to, trueCost: edge.trueCost, trueRisk: edge.trueRisk, volatility: edge.volatility, blocked: edge.blocked }));
+  assert.deepEqual(terrainTruth(sparse), terrainTruth(established), "origin must not regenerate hidden terrain");
+  assert.deepEqual(sparse.destination, established.destination);
+  assert.notDeepEqual(sparse.origin, established.origin);
+  assert.ok(Object.keys(established.agentById.player.beliefs).length > Object.keys(sparse.agentById.player.beliefs).length);
+  assert.ok(Object.values(established.agentById.player.mastery).reduce((sum, value) => sum + value, 0) > 0);
+  assert.ok(established.mountain.edges.some((edge) => edge.infrastructure > 0));
+  assert.ok(established.materials > sparse.materials);
+  assert.notDeepEqual(established.agents.map((agent) => agent.position), sparse.agents.map((agent) => agent.position));
+
+  assert.deepEqual(sparse.destination, branched.destination, "terrain must not rewrite destination demand");
+  assert.deepEqual(sparse.origin, branched.origin, "terrain must not rewrite origin");
+  assert.notEqual(sparse.mountain.edges.length, branched.mountain.edges.length, "branching must alter available topology");
+});
+
+test("current evidence state varies independently from destination terrain and origin", () => {
+  const common = { seed: "evidence-independence", scenarioId: "uncharted", destinationId: "research-frontier", originId: "fresh-start" };
+  const sparse = new Game({ ...common, evidenceStateId: "sparse" });
+  const verified = new Game({ ...common, evidenceStateId: "verified" });
+  assert.deepEqual(sparse.destination, verified.destination);
+  assert.deepEqual(sparse.scenario, verified.scenario);
+  assert.deepEqual(sparse.origin, verified.origin);
+  assert.notDeepEqual(sparse.evidenceState, verified.evidenceState);
+  assert.ok(Object.keys(verified.agentById.player.beliefs).length > Object.keys(sparse.agentById.player.beliefs).length);
+  assert.deepEqual(new Set(Object.keys(EVIDENCE_STATE_PROFILES)), new Set(["inherited", "sparse", "verified"]));
+});
+
+test("worked cells distinguish rational Oe-first and immediate-Oi openings", () => {
+  const sparseEvidence = new Game({
+    seed: "rational-oe-first",
+    scenarioId: "uncharted",
+    destinationId: "research-frontier",
+    originId: "fresh-start"
+  });
+  const establishedPractice = new Game({
+    seed: "rational-immediate-oi",
+    scenarioId: "convoy",
+    destinationId: "production-system",
+    originId: "established-network"
+  });
+  const ranked = (game) => game.getActionOptions().slice().sort((left, right) => right.exAnteValue - left.exAnteValue);
+  const sparseRanked = ranked(sparseEvidence);
+  const establishedRanked = ranked(establishedPractice);
+  assert.ok(["Consume", "Play"].includes(sparseRanked[0].animal), "missing evidence should make a relevant Oe operation rational first");
+  assert.ok(sparseRanked[0].exAnteValue > Math.max(...sparseRanked.filter((option) => option.observer === "Oi").map((option) => option.exAnteValue)));
+  assert.ok(["Sleep", "Blast"].includes(establishedRanked[0].animal), "known recurrent production should make a relevant Oi investment rational immediately");
+  assert.ok(establishedRanked[0].exAnteValue > Math.max(...establishedRanked.filter((option) => option.observer === "Oe").map((option) => option.exAnteValue)));
+  assert.ok(sparseEvidence.currentBottlenecks()[0].score > 0);
+  assert.ok(establishedPractice.currentBottlenecks()[0].score > 0);
+
+  const firstThenAdaptive = (firstAnimal) => {
+    const game = new Game({
+      seed: "oi-outcome-1",
+      scenarioId: "convoy",
+      destinationId: "production-system",
+      originId: "established-network",
+      evidenceStateId: "verified"
+    });
+    const summary = autoplay({
+      game,
+      playerPolicy: (activeGame) => activeGame.round === 0
+        ? firstAnimal
+        : activeGame.chooseAutonomousAction(activeGame.agentById.player).animal
+    });
+    return { summary, weather: game.timeline.map((entry) => entry.weather) };
+  };
+  const immediateBlast = firstThenAdaptive("Blast");
+  const additionalScouting = firstThenAdaptive("Play");
+  assert.deepEqual(immediateBlast.weather, additionalScouting.weather, "operation RNG must not change exogenous weather");
+  assert.ok(immediateBlast.summary.destinationOutcomeScore > additionalScouting.summary.destinationOutcomeScore);
+  assert.ok(immediateBlast.summary.playerSharedInfrastructureUses > additionalScouting.summary.playerSharedInfrastructureUses);
+});
+
+test("demand parameters can change a domain preset's useful sequence and consequences", () => {
+  const evidenceHeavy = new Game({
+    seed: "domain-override",
+    scenarioId: "uncharted",
+    destinationId: "health-practice",
+    destinationDemands: { privateDiscovery: 1, privateRepeatability: 0.1, sharedExploration: 0.2, sharedStandardization: 0.1 },
+    originId: "informed-base"
+  });
+  const practiceHeavy = new Game({
+    seed: "domain-override",
+    scenarioId: "uncharted",
+    destinationId: "health-practice",
+    destinationDemands: { privateDiscovery: 0.05, privateRepeatability: 1, sharedExploration: 0.05, sharedStandardization: 0.05, repeatedTraffic: 1 },
+    originId: "informed-base"
+  });
+  const best = (game) => game.getActionOptions().slice().sort((left, right) => right.exAnteValue - left.exAnteValue)[0];
+  assert.equal(best(evidenceHeavy).animal, "Consume");
+  assert.equal(best(practiceHeavy).animal, "Sleep");
+  assert.deepEqual(evidenceHeavy.origin, practiceHeavy.origin, "demand overrides should be the only changed causal input");
+  assert.equal(evidenceHeavy.destination.id, practiceHeavy.destination.id, "the same domain label should support different explicit demands");
+
+  const stableTerrain = { uncertainty: 0.5, volatility: 0, branching: 0.5, observability: 0.5, interdependence: 0.5, routeRecurrence: 0.5 };
+  const lowError = new Game({ seed: "error-cost", scenarioId: "custom", customScenario: stableTerrain, destinationDemands: { costOfError: 0 }, roundLimit: 1 });
+  const highError = new Game({ seed: "error-cost", scenarioId: "custom", customScenario: stableTerrain, destinationDemands: { costOfError: 1 }, roundLimit: 1 });
+  for (const game of [lowError, highError]) {
+    const player = game.agentById.player;
+    player.stress = 0;
+    const demand = game.trafficDemands.find((candidate) => candidate.assignedAgentId === "player");
+    const target = game.connectedEdges(player.position)[0];
+    game.connectedEdges(player.position).forEach((edge) => {
+      player.beliefs[edge.id] = { known: true, estimatedCost: 1, estimatedRisk: 0, blocked: edge.id !== target.id, confidence: 1, lastObserved: 0 };
+    });
+    target.blocked = true;
+    demand.destination = game.otherNode(target, player.position);
+    demand.stops = [demand.destination];
+    game.updateMovementIntents();
+    game.trafficRng.next = () => 0;
+    game.step("Sleep");
+  }
+  assert.ok(highError.agentById.player.stress > lowError.agentById.player.stress);
+
+  const slowFeedback = new Game({ destinationId: "wisdom-stewardship" });
+  const fastFeedback = new Game({ destinationId: "production-system" });
+  assert.ok(slowFeedback.trafficDemands[0].feedbackDelay > fastFeedback.trafficDemands[0].feedbackDelay);
+});
+
 test("animal operation and logistics traffic are separate timeline phases", () => {
   const game = new Game({ seed: "separate-phases" });
   const before = game.snapshot();
@@ -183,10 +406,10 @@ test("repeated traffic realizes delayed personal and shared pathway returns", ()
 });
 
 test("delayed pathway returns can repay their operation cost on a worked logistics seed", () => {
-  const sleep = autoplay({ seed: "aligned-payoff-2", playerPolicy: "Sleep" });
-  const consume = autoplay({ seed: "aligned-payoff-2", playerPolicy: "Consume" });
-  const blast = autoplay({ seed: "aligned-payoff-2", playerPolicy: "Blast" });
-  const play = autoplay({ seed: "aligned-payoff-2", playerPolicy: "Play" });
+  const sleep = autoplay({ seed: "demand-payoff-34", playerPolicy: "Sleep" });
+  const consume = autoplay({ seed: "demand-payoff-34", playerPolicy: "Consume" });
+  const blast = autoplay({ seed: "demand-payoff-34", playerPolicy: "Blast" });
+  const play = autoplay({ seed: "demand-payoff-34", playerPolicy: "Play" });
   assert.ok(sleep.completedDemands > consume.completedDemands, "personal consolidation should repay through the survey return loop");
   assert.ok(blast.rounds < play.rounds, "shared infrastructure should repay through later follower and payload traffic");
 });
@@ -215,7 +438,7 @@ test("blocked terrain cannot be crossed even at the minimum probability", () => 
   demand.destination = game.otherNode(target, "base");
   demand.stops = [demand.destination];
   game.updateMovementIntents();
-  game.rng.next = () => 0;
+  game.trafficRng.next = () => 0;
   game.step("Sleep");
   assert.equal(player.position, "base");
 });
@@ -239,14 +462,14 @@ test("Sleep and Blast capacity matures after same-round traffic", () => {
 });
 
 test("the first next-round traversal attributes matured Sleep and Blast returns", () => {
-  const sleepGame = new Game({ seed: "first-return-4" });
+  const sleepGame = new Game({ seed: "quality-sleep-1" });
   sleepGame.step("Sleep");
   const sleepRoundTwo = sleepGame.step("Sleep");
   const masteryEvent = sleepRoundTwo.timeline.at(-1).traffic.find((event) => event.agentId === "player");
   assert.equal(masteryEvent.success, true);
   assert.equal(masteryEvent.masteryUsed, true);
 
-  const blastGame = new Game({ seed: "first-blast-0" });
+  const blastGame = new Game({ seed: "quality-blast-0" });
   blastGame.step("Blast");
   const blastRoundTwo = blastGame.step("Blast");
   const sharedEvent = blastRoundTwo.timeline.at(-1).traffic.find((event) => event.agentId !== "player" && event.infrastructureBuilderIds.includes("player"));

@@ -36,9 +36,20 @@
       </div>
 
       <div class="setup-grid">
-        <section class="setup-panel scenario-panel">
+        <section class="setup-panel destination-panel">
           <div class="section-heading">
             <span class="step-number">01</span>
+            <div>
+              <h2>Choose the destination</h2>
+              <p>The outcome determines which capabilities and traffic matter.</p>
+            </div>
+          </div>
+          <div class="profile-grid destination-grid" id="destinationGrid"></div>
+        </section>
+
+        <section class="setup-panel scenario-panel">
+          <div class="section-heading">
+            <span class="step-number">02</span>
             <div>
               <h2>Choose the mountain</h2>
               <p>World pressure changes which routes remain viable.</p>
@@ -48,14 +59,17 @@
           <div class="custom-controls" id="customControls" hidden>
             <label>Environmental uncertainty <output id="uncertaintyOutput">50%</output><input id="uncertaintyInput" type="range" min="0" max="100" value="50"></label>
             <label>Terrain volatility <output id="volatilityOutput">50%</output><input id="volatilityInput" type="range" min="0" max="100" value="50"></label>
+            <label>Route branching <output id="branchingOutput">50%</output><input id="branchingInput" type="range" min="0" max="100" value="50"></label>
+            <label>Terrain observability <output id="observabilityOutput">50%</output><input id="observabilityInput" type="range" min="0" max="100" value="50"></label>
             <label>Social interdependence <output id="interdependenceOutput">50%</output><input id="interdependenceInput" type="range" min="0" max="100" value="50"></label>
+            <label>Route recurrence <output id="routeRecurrenceOutput">50%</output><input id="routeRecurrenceInput" type="range" min="0" max="100" value="50"></label>
             <label>Priority disagreement <output id="disagreementOutput">50%</output><input id="disagreementInput" type="range" min="0" max="100" value="50"></label>
           </div>
         </section>
 
         <section class="setup-panel coins-panel">
           <div class="section-heading">
-            <span class="step-number">02</span>
+            <span class="step-number">04</span>
             <div>
               <h2>Configure navigation costs</h2>
               <p>Coins affect subjective effort, never action availability.</p>
@@ -85,9 +99,20 @@
           <div class="animal-order" id="animalOrder"></div>
         </section>
 
-        <section class="setup-panel goals-panel">
+        <section class="setup-panel origin-panel">
           <div class="section-heading">
             <span class="step-number">03</span>
+            <div>
+              <h2>Choose the origin</h2>
+              <p>Starting evidence, capability, infrastructure, distribution, and resources remain separate from terrain.</p>
+            </div>
+          </div>
+          <div class="profile-grid origin-grid" id="originGrid"></div>
+        </section>
+
+        <section class="setup-panel goals-panel">
+          <div class="section-heading">
+            <span class="step-number">05</span>
             <div>
               <h2>Choose what you want</h2>
               <p>Your goal is generated independently from your coins.</p>
@@ -129,6 +154,7 @@
           <div><p class="eyebrow">Purposeful repeated traffic</p><h2>Logistics demands</h2></div>
           <span class="truth-badge">Source → destination · subject · deadline</span>
         </div>
+        <div class="destination-brief" id="destinationBrief"></div>
         <div class="traffic-demand-list" id="trafficDemandList"></div>
       </section>
 
