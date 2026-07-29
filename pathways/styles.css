@@ -187,10 +187,12 @@ h3 { font-size: 15px; }
 .tutorial-bar p { margin: 0; color: var(--muted); font-size: 11px; }
 
 .game-layout { display: grid; grid-template-columns: minmax(0, 1fr) 360px; gap: 16px; align-items: stretch; }
-.map-panel, .xray-panel, .actions-panel, .timeline-panel { overflow: hidden; }
+.map-panel, .xray-panel, .actions-panel, .timeline-panel, .traffic-panel { overflow: hidden; }
 .panel-heading { padding: 18px 20px 13px; }
 .panel-heading h2 { margin: 2px 0 0; font-size: 22px; }
 .map-heading { align-items: center; }
+.map-controls { display: flex; align-items: end; gap: 6px; }
+.map-controls .quiet-button { min-width: 34px; }
 .agent-selector { display: grid; gap: 4px; color: var(--muted); font-size: 9px; letter-spacing: 0.05em; text-transform: uppercase; }
 .agent-selector select { min-width: 150px; padding: 7px 9px; text-transform: none; }
 .map-legend { display: flex; flex-wrap: wrap; gap: 12px; padding: 0 20px 12px; color: var(--muted); font-size: 9px; }
@@ -200,7 +202,7 @@ h3 { font-size: 15px; }
 .legend-line.shared { border-width: 4px; border-color: var(--teal); }
 .legend-line.unknown { border-color: #6f7d7a; border-style: dashed; }
 .legend-dot { width: 8px; height: 8px; border: 2px solid #fff; border-radius: 50%; }
-.mountain-wrap { position: relative; min-height: 520px; border-top: 1px solid var(--line); }
+.mountain-wrap { position: relative; min-height: 520px; overflow: auto; border-top: 1px solid var(--line); }
 #mountainSvg { display: block; width: 100%; height: auto; min-height: 520px; }
 .mountain-silhouette { stroke: rgba(180, 207, 198, 0.12); stroke-width: 2; }
 .mountain-silhouette.back { fill: rgba(88, 121, 123, 0.13); }
@@ -214,6 +216,8 @@ h3 { font-size: 15px; }
 .agent-marker circle { stroke: #081014; stroke-width: 3; filter: url(#softGlow); }
 .agent-marker text { fill: #071014; font: 800 10px ui-sans-serif, sans-serif; text-anchor: middle; dominant-baseline: central; }
 .agent-marker.player circle { stroke: var(--accent); stroke-width: 4; }
+.payload-marker rect { fill: var(--accent); stroke: #17140d; stroke-width: 2; filter: url(#softGlow); }
+.payload-marker text { fill: #17140d; font: 900 8px ui-sans-serif, sans-serif; text-anchor: middle; dominant-baseline: central; }
 .blocked-mark { fill: var(--danger); font: 800 22px ui-sans-serif, sans-serif; text-anchor: middle; }
 .map-callout { position: absolute; max-width: 250px; padding: 10px 12px; border: 1px solid var(--line-strong); border-radius: 10px; color: var(--text); background: rgba(7, 15, 18, 0.94); box-shadow: var(--shadow); pointer-events: none; font-size: 10px; }
 .map-callout strong { display: block; margin-bottom: 3px; }
@@ -237,6 +241,18 @@ h3 { font-size: 15px; }
 .pressure-chip.hot { color: #1a1414; background: var(--danger); }
 .agent-reason { margin: 8px 0 0; color: #b9c7c2; font-size: 9px; line-height: 1.4; }
 
+.traffic-demand-list { display: grid; grid-template-columns: repeat(5, minmax(0, 1fr)); gap: 8px; padding: 0 16px 16px; }
+.traffic-demand { display: grid; gap: 9px; min-height: 100px; padding: 11px; border: 1px solid var(--line); border-radius: 10px; background: rgba(255, 255, 255, 0.025); }
+.traffic-demand > div:first-child { display: grid; gap: 4px; }
+.traffic-demand strong { font-size: 10px; line-height: 1.35; }
+.traffic-demand span { color: var(--muted); font-size: 8px; }
+.traffic-demand.queued { opacity: 0.58; }
+.traffic-demand.completed { border-color: rgba(121, 214, 194, 0.42); background: rgba(121, 214, 194, 0.07); }
+.traffic-demand.overdue { border-color: rgba(240, 123, 134, 0.55); }
+.traffic-meta { align-self: end; display: flex; flex-wrap: wrap; gap: 4px; }
+.traffic-meta span, .traffic-meta b { padding: 4px 5px; border-radius: 5px; background: rgba(0, 0, 0, 0.2); font: 8px/1 ui-monospace, monospace; }
+.traffic-meta b { color: var(--accent); font-weight: 700; text-transform: uppercase; }
+
 .actions-panel { padding-bottom: 16px; }
 .player-state { display: flex; flex-wrap: wrap; justify-content: flex-end; gap: 5px; }
 .state-chip { padding: 5px 7px; border: 1px solid var(--line); border-radius: 8px; color: var(--muted); font: 9px/1 ui-monospace, monospace; }
@@ -259,6 +275,8 @@ h3 { font-size: 15px; }
 .timeline-entry { padding: 10px; border: 1px solid var(--line); border-radius: 9px; background: rgba(255, 255, 255, 0.02); }
 .timeline-entry strong { display: block; margin-bottom: 4px; font-size: 10px; }
 .timeline-entry p { margin: 0; color: var(--muted); font-size: 9px; }
+.timeline-entry.operation { border-top: 2px solid var(--accent); }
+.timeline-entry.traffic { border-top: 2px solid var(--teal); }
 
 dialog { color: var(--text); border: 1px solid var(--line-strong); border-radius: 18px; background: #111e24; box-shadow: 0 30px 120px rgba(0, 0, 0, 0.65); }
 dialog::backdrop { background: rgba(2, 7, 9, 0.78); backdrop-filter: blur(8px); }
@@ -292,6 +310,7 @@ dialog::backdrop { background: rgba(2, 7, 9, 0.78); backdrop-filter: blur(8px); 
   .scenario-panel, .goals-panel { grid-column: auto; grid-row: auto; }
   .game-layout { grid-template-columns: 1fr; }
   .agent-list { grid-template-columns: repeat(2, 1fr); max-height: none; }
+  .traffic-demand-list { grid-template-columns: repeat(3, 1fr); }
   .action-grid { grid-template-columns: repeat(2, 1fr); }
 }
 
@@ -306,7 +325,7 @@ dialog::backdrop { background: rgba(2, 7, 9, 0.78); backdrop-filter: blur(8px); 
   .tutorial-bar { align-items: flex-start; flex-direction: column; }
   .map-heading, .panel-heading { align-items: flex-start; flex-direction: column; }
   .mountain-wrap, #mountainSvg { min-height: 390px; }
-  .agent-list, .action-grid, .timeline, .metric-grid, .debrief-columns { grid-template-columns: 1fr; }
+  .agent-list, .action-grid, .timeline, .metric-grid, .debrief-columns, .traffic-demand-list { grid-template-columns: 1fr; }
   .start-actions { align-items: flex-start; flex-direction: column; }
   .seed-field { grid-template-columns: 1fr; }
   .player-state { justify-content: flex-start; }

@@ -49,11 +49,13 @@ Neglected pressure must come from unresolved world conditions:
 
 Selecting a demon move does not reduce pressure by itself. The move must address the relevant condition. Successful manageable contact can lower that pole's cost slightly for the current expedition; the baseline configuration does not change.
 
-## Scenario objective
+## Scenario objective and traffic
 
-Five agents have independent goal cards and private maps. The expedition succeeds by delivering at least three members and three supply loads to the summit before the 12-round weather deadline.
+Five agents have independent goal cards and private maps. A scenario creates recurring traffic demands with a source, destination, subject, priority, deadline, value, and optional assigned agent. Demands include summit payload deliveries and return trips between base and intermediate camps. The default logistics objective succeeds after at least three demands and two payloads are completed within a 32-round horizon.
 
-Coordination emerges from visible route commitments. There is no separate voting rule, no intentional deception in the MVP, and no lethal outcome.
+Each round has two explicit phases. The selected animal performs a pathway operation first; then traffic advances along a bidirectional route. Consume collects private evidence, Play collects reciprocal evidence, Sleep consolidates personal mastery, and Blast builds shared infrastructure. Sleep and Blast only report a return when a later traversal uses the investment: Sleep benefits its owner, while Blast can benefit another agent or shared payload.
+
+The map has eight ascent stages plus lateral links, so traffic can ascend, descend, and cross between routes. Coordination emerges from visible route commitments. There is no separate voting rule, no intentional deception in the MVP, and no lethal outcome.
 
 ## Benchmark scenarios
 
@@ -64,7 +66,7 @@ Coordination emerges from visible route commitments. There is no separate voting
 
 ## Balance benchmark
 
-`balance-benchmark.js` runs a committed 160-case cohort against Sleep-only, Consume-only, Blast-only, Play-only, and a state-responsive Adaptive policy. It reports success, arrivals, payload, reliable shared routes, stranding, player stress and stamina, rounds, and dominant failure reasons.
+`balance-benchmark.js` runs a committed 40-case cohort against Sleep-only, Consume-only, Blast-only, Play-only, and a state-responsive Adaptive policy. It also compares five horizon policies: Oe Opening, Oi Opening, Continued Oe, Continued Oi, and Oe to Oi. It reports completed demands, payload throughput, repeated traversals, personal and shared delayed returns, stress, stamina, rounds, and early/middle/final checkpoints.
 
 The Adaptive policy uses only visible pressure, stamina, stress, scenario uncertainty, and interdependence. It does not inspect hidden terrain truth. Paired comparisons preserve seed, scenario, profile, goal, terrain, and other-agent initialization while changing only the player policy.
 
@@ -74,7 +76,7 @@ node pathways/balance-benchmark.js --json
 node pathways/balance-benchmark.test.js
 ```
 
-See `BALANCE_BASELINE.md` for the prototype measurements, the material-divergence definition, and the intentionally failing balance verdict captured before tuning.
+See `BALANCE_BASELINE.md` for the superseded issue #10 one-ascent measurements. Those numbers remain reproducibility history and do not gate the current repeated-traffic model.
 
 ## Technical boundary
 

@@ -6,92 +6,27 @@
   "use strict";
 
   const ANIMALS = Object.freeze({
-    Sleep: {
-      observer: "Oi",
-      decider: "Di",
-      verb: "Strengthen a route you understand",
-      short: "Personal mastery",
-      color: "#f2b84b"
-    },
-    Consume: {
-      observer: "Oe",
-      decider: "Di",
-      verb: "Scout an uncertain route",
-      short: "Private discovery",
-      color: "#58c4dd"
-    },
-    Blast: {
-      observer: "Oi",
-      decider: "De",
-      verb: "Publish and establish a known route",
-      short: "Shared infrastructure",
-      color: "#f0758b"
-    },
-    Play: {
-      observer: "Oe",
-      decider: "De",
-      verb: "Explore and reconcile maps together",
-      short: "Joint discovery",
-      color: "#83d17a"
-    }
+    Sleep: { observer: "Oi", decider: "Di", verb: "Consolidate a route you expect to reuse", short: "Personal mastery", color: "#f2b84b" },
+    Consume: { observer: "Oe", decider: "Di", verb: "Scout or refresh private route evidence", short: "Private discovery", color: "#58c4dd" },
+    Blast: { observer: "Oi", decider: "De", verb: "Establish a route for later shared traffic", short: "Shared infrastructure", color: "#f0758b" },
+    Play: { observer: "Oe", decider: "De", verb: "Explore and reconcile a route together", short: "Joint discovery", color: "#83d17a" }
   });
 
   const ANIMAL_ORDER = Object.freeze(["Sleep", "Consume", "Blast", "Play"]);
 
   const SCENARIOS = Object.freeze({
-    uncharted: {
-      id: "uncharted",
-      name: "Uncharted Range",
-      description: "The terrain is stable, but most viable routes are still unknown.",
-      uncertainty: 0.86,
-      volatility: 0.12,
-      interdependence: 0.42,
-      disagreement: 0.28,
-      initialSupplies: 17,
-      stormLabel: "whiteout"
-    },
-    melting: {
-      id: "melting",
-      name: "Melting Pass",
-      description: "Useful trails change as warming ice and rockfall reshape the mountain.",
-      uncertainty: 0.52,
-      volatility: 0.82,
-      interdependence: 0.55,
-      disagreement: 0.35,
-      initialSupplies: 18,
-      stormLabel: "ice break"
-    },
-    convoy: {
-      id: "convoy",
-      name: "Supply Convoy",
-      description: "The mountain is legible, but no one can carry the expedition alone.",
-      uncertainty: 0.34,
-      volatility: 0.2,
-      interdependence: 0.9,
-      disagreement: 0.45,
-      initialSupplies: 21,
-      stormLabel: "supply window closes"
-    },
-    wrong: {
-      id: "wrong",
-      name: "Confidently Wrong",
-      description: "Most maps agree on a route that one expedition member doubts.",
-      uncertainty: 0.58,
-      volatility: 0.3,
-      interdependence: 0.74,
-      disagreement: 0.86,
-      initialSupplies: 18,
-      stormLabel: "rescue window closes",
-      falseConsensus: true
-    }
+    uncharted: { id: "uncharted", name: "Uncharted Range", description: "The terrain is stable, but most viable routes are still unknown.", uncertainty: 0.86, volatility: 0.12, interdependence: 0.42, disagreement: 0.28, initialMaterials: 18, stormLabel: "whiteout" },
+    melting: { id: "melting", name: "Melting Pass", description: "Useful trails change as warming ice and rockfall reshape the mountain.", uncertainty: 0.52, volatility: 0.82, interdependence: 0.55, disagreement: 0.35, initialMaterials: 20, stormLabel: "ice break" },
+    convoy: { id: "convoy", name: "Supply Convoy", description: "The mountain is legible, but repeated payload traffic needs shared capacity.", uncertainty: 0.34, volatility: 0.2, interdependence: 0.9, disagreement: 0.45, initialMaterials: 24, stormLabel: "supply window closes" },
+    wrong: { id: "wrong", name: "Confidently Wrong", description: "Most maps agree on a route that one expedition member doubts.", uncertainty: 0.58, volatility: 0.3, interdependence: 0.74, disagreement: 0.86, initialMaterials: 20, stormLabel: "rescue window closes", falseConsensus: true }
   });
 
   const GOALS = Object.freeze([
-    { id: "speed", name: "Reach early", description: "Value upward progress and arriving before the final rounds.", progress: 1.4, safety: 0.65, discovery: 0.45, group: 0.55, economy: 0.45 },
+    { id: "speed", name: "Complete urgent traffic", description: "Value progress before demand deadlines.", progress: 1.4, safety: 0.65, discovery: 0.45, group: 0.55, economy: 0.45 },
     { id: "safety", name: "Avoid preventable risk", description: "Value reliable routes and preserved stamina.", progress: 0.65, safety: 1.45, discovery: 0.55, group: 0.7, economy: 0.65 },
     { id: "discovery", name: "Map the unknown", description: "Value high-confidence knowledge of alternative routes.", progress: 0.55, safety: 0.55, discovery: 1.55, group: 0.5, economy: 0.4 },
-    { id: "solidarity", name: "Keep the expedition together", description: "Value shared progress and reduce stranding.", progress: 0.7, safety: 0.85, discovery: 0.5, group: 1.5, economy: 0.5 },
-    { id: "economy", name: "Preserve scarce supplies", description: "Value low material use and efficient infrastructure.", progress: 0.7, safety: 0.8, discovery: 0.45, group: 0.55, economy: 1.55 }
+    { id: "solidarity", name: "Keep traffic coordinated", description: "Value shared progress and reduce stranding.", progress: 0.7, safety: 0.85, discovery: 0.5, group: 1.5, economy: 0.5 },
+    { id: "economy", name: "Preserve route materials", description: "Value low material use and efficient infrastructure.", progress: 0.7, safety: 0.8, discovery: 0.45, group: 0.55, economy: 1.55 }
   ]);
 
   const PROFILE_PRESETS = Object.freeze([
@@ -105,22 +40,23 @@
     { id: "oe-de-decider", observer: "Oe", decider: "De", polarity: "Decider" }
   ]);
 
-  const DEFAULT_ROUNDS = 12;
+  const DEFAULT_ROUNDS = 32;
+  const HORIZON_LABELS = Object.freeze(["early", "middle", "final"]);
 
   function clamp(value, min, max) {
     return Math.max(min, Math.min(max, value));
   }
 
   function round(value, places = 2) {
-    const p = 10 ** places;
-    return Math.round(value * p) / p;
+    const scale = 10 ** places;
+    return Math.round(value * scale) / scale;
   }
 
   function hashSeed(input) {
     const text = String(input);
     let hash = 2166136261;
-    for (let i = 0; i < text.length; i += 1) {
-      hash ^= text.charCodeAt(i);
+    for (let index = 0; index < text.length; index += 1) {
+      hash ^= text.charCodeAt(index);
       hash = Math.imul(hash, 16777619);
     }
     return hash >>> 0 || 1;
@@ -133,10 +69,10 @@
 
     next() {
       this.state += 0x6d2b79f5;
-      let t = this.state;
-      t = Math.imul(t ^ (t >>> 15), t | 1);
-      t ^= t + Math.imul(t ^ (t >>> 7), t | 61);
-      return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
+      let value = this.state;
+      value = Math.imul(value ^ (value >>> 15), value | 1);
+      value ^= value + Math.imul(value ^ (value >>> 7), value | 61);
+      return ((value ^ (value >>> 14)) >>> 0) / 4294967296;
     }
 
     int(min, max) {
@@ -149,9 +85,9 @@
 
     shuffle(items) {
       const result = items.slice();
-      for (let i = result.length - 1; i > 0; i -= 1) {
-        const j = this.int(0, i);
-        [result[i], result[j]] = [result[j], result[i]];
+      for (let index = result.length - 1; index > 0; index -= 1) {
+        const other = this.int(0, index);
+        [result[index], result[other]] = [result[other], result[index]];
       }
       return result;
     }
@@ -169,22 +105,22 @@
   }
 
   function goalChoices(seed) {
-    const rng = new RNG(`${seed}:goal-choices`);
-    return rng.shuffle(GOALS).slice(0, 3).map(clone);
+    return new RNG(`${seed}:goal-choices`).shuffle(GOALS).slice(0, 3).map(clone);
   }
 
   function scenarioConfig(id, custom) {
     if (id === "custom") {
       const input = custom || {};
+      const setting = (value) => Number.isFinite(Number(value)) ? Number(value) : 0.5;
       return {
         id: "custom",
         name: "Custom Expedition",
         description: "A custom balance of terrain uncertainty and social interdependence.",
-        uncertainty: clamp(Number(input.uncertainty) || 0.5, 0, 1),
-        volatility: clamp(Number(input.volatility) || 0.5, 0, 1),
-        interdependence: clamp(Number(input.interdependence) || 0.5, 0, 1),
-        disagreement: clamp(Number(input.disagreement) || 0.5, 0, 1),
-        initialSupplies: 18,
+        uncertainty: clamp(setting(input.uncertainty), 0, 1),
+        volatility: clamp(setting(input.volatility), 0, 1),
+        interdependence: clamp(setting(input.interdependence), 0, 1),
+        disagreement: clamp(setting(input.disagreement), 0, 1),
+        initialMaterials: 20,
         stormLabel: "weather window closes"
       };
     }
@@ -192,59 +128,175 @@
   }
 
   function createMountain(rng, scenario) {
-    const nodes = [
-      { id: "base", name: "Base Camp", x: 50, y: 92, level: 0 },
-      { id: "l1a", name: "Pine Shelf", x: 22, y: 72, level: 1 },
-      { id: "l1b", name: "River Split", x: 50, y: 70, level: 1 },
-      { id: "l1c", name: "Scree Gate", x: 78, y: 73, level: 1 },
-      { id: "l2a", name: "West Bowl", x: 15, y: 50, level: 2 },
-      { id: "l2b", name: "Old Refuge", x: 39, y: 48, level: 2 },
-      { id: "l2c", name: "Glass Ridge", x: 63, y: 49, level: 2 },
-      { id: "l2d", name: "East Face", x: 86, y: 52, level: 2 },
-      { id: "l3a", name: "Cloud Camp", x: 30, y: 28, level: 3 },
-      { id: "l3b", name: "Knife Pass", x: 52, y: 25, level: 3 },
-      { id: "l3c", name: "Sun Ledge", x: 73, y: 30, level: 3 },
-      { id: "summit", name: "Summit", x: 51, y: 8, level: 4 }
-    ];
+    const nodes = [{ id: "base", name: "Base Camp", x: 50, y: 94, level: 0 }];
+    const laneNames = ["West", "Central", "East"];
+    for (let level = 1; level <= 7; level += 1) {
+      for (let lane = 0; lane < 3; lane += 1) {
+        nodes.push({
+          id: `l${level}${String.fromCharCode(97 + lane)}`,
+          name: `${laneNames[lane]} Camp ${level}`,
+          x: [20, 50, 80][lane] + (level % 2 === 0 ? [3, -2, -3][lane] : 0),
+          y: 94 - level * 10.7,
+          level
+        });
+      }
+    }
+    nodes.push({ id: "summit", name: "Summit Depot", x: 50, y: 8, level: 8 });
 
-    const pairs = [
-      ["base", "l1a"], ["base", "l1b"], ["base", "l1c"],
-      ["l1a", "l2a"], ["l1a", "l2b"], ["l1b", "l2b"], ["l1b", "l2c"],
-      ["l1c", "l2c"], ["l1c", "l2d"], ["l2a", "l3a"], ["l2b", "l3a"],
-      ["l2b", "l3b"], ["l2c", "l3b"], ["l2c", "l3c"], ["l2d", "l3c"],
-      ["l3a", "summit"], ["l3b", "summit"], ["l3c", "summit"]
-    ];
+    const pairs = [["base", "l1a"], ["base", "l1b"], ["base", "l1c"]];
+    for (let level = 1; level < 7; level += 1) {
+      const current = [`l${level}a`, `l${level}b`, `l${level}c`];
+      const next = [`l${level + 1}a`, `l${level + 1}b`, `l${level + 1}c`];
+      pairs.push(
+        [current[0], next[0]], [current[0], next[1]],
+        [current[1], next[0]], [current[1], next[1]], [current[1], next[2]],
+        [current[2], next[1]], [current[2], next[2]],
+        [current[0], current[1]], [current[1], current[2]]
+      );
+    }
+    pairs.push(["l7a", "summit"], ["l7b", "summit"], ["l7c", "summit"], ["l7a", "l7b"], ["l7b", "l7c"]);
 
     const nodeById = Object.fromEntries(nodes.map((node) => [node.id, node]));
-    const edges = pairs.map((pair, index) => {
-      const from = nodeById[pair[0]];
-      const to = nodeById[pair[1]];
+    const edges = pairs.map(([from, to], index) => {
       const exposed = rng.next();
+      const levelDistance = Math.abs(nodeById[from].level - nodeById[to].level);
       return {
         id: `e${index + 1}`,
-        from: from.id,
-        to: to.id,
-        name: `${from.name} to ${to.name}`,
-        trueCost: round(1.2 + rng.next() * 2.6),
-        trueRisk: round(clamp(0.08 + exposed * 0.58 + scenario.volatility * 0.12, 0.05, 0.88)),
+        from,
+        to,
+        name: `${nodeById[from].name} - ${nodeById[to].name}`,
+        bidirectional: true,
+        trueCost: round(0.9 + levelDistance * 0.65 + rng.next() * 1.5),
+        trueRisk: round(clamp(0.06 + exposed * 0.48 + scenario.volatility * 0.14, 0.04, 0.9)),
         volatility: round(clamp(rng.next() * 0.55 + scenario.volatility * 0.45, 0, 1)),
         blocked: false,
         infrastructure: 0,
+        infrastructureBuiltRound: null,
+        infrastructureBuilderId: null,
+        infrastructureContributions: {},
+        infrastructureAvailableRoundByBuilder: {},
+        pendingInfrastructure: {},
         traversals: 0,
-        levelGain: to.level - from.level
+        repeatTraversals: 0,
+        personalMasteryUses: 0,
+        sharedInfrastructureUses: 0,
+        agentTraversals: {}
       };
     });
 
     let falseConsensusEdgeId = null;
     if (scenario.falseConsensus) {
-      const candidates = edges.filter((edge) => edge.from === "l1b" || edge.from === "l2b");
-      const trap = candidates[0] || edges[5];
-      trap.trueRisk = 0.94;
+      const trap = edges.find((edge) => edge.from === "l2b" && edge.to === "l3b") || edges[12];
+      trap.trueRisk = 0.96;
       trap.blocked = true;
       falseConsensusEdgeId = trap.id;
     }
-
     return { nodes, edges, falseConsensusEdgeId };
+  }
+
+  function createTrafficDemands(roundLimit) {
+    return [
+      {
+        id: "survey-loop",
+        type: "survey-return",
+        name: "Survey Central Camp 4 and report back",
+        source: "base",
+        destination: "l4b",
+        stops: ["l4b", "base"],
+        stopIndex: 0,
+        subject: { kind: "agent", id: "player", label: "You" },
+        assignedAgentId: "player",
+        priority: 5,
+        deadline: Math.min(22, roundLimit),
+        value: 4,
+        releaseRound: 0,
+        currentNode: "base",
+        completed: false,
+        completedRound: null,
+        status: "active",
+        legsCompleted: 0
+      },
+      {
+        id: "payload-alpha",
+        type: "payload-delivery",
+        name: "Deliver payload Alpha to the summit depot",
+        source: "base",
+        destination: "summit",
+        stops: ["summit"],
+        stopIndex: 0,
+        subject: { kind: "payload", id: "load-alpha", label: "Payload Alpha" },
+        assignedAgentId: "a1",
+        priority: 5,
+        deadline: Math.min(25, roundLimit),
+        value: 4,
+        releaseRound: 0,
+        currentNode: "base",
+        completed: false,
+        completedRound: null,
+        status: "active",
+        legsCompleted: 0
+      },
+      {
+        id: "payload-beta",
+        type: "payload-delivery",
+        name: "Deliver payload Beta through the established network",
+        source: "base",
+        destination: "summit",
+        stops: ["summit"],
+        stopIndex: 0,
+        subject: { kind: "payload", id: "load-beta", label: "Payload Beta" },
+        assignedAgentId: "a2",
+        priority: 4,
+        deadline: Math.min(29, roundLimit),
+        value: 4,
+        releaseRound: 5,
+        currentNode: "base",
+        completed: false,
+        completedRound: null,
+        status: "queued",
+        legsCompleted: 0
+      },
+      {
+        id: "relay-loop",
+        type: "relay-return",
+        name: "Inspect East Camp 5 and return equipment",
+        source: "base",
+        destination: "l5c",
+        stops: ["l5c", "base"],
+        stopIndex: 0,
+        subject: { kind: "agent", id: "a3", label: "Noor" },
+        assignedAgentId: "a3",
+        priority: 3,
+        deadline: Math.min(30, roundLimit),
+        value: 3,
+        releaseRound: 2,
+        currentNode: "base",
+        completed: false,
+        completedRound: null,
+        status: "queued",
+        legsCompleted: 0
+      },
+      {
+        id: "rescue-loop",
+        type: "escort-return",
+        name: "Reach West Camp 3 and escort a climber home",
+        source: "base",
+        destination: "l3a",
+        stops: ["l3a", "base"],
+        stopIndex: 0,
+        subject: { kind: "agent", id: "a4", label: "Tomas" },
+        assignedAgentId: "a4",
+        priority: 4,
+        deadline: Math.min(24, roundLimit),
+        value: 3,
+        releaseRound: 1,
+        currentNode: "base",
+        completed: false,
+        completedRound: null,
+        status: "queued",
+        legsCompleted: 0
+      }
+    ];
   }
 
   function axisForPole(pole) {
@@ -257,13 +309,11 @@
 
   function poleCost(agent, pole) {
     const axis = axisForPole(pole);
-    const savior = saviorForAxis(agent.profile, axis);
-    if (pole === savior) return 1;
+    if (pole === saviorForAxis(agent.profile, axis)) return 1;
     const polarized = agent.profile.polarity === axis;
-    const base = polarized ? 3.2 : 2.1;
     const adaptation = agent.adaptation[pole] || 0;
     const stressAmplifier = agent.stress * (polarized ? 0.055 : 0.025);
-    return clamp(base + stressAmplifier - adaptation, 1.35, 5.2);
+    return clamp((polarized ? 3.2 : 2.1) + stressAmplifier - adaptation, 1.35, 5.2);
   }
 
   function animalCost(agent, animalName) {
@@ -283,20 +333,25 @@
       profile: normalizeProfile(profile),
       goal: clone(goal),
       position: "base",
-      stamina: 12,
+      stamina: 14,
       stress: 1,
       adaptation: { Oi: 0, Oe: 0, Di: 0, De: 0 },
       pressure: { Oi: 0, Oe: 0, Di: 0, De: 0 },
       mastery: {},
+      masteryInvestedRound: {},
+      pendingMastery: {},
       beliefs: {},
       expressedGoal: false,
       lastAction: null,
-      lastReason: "Awaiting the first observation.",
+      lastReason: "Awaiting the first logistics demand.",
+      movementIntent: null,
       moveCounts: { Sleep: 0, Consume: 0, Blast: 0, Play: 0 },
       stranded: false,
-      arrivedRound: null,
       discoveries: 0,
-      personalProgress: 0
+      personalProgress: 0,
+      personalMasteryUses: 0,
+      sharedInfrastructureUses: 0,
+      completedDemandIds: []
     };
   }
 
@@ -310,11 +365,15 @@
       this.nodeById = Object.fromEntries(this.mountain.nodes.map((node) => [node.id, node]));
       this.edgeById = Object.fromEntries(this.mountain.edges.map((edge) => [edge.id, edge]));
       this.round = 0;
-      this.supplies = this.scenario.initialSupplies;
+      this.materials = this.scenario.initialMaterials;
+      this.supplies = this.materials;
+      this.deliveredPayload = 0;
       this.deliveredSupplies = 0;
-      this.weather = { label: "clear planning window", severity: 0.08, changedEdges: [] };
+      this.objectiveValue = 0;
+      this.weather = { label: "clear logistics window", severity: 0.08, changedEdges: [] };
       this.commitments = {};
       this.timeline = [];
+      this.checkpoints = {};
       this.finished = false;
       this.success = false;
       this.finishReason = null;
@@ -326,50 +385,51 @@
       const goalPool = this.rng.shuffle(GOALS.filter((goal) => goal.id !== playerGoal.id));
       const names = ["You", "Mara", "Ivo", "Noor", "Tomas"];
       const colors = ["#f7cb67", "#7fd7c4", "#f78c9b", "#9fa8ff", "#e5a9f2"];
-
       this.agents = [createAgent("player", names[0], playerProfile, playerGoal, colors[0])];
-      for (let i = 1; i < 5; i += 1) {
-        const profile = profilePool[(i - 1) % profilePool.length];
-        const goal = goalPool[(i - 1) % goalPool.length];
-        this.agents.push(createAgent(`a${i}`, names[i], profile, goal, colors[i]));
+      for (let index = 1; index < 5; index += 1) {
+        this.agents.push(createAgent(`a${index}`, names[index], profilePool[(index - 1) % profilePool.length], goalPool[(index - 1) % goalPool.length], colors[index]));
       }
       this.agentById = Object.fromEntries(this.agents.map((agent) => [agent.id, agent]));
+      this.trafficDemands = clone(options.trafficDemands || createTrafficDemands(this.roundLimit));
       this.initializeBeliefs();
+      this.activateDemands();
+      this.updateMovementIntents();
       this.updatePressures();
     }
 
-    initializeBeliefs() {
-      const baseEdges = this.outgoingEdges("base");
-      this.agents.forEach((agent, index) => {
-        const shuffled = new RNG(`${this.seed}:beliefs:${agent.id}`).shuffle(baseEdges);
-        const knownCount = this.scenario.uncertainty > 0.7 ? 1 : 2;
-        shuffled.slice(0, knownCount).forEach((edge) => this.observe(agent, edge, 0.64, false));
-
-        if (this.scenario.falseConsensus && this.mountain.falseConsensusEdgeId) {
-          const trap = this.edgeById[this.mountain.falseConsensusEdgeId];
-          if (index < 4) {
-            agent.beliefs[trap.id] = {
-              known: true,
-              estimatedCost: 1.15,
-              estimatedRisk: 0.08,
-              blocked: false,
-              confidence: 0.9,
-              lastObserved: 0,
-              source: "old expedition map"
-            };
-          } else {
-            this.observe(agent, trap, 0.93, true);
-          }
-        }
-      });
+    connectedEdges(nodeId) {
+      return this.mountain.edges.filter((edge) => edge.from === nodeId || (edge.bidirectional && edge.to === nodeId));
     }
 
     outgoingEdges(nodeId) {
-      return this.mountain.edges.filter((edge) => edge.from === nodeId);
+      return this.connectedEdges(nodeId);
+    }
+
+    otherNode(edge, nodeId) {
+      if (edge.from === nodeId) return edge.to;
+      if (edge.bidirectional && edge.to === nodeId) return edge.from;
+      return null;
     }
 
     agentsAt(nodeId) {
       return this.agents.filter((agent) => agent.position === nodeId && !agent.stranded);
+    }
+
+    initializeBeliefs() {
+      const baseEdges = this.connectedEdges("base");
+      this.agents.forEach((agent, index) => {
+        const shuffled = new RNG(`${this.seed}:beliefs:${agent.id}`).shuffle(baseEdges);
+        const knownCount = this.scenario.uncertainty > 0.7 ? 1 : 2;
+        shuffled.slice(0, knownCount).forEach((edge) => this.observe(agent, edge, 0.68, false));
+        if (this.scenario.falseConsensus && this.mountain.falseConsensusEdgeId) {
+          const trap = this.edgeById[this.mountain.falseConsensusEdgeId];
+          if (index < 4) {
+            agent.beliefs[trap.id] = { known: true, estimatedCost: 1.1, estimatedRisk: 0.08, blocked: false, confidence: 0.9, lastObserved: 0, source: "old expedition map" };
+          } else {
+            this.observe(agent, trap, 0.94, true);
+          }
+        }
+      });
     }
 
     observe(agent, edge, confidence = 0.78, precise = false) {
@@ -393,11 +453,119 @@
       const existing = receiver.beliefs[edge.id];
       const incomingConfidence = source.confidence * confidenceFactor;
       if (!existing || incomingConfidence > existing.confidence || existing.lastObserved < source.lastObserved) {
-        receiver.beliefs[edge.id] = {
-          ...clone(source),
-          confidence: round(incomingConfidence),
-          source: `${sender.name}'s report`
-        };
+        receiver.beliefs[edge.id] = { ...clone(source), confidence: round(incomingConfidence), source: `${sender.name}'s report` };
+      }
+    }
+
+    activateDemands() {
+      for (const demand of this.trafficDemands) {
+        if (!demand.completed && this.round >= demand.releaseRound) demand.status = "active";
+      }
+    }
+
+    demandForAgent(agentId) {
+      return this.trafficDemands
+        .filter((demand) => demand.assignedAgentId === agentId && demand.status === "active" && !demand.completed)
+        .sort((left, right) => right.priority - left.priority || left.deadline - right.deadline)[0] || null;
+    }
+
+    edgeWeight(agent, edge) {
+      const belief = agent.beliefs[edge.id];
+      if (belief && belief.blocked) return Infinity;
+      const risk = belief ? belief.estimatedRisk : 0.58 + this.scenario.uncertainty * 0.12;
+      const cost = belief ? belief.estimatedCost : 2.8;
+      const mastery = agent.mastery[edge.id] || 0;
+      return cost + risk * 3.2 - mastery * 0.9 - edge.infrastructure * 1.1;
+    }
+
+    findPath(agent, source, destination) {
+      if (source === destination) return { nodes: [source], edges: [] };
+      const distances = Object.fromEntries(this.mountain.nodes.map((node) => [node.id, Infinity]));
+      const previous = {};
+      const unvisited = new Set(this.mountain.nodes.map((node) => node.id));
+      distances[source] = 0;
+      while (unvisited.size) {
+        let current = null;
+        for (const nodeId of unvisited) {
+          if (current === null || distances[nodeId] < distances[current]) current = nodeId;
+        }
+        if (current === null || distances[current] === Infinity) break;
+        unvisited.delete(current);
+        if (current === destination) break;
+        for (const edge of this.connectedEdges(current)) {
+          const neighbor = this.otherNode(edge, current);
+          if (!neighbor || !unvisited.has(neighbor)) continue;
+          const weight = this.edgeWeight(agent, edge);
+          const candidate = distances[current] + weight;
+          if (candidate < distances[neighbor]) {
+            distances[neighbor] = candidate;
+            previous[neighbor] = { nodeId: current, edgeId: edge.id };
+          }
+        }
+      }
+      if (!previous[destination]) return { nodes: [source], edges: [] };
+      const nodes = [destination];
+      const edges = [];
+      let cursor = destination;
+      while (cursor !== source) {
+        const step = previous[cursor];
+        if (!step) return { nodes: [source], edges: [] };
+        edges.unshift(step.edgeId);
+        nodes.unshift(step.nodeId);
+        cursor = step.nodeId;
+      }
+      return { nodes, edges };
+    }
+
+    movementIntentFor(agent) {
+      const demand = this.demandForAgent(agent.id);
+      if (!demand || agent.stranded) return null;
+      const path = this.findPath(agent, agent.position, demand.destination);
+      if (!path.edges.length) return null;
+      const edge = this.edgeById[path.edges[0]];
+      return {
+        agentId: agent.id,
+        demandId: demand.id,
+        from: agent.position,
+        to: this.otherNode(edge, agent.position),
+        edgeId: edge.id,
+        carrying: demand.subject.kind === "payload" ? demand.subject.id : null,
+        destination: demand.destination,
+        remainingEdges: path.edges.length,
+        pathEdgeIds: path.edges,
+        pathNodeIds: path.nodes
+      };
+    }
+
+    updateMovementIntents() {
+      for (const agent of this.agents) agent.movementIntent = this.movementIntentFor(agent);
+    }
+
+    maturePathwayInvestments() {
+      for (const agent of this.agents) {
+        for (const [edgeId, amount] of Object.entries(agent.pendingMastery)) {
+          const active = agent.mastery[edgeId] || 0;
+          agent.mastery[edgeId] = round(clamp(active + amount, 0, 1));
+          if (active <= 0) agent.masteryInvestedRound[edgeId] = this.round;
+        }
+        agent.pendingMastery = {};
+      }
+      for (const edge of this.mountain.edges) {
+        let remainingCapacity = clamp(1 - edge.infrastructure, 0, 1);
+        for (const [builderId, amount] of Object.entries(edge.pendingInfrastructure)) {
+          const accepted = Math.min(amount, remainingCapacity);
+          if (accepted <= 0) continue;
+          const active = edge.infrastructureContributions[builderId] || 0;
+          edge.infrastructureContributions[builderId] = round(active + accepted, 4);
+          if (active <= 0) edge.infrastructureAvailableRoundByBuilder[builderId] = this.round;
+          if (edge.infrastructureBuiltRound === null) {
+            edge.infrastructureBuiltRound = this.round;
+            edge.infrastructureBuilderId = builderId;
+          }
+          remainingCapacity -= accepted;
+        }
+        edge.infrastructure = round(Object.values(edge.infrastructureContributions).reduce((total, value) => total + value, 0));
+        edge.pendingInfrastructure = {};
       }
     }
 
@@ -409,21 +577,19 @@
 
     makeOption(agent, animalName) {
       const animal = ANIMALS[animalName];
-      const candidates = this.outgoingEdges(agent.position);
-      const known = candidates.filter((edge) => agent.beliefs[edge.id]);
-      const unknown = candidates.filter((edge) => !agent.beliefs[edge.id]);
-      let pool = animal.observer === "Oe" ? (unknown.length ? unknown : candidates) : (known.length ? known : candidates);
-      if (!pool.length && agent.position === "summit") {
-        pool = this.mountain.edges.filter((edge) => edge.infrastructure < 0.8);
-      }
-
-      const target = pool.slice().sort((a, b) => this.edgePriority(agent, b, animalName) - this.edgePriority(agent, a, animalName))[0] || null;
+      const connected = this.connectedEdges(agent.position);
+      const intentEdge = agent.movementIntent ? this.edgeById[agent.movementIntent.edgeId] : null;
+      const known = connected.filter((edge) => agent.beliefs[edge.id]);
+      const unknown = connected.filter((edge) => !agent.beliefs[edge.id]);
+      let pool = animal.observer === "Oe" ? (unknown.length ? unknown : connected) : (known.length ? known : connected);
+      if (intentEdge && pool.some((edge) => edge.id === intentEdge.id)) pool = [intentEdge, ...pool.filter((edge) => edge.id !== intentEdge.id)];
+      const target = pool[0] || null;
       const partner = animal.decider === "De"
-        ? this.agentsAt(agent.position).filter((candidate) => candidate.id !== agent.id).sort((a, b) => a.stress - b.stress)[0] || null
+        ? this.agentsAt(agent.position).filter((candidate) => candidate.id !== agent.id).sort((left, right) => left.stress - right.stress)[0] || null
         : null;
       const cost = animalCost(agent, animalName);
       const pressureKey = animal.observer !== agent.profile.observer ? animal.observer : (animal.decider !== agent.profile.decider ? animal.decider : null);
-      const enabled = Boolean(target);
+      const demand = this.demandForAgent(agent.id);
       return {
         animal: animalName,
         observer: animal.observer,
@@ -432,209 +598,288 @@
         short: animal.short,
         color: animal.color,
         targetEdgeId: target ? target.id : null,
-        targetName: target ? target.name : "No remaining ascent",
+        targetName: target ? target.name : "No relevant route",
+        demandId: demand ? demand.id : null,
+        demandName: demand ? demand.name : "No active traffic demand",
+        expectedFutureUses: target ? this.expectedFutureUses(target.id, agent.id) : 0,
         partnerId: partner ? partner.id : null,
         partnerName: partner ? partner.name : null,
         subjectiveCost: cost,
-        staminaCost: round(0.9 + cost * 0.18 + (animalName === "Blast" ? 0.35 : 0)),
-        supplyCost: animalName === "Blast" ? Math.min(2, this.supplies) : 0,
+        staminaCost: round(0.55 + cost * 0.14 + (animalName === "Blast" ? 0.25 : 0)),
+        materialCost: animalName === "Blast" && target && agent.beliefs[target.id] ? 1 : 0,
+        supplyCost: 0,
         pressureAddressed: pressureKey,
-        enabled,
-        rationale: this.optionRationale(agent, animalName, target, partner)
+        enabled: Boolean(target),
+        rationale: this.optionRationale(agent, animalName, target, partner, demand)
       };
     }
 
-    edgePriority(agent, edge, animalName) {
-      const belief = agent.beliefs[edge.id];
-      const targetNode = this.nodeById[edge.to];
-      const unknownBonus = belief ? 0 : 2.3;
-      const progress = targetNode.level * 1.4;
-      const safety = belief ? (1 - belief.estimatedRisk) * 2 : 0.7;
-      const mastery = agent.mastery[edge.id] || 0;
-      const support = this.commitments[edge.id] || 0;
-      if (animalName === "Consume") return progress + unknownBonus * agent.goal.discovery + safety * 0.25;
-      if (animalName === "Play") return progress + unknownBonus + support * 0.35 + this.scenario.interdependence;
-      if (animalName === "Sleep") return progress + safety * agent.goal.safety + (1 - mastery) * 1.2;
-      return progress + safety + support * agent.goal.group + (1 - edge.infrastructure) * 1.4;
+    expectedFutureUses(edgeId, excludingAgentId) {
+      let uses = 0;
+      for (const agent of this.agents) {
+        const intent = agent.movementIntent;
+        if (intent && intent.pathEdgeIds.includes(edgeId)) uses += agent.id === excludingAgentId ? 1 : 2;
+      }
+      return uses;
     }
 
-    optionRationale(agent, animalName, edge, partner) {
-      if (!edge) return "No unresolved pathway remains from this position.";
+    optionRationale(agent, animalName, edge, partner, demand) {
+      if (!edge) return "No route is currently relevant.";
       const belief = agent.beliefs[edge.id];
-      if (animalName === "Consume") {
-        return belief ? "Recheck the stalest available observation privately." : "Reduce a concrete gap in the private map.";
-      }
-      if (animalName === "Sleep") {
-        return belief ? "Turn a known possibility into reliable personal mastery." : "Study the least-known route before trusting it.";
-      }
-      if (animalName === "Blast") {
-        return `Convert current knowledge into a route the expedition can use${this.commitments[edge.id] ? " and reinforce existing commitment" : ""}.`;
-      }
-      return `Reconcile maps${partner ? ` with ${partner.name}` : " with the expedition"} while exploring the frontier.`;
-    }
-
-    privateBestEdge(agent) {
-      const candidates = this.outgoingEdges(agent.position);
-      return candidates.slice().sort((a, b) => this.edgePriority(agent, b, "Sleep") - this.edgePriority(agent, a, "Sleep"))[0] || null;
+      const futureUses = this.expectedFutureUses(edge.id, agent.id);
+      const traffic = demand ? `Demand: ${demand.name}.` : "No active demand.";
+      if (animalName === "Consume") return `${traffic} ${belief ? "Refresh private evidence before movement." : "Inspect an unknown possibility before movement."}`;
+      if (animalName === "Sleep") return belief
+        ? `${traffic} Consolidate personal capability; ${futureUses} expected future route-use units.`
+        : `${traffic} You lack evidence to consolidate, so this investment may not pay.`;
+      if (animalName === "Blast") return belief
+        ? `${traffic} Establish a shared pathway for ${futureUses} expected future route-use units.`
+        : `${traffic} Publishing without credible evidence risks weak infrastructure.`;
+      return `${traffic} Reconcile evidence${partner ? ` with ${partner.name}` : " if a partner becomes available"} before movement.`;
     }
 
     scoreOption(agent, option) {
       if (!option.enabled) return -Infinity;
       const edge = this.edgeById[option.targetEdgeId];
       const belief = agent.beliefs[edge.id];
-      const node = this.nodeById[edge.to];
-      const progress = node.level - this.nodeById[agent.position].level;
-      const perceivedRisk = belief ? belief.estimatedRisk : 0.52;
-      const infoGain = belief ? clamp((this.round - belief.lastObserved) / 4, 0, 1) : 1;
-      const support = this.commitments[edge.id] || 0;
-      const privateBest = this.privateBestEdge(agent);
-      const privateAlignment = privateBest && privateBest.id === edge.id ? 1 : -0.35;
-      let benefit = progress * 2.4 * agent.goal.progress;
-      benefit += (1 - perceivedRisk) * 1.8 * agent.goal.safety;
-      benefit += (option.observer === "Oe" ? infoGain * 2.4 : (1 - (agent.mastery[edge.id] || 0)) * 1.5) * agent.goal.discovery;
-      benefit += (option.decider === "De" ? support * 0.9 + this.scenario.interdependence * 1.4 : privateAlignment * 1.1) * (option.decider === "De" ? agent.goal.group : 1);
-      benefit += option.animal === "Blast" ? edge.infrastructure * 0.4 : 0;
-      const objectiveCost = option.staminaCost + option.supplyCost * 0.18 * agent.goal.economy;
-      const stressWeight = 0.46 + agent.stress * 0.045;
-      return round(benefit - objectiveCost - option.subjectiveCost * stressWeight - perceivedRisk * 1.2);
+      const unknown = belief ? 0 : 1;
+      const stale = belief ? clamp((this.round - belief.lastObserved) / 5, 0, 1) : 0;
+      const futureUses = option.expectedFutureUses;
+      const masteryGap = 1 - (agent.mastery[edge.id] || 0);
+      const sharedGap = 1 - edge.infrastructure;
+      let benefit = 0;
+      if (option.animal === "Consume") benefit = (unknown + stale) * 3.2 * agent.goal.discovery;
+      if (option.animal === "Sleep") benefit = (belief ? masteryGap * (1 + futureUses) : -1.8) * agent.goal.safety;
+      if (option.animal === "Blast") benefit = (belief ? sharedGap * (1 + futureUses * this.scenario.interdependence) : -2) * agent.goal.group;
+      if (option.animal === "Play") benefit = (unknown + stale + (option.partnerId ? 1 : 0.1)) * (1 + this.scenario.disagreement) * agent.goal.group;
+      return round(benefit - option.staminaCost - option.materialCost * 0.35 * agent.goal.economy - option.subjectiveCost * (0.25 + agent.stress * 0.025));
     }
 
     chooseAutonomousAction(agent) {
       const options = this.getActionOptions(agent.id).map((option) => ({ ...option, score: this.scoreOption(agent, option) }));
-      options.sort((a, b) => b.score - a.score || ANIMAL_ORDER.indexOf(a.animal) - ANIMAL_ORDER.indexOf(b.animal));
+      options.sort((left, right) => right.score - left.score || ANIMAL_ORDER.indexOf(left.animal) - ANIMAL_ORDER.indexOf(right.animal));
       return options[0];
     }
 
     step(playerAnimal) {
       if (this.finished) return this.snapshot();
-      const playerOptions = this.getActionOptions("player");
-      const playerAction = playerOptions.find((option) => option.animal === playerAnimal && option.enabled);
-      if (!playerAction) throw new Error(`Unavailable player action: ${playerAnimal}`);
+      if (!ANIMALS[playerAnimal]) throw new Error(`Unavailable player action: ${playerAnimal}`);
 
       this.round += 1;
+      this.maturePathwayInvestments();
+      this.activateDemands();
       this.updateWeather();
-      const actions = [playerAction];
-      for (const agent of this.agents.slice(1)) actions.push(this.chooseAutonomousAction(agent));
+      this.updateMovementIntents();
+      const playerAction = this.getActionOptions("player").find((option) => option.animal === playerAnimal && option.enabled);
+      if (!playerAction) throw new Error(`Unavailable player action: ${playerAnimal}`);
+      const actions = [playerAction, ...this.agents.slice(1).map((agent) => this.chooseAutonomousAction(agent))];
       this.commitments = {};
       for (const action of actions) {
-        if (action && action.decider === "De" && action.targetEdgeId) {
-          this.commitments[action.targetEdgeId] = (this.commitments[action.targetEdgeId] || 0) + 1;
-        }
+        if (action && action.decider === "De" && action.targetEdgeId) this.commitments[action.targetEdgeId] = (this.commitments[action.targetEdgeId] || 0) + 1;
       }
 
-      const beforePressure = Object.fromEntries(this.agents.map((agent) => [agent.id, clone(agent.pressure)]));
-      const events = [];
-      actions.forEach((action, index) => {
-        const agent = this.agents[index];
-        events.push(this.resolveAction(agent, action));
-      });
+      const pressureBefore = Object.fromEntries(this.agents.map((agent) => [agent.id, clone(agent.pressure)]));
+      const operationEvents = actions.map((action, index) => this.resolveOperation(this.agents[index], action));
+      this.updateMovementIntents();
+      const trafficEvents = this.agents.map((agent) => this.resolveTraffic(agent)).filter(Boolean);
+      this.updateDemandProgress();
+      this.updateMovementIntents();
       this.updatePressures();
-      this.updateAdaptation(actions, beforePressure);
+      this.updateAdaptation(actions, pressureBefore);
       this.applyRoundRecovery();
+      this.captureScheduledCheckpoints();
       this.checkFinish();
 
       this.timeline.push({
         round: this.round,
         weather: clone(this.weather),
-        actions: actions.map((action, index) => ({
+        operations: actions.map((action, index) => ({
           agentId: this.agents[index].id,
           agentName: this.agents[index].name,
           animal: action.animal,
           targetEdgeId: action.targetEdgeId,
           targetName: action.targetName,
+          demandId: action.demandId,
           subjectiveCost: action.subjectiveCost,
           reason: this.agents[index].lastReason
         })),
-        events
+        actions: actions.map((action, index) => ({ agentId: this.agents[index].id, agentName: this.agents[index].name, animal: action.animal, targetEdgeId: action.targetEdgeId, targetName: action.targetName })),
+        traffic: trafficEvents,
+        events: [...operationEvents, ...trafficEvents.map((event) => event.description)]
       });
+      if (this.finished) this.captureCheckpoint("final");
       return this.snapshot();
     }
 
-    resolveAction(agent, action) {
+    resolveOperation(agent, action) {
       if (!action || !action.enabled) {
-        agent.stress = clamp(agent.stress + 0.6, 0, 10);
-        agent.lastReason = "No viable action was available.";
-        return `${agent.name} could not act.`;
+        agent.stress = round(clamp(agent.stress + 0.5, 0, 10));
+        return `${agent.name} had no relevant pathway operation.`;
       }
       const edge = this.edgeById[action.targetEdgeId];
       agent.moveCounts[action.animal] += 1;
-      agent.stamina = round(clamp(agent.stamina - action.staminaCost, 0, 12));
-      agent.stress = round(clamp(agent.stress + Math.max(0, action.subjectiveCost - 2.2) * 0.34, 0, 10));
+      agent.stamina = round(clamp(agent.stamina - action.staminaCost, 0, 14));
+      agent.stress = round(clamp(agent.stress + Math.max(0, action.subjectiveCost - 2.2) * 0.25, 0, 10));
+      let effect = "prepared no durable pathway state";
 
       if (action.animal === "Consume") {
-        this.observe(agent, edge, 0.86, true);
-        agent.mastery[edge.id] = round(clamp((agent.mastery[edge.id] || 0) + 0.12, 0, 1));
+        this.observe(agent, edge, 0.88, true);
+        effect = "updated private route evidence";
       } else if (action.animal === "Sleep") {
-        if (!agent.beliefs[edge.id]) this.observe(agent, edge, 0.68, false);
-        agent.mastery[edge.id] = round(clamp((agent.mastery[edge.id] || 0) + 0.36, 0, 1));
-        agent.beliefs[edge.id].confidence = round(clamp(agent.beliefs[edge.id].confidence + 0.1, 0, 1));
+        if (agent.beliefs[edge.id]) {
+          const activeAndPending = (agent.mastery[edge.id] || 0) + (agent.pendingMastery[edge.id] || 0);
+          agent.pendingMastery[edge.id] = round(clamp(activeAndPending + 0.3, 0, 1) - clamp(activeAndPending, 0, 1));
+          agent.beliefs[edge.id].confidence = round(clamp(agent.beliefs[edge.id].confidence + 0.08, 0, 1));
+          effect = "queued personal route mastery for later traffic";
+        } else {
+          effect = "could not consolidate an unknown route";
+        }
       } else if (action.animal === "Blast") {
-        if (!agent.beliefs[edge.id]) this.observe(agent, edge, 0.62, false);
-        this.supplies = Math.max(0, this.supplies - action.supplyCost);
-        edge.infrastructure = round(clamp(edge.infrastructure + 0.12 + action.supplyCost * 0.11, 0, 1));
-        agent.expressedGoal = true;
-        this.agents.forEach((receiver) => this.shareBelief(agent, receiver, edge, 0.9));
+        if (agent.beliefs[edge.id] && this.materials > 0) {
+          const credibility = agent.beliefs[edge.id].confidence * 0.7 + (agent.mastery[edge.id] || 0) * 0.3;
+          const amount = round(0.16 + credibility * 0.18);
+          this.materials -= action.materialCost;
+          this.supplies = this.materials;
+          edge.pendingInfrastructure[agent.id] = round((edge.pendingInfrastructure[agent.id] || 0) + amount);
+          agent.expressedGoal = true;
+          this.agents.forEach((receiver) => this.shareBelief(agent, receiver, edge, 0.9));
+          effect = "queued credible shared pathway capacity for later traffic";
+        } else {
+          effect = "lacked evidence or materials for shared infrastructure";
+        }
       } else if (action.animal === "Play") {
         const partner = this.agentById[action.partnerId] || this.agentsAt(agent.position).find((candidate) => candidate.id !== agent.id);
-        this.observe(agent, edge, 0.82, true);
         agent.expressedGoal = true;
         if (partner) {
-          this.observe(partner, edge, 0.74, true);
-          this.shareBelief(agent, partner, edge, 0.92);
-          this.shareBelief(partner, agent, edge, 0.92);
+          this.observe(agent, edge, 0.83, true);
+          this.observe(partner, edge, 0.78, true);
+          this.shareBelief(agent, partner, edge, 0.94);
+          this.shareBelief(partner, agent, edge, 0.94);
+          effect = `reconciled route evidence with ${partner.name}`;
+        } else {
+          effect = "could not create joint evidence without a reciprocal partner";
         }
       }
 
-      const moved = this.attemptTraversal(agent, edge, action);
-      const privateBest = this.privateBestEdge(agent);
-      const belief = agent.beliefs[edge.id];
-      agent.lastReason = `${action.rationale} ${belief ? `Perceived risk ${Math.round(belief.estimatedRisk * 100)}%.` : "Risk remained unknown."}`;
-      if (action.decider === "Di" && privateBest && privateBest.id === edge.id) agent.personalProgress += 0.5;
-      if (action.decider === "De" && (this.commitments[edge.id] || 0) >= 2) agent.personalProgress += 0.5;
-      return `${agent.name} used ${action.animal} on ${edge.name}${moved ? ` and reached ${this.nodeById[agent.position].name}` : ""}.`;
+      agent.lastAction = clone(action);
+      agent.lastReason = `${action.rationale} Operation ${effect}; traffic resolves separately.`;
+      return `${agent.name} used ${action.animal} on ${edge.name} and ${effect}.`;
     }
 
-    attemptTraversal(agent, edge, action) {
-      if (agent.position !== edge.from || edge.blocked) {
-        if (edge.blocked) agent.stress = round(clamp(agent.stress + 0.9, 0, 10));
-        return false;
-      }
+    resolveTraffic(agent) {
+      const intent = agent.movementIntent;
+      if (!intent || agent.stranded) return null;
+      const edge = this.edgeById[intent.edgeId];
+      const demand = this.trafficDemands.find((candidate) => candidate.id === intent.demandId);
+      if (!edge || !demand || demand.completed || agent.position !== intent.from) return null;
       const mastery = agent.mastery[edge.id] || 0;
-      const coordinated = this.commitments[edge.id] || 0;
-      let successChance = 0.48 + mastery * 0.28 + edge.infrastructure * 0.24 - edge.trueRisk * 0.42;
-      if (action.animal === "Consume") successChance += 0.08;
-      if (action.animal === "Sleep") successChance += 0.1;
-      if (action.decider === "De") successChance += coordinated * 0.035 * this.scenario.interdependence;
-      successChance = clamp(successChance, 0.08, 0.96);
-      const moved = this.rng.next() < successChance;
-      if (moved) {
-        agent.position = edge.to;
+      const infrastructure = edge.infrastructure;
+      const belief = agent.beliefs[edge.id];
+      let chance = 0.66 + mastery * 0.22 + infrastructure * 0.2 - edge.trueRisk * 0.38 - this.weather.severity * 0.08;
+      if (!belief) chance -= 0.1;
+      if (agent.stamina < 2) chance -= 0.12;
+      chance = clamp(chance, 0.04, 0.97);
+      if (edge.blocked) chance = 0;
+      const success = this.rng.next() < chance;
+      const staminaCost = round(clamp(0.45 + edge.trueCost * 0.12 - mastery * 0.18 - infrastructure * 0.12, 0.16, 1.2));
+      agent.stamina = round(clamp(agent.stamina - staminaCost, 0, 14));
+      const masteryUsed = success && mastery > 0 && agent.masteryInvestedRound[edge.id] <= this.round;
+      const infrastructureBuilderIds = success && infrastructure > 0
+        ? Object.keys(edge.infrastructureContributions).filter((builderId) => (
+          edge.infrastructureContributions[builderId] > 0
+          && edge.infrastructureAvailableRoundByBuilder[builderId] <= this.round
+          && (builderId !== agent.id || demand.subject.kind === "payload")
+        ))
+        : [];
+      const sharedUsed = infrastructureBuilderIds.length > 0;
+
+      if (success) {
+        const previousUses = edge.agentTraversals[agent.id] || 0;
+        agent.position = intent.to;
+        demand.currentNode = intent.to;
         edge.traversals += 1;
-        if (edge.to === "summit" && agent.arrivedRound === null) {
-          agent.arrivedRound = this.round;
-          if (this.supplies > 0) {
-            this.supplies -= 1;
-            this.deliveredSupplies += 1;
-          }
+        edge.agentTraversals[agent.id] = previousUses + 1;
+        if (previousUses > 0) {
+          edge.repeatTraversals += 1;
+        }
+        if (masteryUsed) {
+          agent.personalMasteryUses += 1;
+          edge.personalMasteryUses += 1;
+        }
+        if (sharedUsed) {
+          edge.sharedInfrastructureUses += 1;
+          infrastructureBuilderIds.forEach((builderId) => {
+            const builder = this.agentById[builderId];
+            if (builder) builder.sharedInfrastructureUses += 1;
+          });
         }
       } else {
-        agent.stress = round(clamp(agent.stress + 0.45 + edge.trueRisk * 0.4, 0, 10));
+        agent.stress = round(clamp(agent.stress + 0.4 + edge.trueRisk * 0.45, 0, 10));
+        if (!belief) this.observe(agent, edge, 0.62, false);
       }
-      return moved;
+      return {
+        agentId: agent.id,
+        agentName: agent.name,
+        demandId: demand.id,
+        intent: clone(intent),
+        from: intent.from,
+        to: intent.to,
+        edgeId: edge.id,
+        carrying: intent.carrying,
+        success,
+        masteryUsed,
+        sharedInfrastructureUsed: sharedUsed,
+        infrastructureBuilderIds,
+        staminaCost,
+        description: success
+          ? `${agent.name} moved ${intent.from} -> ${intent.to} for ${demand.name}${intent.carrying ? ` carrying ${intent.carrying}` : ""}.`
+          : `${agent.name} could not move ${intent.from} -> ${intent.to} for ${demand.name}.`
+      };
+    }
+
+    updateDemandProgress() {
+      for (const demand of this.trafficDemands) {
+        if (demand.completed || demand.status !== "active") continue;
+        const agent = this.agentById[demand.assignedAgentId];
+        if (!agent || agent.position !== demand.destination) continue;
+        demand.legsCompleted += 1;
+        if (demand.stopIndex < demand.stops.length - 1) {
+          demand.source = demand.destination;
+          demand.stopIndex += 1;
+          demand.destination = demand.stops[demand.stopIndex];
+          demand.currentNode = agent.position;
+        } else {
+          demand.completed = true;
+          demand.completedRound = this.round;
+          demand.status = "completed";
+          this.objectiveValue += demand.value;
+          agent.completedDemandIds.push(demand.id);
+          if (demand.subject.kind === "payload") {
+            this.deliveredPayload += 1;
+            this.deliveredSupplies = this.deliveredPayload;
+          }
+        }
+      }
     }
 
     updateWeather() {
-      const severity = clamp(0.08 + this.scenario.volatility * (0.25 + this.rng.next() * 0.65) + this.round / this.roundLimit * 0.18, 0, 1);
+      const severity = clamp(0.06 + this.scenario.volatility * (0.2 + this.rng.next() * 0.55) + this.round / this.roundLimit * 0.14, 0, 1);
       const labels = severity < 0.32 ? ["clear", "light wind", "high cloud"] : severity < 0.68 ? ["crosswind", "freezing rain", "moving fog"] : ["rockfall", "ice fracture", "whiteout"];
       const changedEdges = [];
-      const changes = severity > 0.55 ? 2 : 1;
-      for (let i = 0; i < changes; i += 1) {
+      const changes = severity > 0.58 ? 2 : 1;
+      for (let index = 0; index < changes; index += 1) {
         const edge = this.rng.pick(this.mountain.edges);
         if (this.rng.next() < edge.volatility * this.scenario.volatility) {
-          const delta = (this.rng.next() * 2 - 0.7) * 0.24;
-          edge.trueRisk = round(clamp(edge.trueRisk + delta, 0.04, 0.96));
-          if (!this.scenario.falseConsensus || edge.id !== this.mountain.falseConsensusEdgeId) {
-            edge.blocked = edge.trueRisk > 0.9 && this.rng.next() < 0.35;
+          edge.trueRisk = round(clamp(edge.trueRisk + (this.rng.next() * 2 - 0.75) * 0.2, 0.04, 0.96));
+          if (!this.scenario.falseConsensus || edge.id !== this.mountain.falseConsensusEdgeId) edge.blocked = edge.trueRisk > 0.92 && this.rng.next() < 0.25;
+          if (edge.infrastructure > 0 && severity > 0.65) {
+            const before = edge.infrastructure;
+            const after = round(clamp(before - severity * 0.08, 0, 1));
+            const factor = before > 0 ? after / before : 0;
+            for (const builderId of Object.keys(edge.infrastructureContributions)) {
+              edge.infrastructureContributions[builderId] = round(edge.infrastructureContributions[builderId] * factor, 4);
+            }
+            edge.infrastructure = round(Object.values(edge.infrastructureContributions).reduce((total, value) => total + value, 0));
           }
           changedEdges.push(edge.id);
         }
@@ -644,38 +889,24 @@
 
     updatePressures() {
       for (const agent of this.agents) {
-        const outgoing = this.outgoingEdges(agent.position);
-        if (!outgoing.length) {
-          agent.pressure = { Oi: 0, Oe: 0, Di: 0, De: 0 };
-          continue;
-        }
-        const unknown = outgoing.filter((edge) => !agent.beliefs[edge.id]).length;
-        const stale = outgoing.filter((edge) => agent.beliefs[edge.id] && this.round - agent.beliefs[edge.id].lastObserved >= 3).length;
-        const fragile = outgoing.filter((edge) => {
-          const known = agent.beliefs[edge.id];
-          return known && (agent.mastery[edge.id] || 0) + edge.infrastructure < 0.5;
-        }).length;
-        const targets = Object.keys(this.commitments).filter((edgeId) => {
-          const edge = this.edgeById[edgeId];
-          return edge && edge.from === agent.position && this.commitments[edgeId] > 0;
-        });
-        const fragmentation = targets.length > 1 ? targets.length - 1 : 0;
-        const privateBest = this.privateBestEdge(agent);
-        const lastEdgeId = agent.lastAction && agent.lastAction.targetEdgeId;
-        const privateConflict = agent.lastAction && agent.lastAction.decider === "De" && privateBest && lastEdgeId !== privateBest.id ? 1 : 0;
+        const connected = this.connectedEdges(agent.position);
+        if (!connected.length) continue;
+        const unknown = connected.filter((edge) => !agent.beliefs[edge.id]).length;
+        const stale = connected.filter((edge) => agent.beliefs[edge.id] && this.round - agent.beliefs[edge.id].lastObserved >= 5).length;
+        const fragile = connected.filter((edge) => agent.beliefs[edge.id] && (agent.mastery[edge.id] || 0) + edge.infrastructure < 0.45).length;
+        const demand = this.demandForAgent(agent.id);
+        const sharedNeed = demand && demand.subject.kind === "payload" ? 1 : 0;
         const next = {
-          Oe: clamp((unknown + stale * 0.7) / outgoing.length * 7, 0, 10),
-          Oi: clamp(fragile / outgoing.length * 7, 0, 10),
-          De: clamp(fragmentation * 2.4 + (!agent.expressedGoal ? this.scenario.interdependence * 2.2 : 0), 0, 10),
-          Di: clamp(privateConflict * 4 + (agent.expressedGoal && this.scenario.disagreement > 0.7 ? 0.8 : 0), 0, 10)
+          Oe: clamp((unknown + stale * 0.7) / connected.length * 7, 0, 10),
+          Oi: clamp(fragile / connected.length * 7, 0, 10),
+          De: clamp(sharedNeed * this.scenario.interdependence * 3 + (!agent.expressedGoal ? 1 : 0), 0, 10),
+          Di: clamp(agent.lastAction && agent.lastAction.decider === "De" && this.scenario.disagreement > 0.7 ? 3.5 : 0, 0, 10)
         };
-        for (const pole of ["Oi", "Oe", "Di", "De"]) {
-          agent.pressure[pole] = round(agent.pressure[pole] * 0.42 + next[pole] * 0.58);
-        }
+        for (const pole of ["Oi", "Oe", "Di", "De"]) agent.pressure[pole] = round(agent.pressure[pole] * 0.42 + next[pole] * 0.58);
         const demonObserver = agent.profile.observer === "Oi" ? "Oe" : "Oi";
         const demonDecider = agent.profile.decider === "Di" ? "De" : "Di";
         const polarDemon = agent.profile.polarity === "Observer" ? demonObserver : demonDecider;
-        agent.stress = round(clamp(agent.stress + agent.pressure[polarDemon] * 0.055, 0, 10));
+        agent.stress = round(clamp(agent.stress + agent.pressure[polarDemon] * 0.04, 0, 10));
       }
     }
 
@@ -686,59 +917,93 @@
         for (const pole of [action.observer, action.decider]) {
           const isDemon = saviorForAxis(agent.profile, axisForPole(pole)) !== pole;
           const pressureDropped = agent.pressure[pole] + 0.15 < beforePressure[agent.id][pole];
-          if (isDemon && pressureDropped && agent.stress < 8.5) {
-            agent.adaptation[pole] = round(clamp(agent.adaptation[pole] + 0.07, 0, 0.6));
-          }
+          if (isDemon && pressureDropped && agent.stress < 8.5) agent.adaptation[pole] = round(clamp(agent.adaptation[pole] + 0.07, 0, 0.6));
         }
-        agent.lastAction = clone(action);
       });
     }
 
     applyRoundRecovery() {
-      this.agents.forEach((agent) => {
-        if (agent.position === "summit") {
-          agent.stress = round(clamp(agent.stress - 0.45, 0, 10));
-          return;
-        }
-        agent.stamina = round(clamp(agent.stamina + 0.22, 0, 12));
-        if (agent.lastAction && animalCost(agent, agent.lastAction.animal) <= 2.5) {
-          agent.stress = round(clamp(agent.stress - 0.28, 0, 10));
-        }
-        if (agent.stamina <= 0.4 && agent.stress > 8.7) agent.stranded = true;
-      });
+      for (const agent of this.agents) {
+        agent.stamina = round(clamp(agent.stamina + 0.38, 0, 14));
+        if (agent.lastAction && animalCost(agent, agent.lastAction.animal) <= 2.5) agent.stress = round(clamp(agent.stress - 0.22, 0, 10));
+        if (agent.stamina <= 0.25 && agent.stress > 9.1) agent.stranded = true;
+      }
+    }
+
+    checkpointMetrics() {
+      const player = this.agentById.player;
+      const completedAgents = new Set(this.trafficDemands.filter((demand) => demand.completed).map((demand) => demand.assignedAgentId));
+      const reliabilityValues = this.mountain.edges.map((edge) => (player.mastery[edge.id] || 0) + edge.infrastructure);
+      return {
+        round: this.round,
+        frontierEvidence: Object.keys(player.beliefs).length,
+        progress: round(this.objectiveValue + this.agents.reduce((total, agent) => total + this.nodeById[agent.position].level / 8, 0)),
+        routeReliability: round(reliabilityValues.reduce((total, value) => total + value, 0) / reliabilityValues.length),
+        repeatTraversals: this.mountain.edges.reduce((total, edge) => total + edge.repeatTraversals, 0),
+        members: completedAgents.size,
+        payloadThroughput: this.deliveredPayload,
+        stress: round(player.stress),
+        stamina: round(player.stamina),
+        stranding: this.agents.filter((agent) => agent.stranded).length
+      };
+    }
+
+    captureCheckpoint(label) {
+      if (!this.checkpoints[label]) this.checkpoints[label] = this.checkpointMetrics();
+    }
+
+    captureScheduledCheckpoints() {
+      if (this.round >= Math.ceil(this.roundLimit / 3)) this.captureCheckpoint("early");
+      if (this.round >= Math.ceil(this.roundLimit * 2 / 3)) this.captureCheckpoint("middle");
     }
 
     checkFinish() {
-      const arrived = this.agents.filter((agent) => agent.position === "summit").length;
-      if (arrived >= 3 && this.deliveredSupplies >= 3) {
+      const completed = this.trafficDemands.filter((demand) => demand.completed).length;
+      const middleReached = this.round >= Math.ceil(this.roundLimit * 2 / 3);
+      if (middleReached && completed >= 3 && this.deliveredPayload >= 2) {
         this.finished = true;
         this.success = true;
-        this.finishReason = `${arrived} expedition members delivered ${this.deliveredSupplies} supply loads to the summit.`;
+        this.finishReason = `${completed} logistics demands completed with ${this.deliveredPayload} payloads delivered.`;
       } else if (this.round >= this.roundLimit) {
         this.finished = true;
         this.success = false;
-        this.finishReason = `The ${this.scenario.stormLabel} with ${arrived} members and ${this.deliveredSupplies} supply loads at the summit.`;
+        this.finishReason = `The ${this.scenario.stormLabel} with ${completed} demands and ${this.deliveredPayload} payloads completed.`;
       }
     }
 
     summary() {
       const player = this.agentById.player;
+      const completed = this.trafficDemands.filter((demand) => demand.completed).length;
       const arrived = this.agents.filter((agent) => agent.position === "summit").length;
-      const stranded = this.agents.filter((agent) => agent.stranded).length;
       const explored = this.mountain.edges.filter((edge) => this.agents.some((agent) => agent.beliefs[edge.id])).length;
       const shared = this.mountain.edges.filter((edge) => edge.infrastructure > 0).length;
       const reliable = this.mountain.edges.filter((edge) => edge.infrastructure >= 0.55).length;
+      const repeatTraversals = this.mountain.edges.reduce((total, edge) => total + edge.repeatTraversals, 0);
+      const sharedInfrastructureUses = this.mountain.edges.reduce((total, edge) => total + edge.sharedInfrastructureUses, 0);
+      const checkpoints = clone(this.checkpoints);
+      for (const label of HORIZON_LABELS) if (!checkpoints[label]) checkpoints[label] = this.checkpointMetrics();
       return {
         success: this.success,
         reason: this.finishReason,
         rounds: this.round,
         arrived,
-        stranded,
-        deliveredSupplies: this.deliveredSupplies,
-        remainingSupplies: this.supplies,
+        stranded: this.agents.filter((agent) => agent.stranded).length,
+        deliveredSupplies: this.deliveredPayload,
+        deliveredPayload: this.deliveredPayload,
+        payloadThroughput: this.deliveredPayload,
+        remainingSupplies: this.materials,
+        remainingMaterials: this.materials,
         exploredEdges: explored,
         sharedEdges: shared,
         reliableEdges: reliable,
+        repeatTraversals,
+        personalMasteryUses: player.personalMasteryUses,
+        sharedInfrastructureUses,
+        playerSharedInfrastructureUses: player.sharedInfrastructureUses,
+        completedDemands: completed,
+        totalDemands: this.trafficDemands.length,
+        objectiveValue: this.objectiveValue,
+        checkpoints,
         playerMoves: clone(player.moveCounts),
         playerStress: round(player.stress),
         playerStamina: round(player.stamina),
@@ -755,12 +1020,17 @@
         scenario: clone(this.scenario),
         round: this.round,
         roundLimit: this.roundLimit,
-        supplies: this.supplies,
-        deliveredSupplies: this.deliveredSupplies,
+        materials: this.materials,
+        supplies: this.materials,
+        deliveredPayload: this.deliveredPayload,
+        deliveredSupplies: this.deliveredPayload,
+        objectiveValue: this.objectiveValue,
         weather: clone(this.weather),
         commitments: clone(this.commitments),
         mountain: clone(this.mountain),
+        trafficDemands: clone(this.trafficDemands),
         agents: clone(this.agents),
+        checkpoints: clone(this.checkpoints),
         timeline: clone(this.timeline),
         finished: this.finished,
         success: this.success,
@@ -770,13 +1040,18 @@
     }
   }
 
+  function selectPolicyAnimal(game, policy) {
+    if (typeof policy === "function") return policy(game);
+    if (ANIMAL_ORDER.includes(policy)) return policy;
+    const player = game.agentById.player;
+    const action = game.chooseAutonomousAction(player);
+    return action ? action.animal : ANIMAL_ORDER[0];
+  }
+
   function autoplay(options = {}) {
-    const game = new Game(options);
-    while (!game.finished) {
-      const player = game.agentById.player;
-      const action = game.chooseAutonomousAction(player);
-      game.step(action.animal);
-    }
+    const game = options.game || new Game(options);
+    const policy = options.playerPolicy || "Adaptive";
+    while (!game.finished) game.step(selectPolicyAnimal(game, policy));
     return game.summary();
   }
 
@@ -787,6 +1062,7 @@
     GOALS,
     PROFILE_PRESETS,
     DEFAULT_ROUNDS,
+    HORIZON_LABELS,
     RNG,
     Game,
     animalCost,

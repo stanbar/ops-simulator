@@ -2,8 +2,12 @@ const assert = require("node:assert/strict");
 const {
   BALANCE_ENVELOPE,
   FIXED_COHORT,
+  HORIZON_POLICY_NAMES,
   MATERIAL_DIVERGENCE,
   POLICY_NAMES,
+  PROTOTYPE_BALANCE_ENVELOPE,
+  PURE_POLICIES,
+  evaluateBalance,
   materiallyDiverges,
   runBenchmark
 } = require("./balance-benchmark.js");
@@ -30,7 +34,7 @@ test("fixed cohort covers every scenario, controlled goal, and representative pr
     "oi-de-decider",
     "oe-de-observer"
   ]));
-  assert.equal(FIXED_COHORT.length, 160);
+  assert.equal(FIXED_COHORT.length, 40);
   assert.equal(new Set(FIXED_COHORT.map((run) => run.id)).size, FIXED_COHORT.length);
 });
 
@@ -41,9 +45,11 @@ test("benchmark reports every policy and required expedition metric", () => {
     const result = report.policies[policy];
     assert.equal(result.runs, 8);
     assert.equal(typeof result.successRate, "number");
-    for (const metric of ["arrived", "deliveredSupplies", "reliableEdges", "stranded", "playerStress", "playerStamina", "rounds"]) {
+    for (const metric of ["arrived", "deliveredSupplies", "reliableEdges", "stranded", "playerStress", "playerStamina", "rounds", "repeatTraversals", "personalMasteryUses", "sharedInfrastructureUses", "playerSharedInfrastructureUses", "completedDemands", "payloadThroughput"]) {
       assert.equal(typeof result.averages[metric], "number", `${policy} should report ${metric}`);
     }
+    assert.deepEqual(Object.keys(result.horizons), ["early", "middle", "final"]);
+    assert.equal(typeof result.horizons.early.averages.frontierEvidence, "number");
     assert.equal(typeof result.dominantFailureReason, "string");
   }
 });
@@ -69,8 +75,9 @@ test("material divergence uses the ticket's observable outcome boundary", () => 
 test("paired agency comparisons vary policy over identical expedition cases", () => {
   const cohort = FIXED_COHORT.slice(0, 3);
   const report = runBenchmark({ cohort });
-  assert.equal(report.agency.totalPairs, cohort.length * 10);
-  assert.equal(report.agency.byPair.length, 10);
+  const pairCount = POLICY_NAMES.length * (POLICY_NAMES.length - 1) / 2;
+  assert.equal(report.agency.totalPairs, cohort.length * pairCount);
+  assert.equal(report.agency.byPair.length, pairCount);
   assert.equal(report.agency.caseCount, cohort.length);
   assert.equal(report.agency.definition.stressDelta, MATERIAL_DIVERGENCE.stressDelta);
 });
@@ -80,11 +87,22 @@ test("repeating a cohort produces an identical report", () => {
   assert.deepEqual(runBenchmark({ cohort }), runBenchmark({ cohort }));
 });
 
-test("prototype remains recorded as failing the future balance envelope", () => {
-  const report = runBenchmark();
-  assert.deepEqual(report.balance.envelope, BALANCE_ENVELOPE);
-  assert.equal(report.balance.passes, false);
-  assert.ok(report.balance.violations.length > 0);
+test("horizon policies are included without turning the prototype envelope into a gate", () => {
+  const report = runBenchmark({ cohort: FIXED_COHORT.slice(0, 4) });
+  assert.ok(HORIZON_POLICY_NAMES.every((policy) => POLICY_NAMES.includes(policy)));
+  assert.deepEqual(report.historicalPrototypeBalance.envelope, PROTOTYPE_BALANCE_ENVELOPE);
+  assert.equal(report.historicalPrototypeBalance.gatesCurrentRun, false);
+  assert.equal(report.historicalPrototypeBalance.status, "superseded");
+  assert.equal(report.balance.gatesCurrentRun, false);
+  assert.equal(report.balance.status, "superseded");
+  assert.deepEqual(report.balance.envelope, PROTOTYPE_BALANCE_ENVELOPE);
+  assert.ok(report.agency.controlledVariables.includes("traffic demands"));
+});
+
+test("historical benchmark exports remain available to existing callers", () => {
+  assert.equal(BALANCE_ENVELOPE, PROTOTYPE_BALANCE_ENVELOPE);
+  assert.deepEqual(PURE_POLICIES, ["Sleep", "Consume", "Blast", "Play"]);
+  assert.equal(typeof evaluateBalance, "function");
 });
 
 process.on("exit", () => {

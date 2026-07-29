@@ -8,7 +8,9 @@ These are exploratory models. Behavior inside a simulator does not validate OPS/
 
 ### Pathways
 
-`/pathways/` is a turn-based five-agent mountain expedition. It models:
+`/pathways/` is a turn-based five-agent mountain logistics simulation. Recurring
+demands move agents and payloads between camps instead of ending after one ascent.
+It models:
 
 - `Oi/Oe` as route stabilization versus route exploration;
 - `Di/De` as private versus externally coordinated decision authority;
@@ -16,6 +18,8 @@ These are exploratory models. Behavior inside a simulator does not validate OPS/
 - Sleep, Consume, Blast, and Play as concrete combined pathway operations;
 - private belief maps over hidden seeded terrain;
 - personal mastery and shared infrastructure as separate pathway layers;
+- private evidence from Consume and joint evidence from Play;
+- delayed personal returns from Sleep and delayed shared returns from Blast;
 - stress, neglected reality, and bounded within-run adaptation.
 
 The engine is in `pathways/engine.js`; the SVG application is in `pathways/app.js`.
@@ -42,9 +46,9 @@ node pathways/balance-benchmark.test.js
 node simulation.test.js
 ```
 
-The Pathways suite covers deterministic replay, coin-derived cost ordering, action availability, counterfactual coin flips, separate pathway layers, false consensus, and benchmark scenario execution.
+The Pathways suite covers deterministic replay, coin-derived cost ordering, action availability, counterfactual coin flips, repeated traffic, delayed pathway returns, false consensus, and benchmark scenario execution.
 
-Run `node pathways/balance-benchmark.js` for the fixed-cohort policy report. The current prototype's intentionally failing measurements and the future acceptance envelope are recorded in `pathways/BALANCE_BASELINE.md`.
+Run `node pathways/balance-benchmark.js` for the fixed-cohort policy and horizon report. The obsolete one-ascent measurements from issue #10 are retained as historical context in `pathways/BALANCE_BASELINE.md`; they are not a gate for the logistics model.
 
 ## Future fusion boundary
 

@@ -6,7 +6,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 This repository contains two exploratory OPS/BCM simulations:
 
-- **Pathways** (`pathways/`): a turn-based five-agent mountain expedition with a pure seeded engine and SVG browser UI.
+- **Pathways** (`pathways/`): a turn-based five-agent mountain logistics simulation with recurring traffic, a pure seeded engine, and an SVG browser UI.
 - **Spectrum** (`spectrum/` + root `simulation.js`): the original p5.js agent ecology where agents solve voids with keys in a circular spectrum.
 
 The simulation explores how collective intelligence emerges from individual cognitive constraints and specialization, grounded in Jungian psychology concepts.
@@ -48,7 +48,7 @@ pathways/engine.test.js       - Deterministic and behavioral tests
 pathways/README.md            - Model contract and epistemic boundary
 ```
 
-Pathways separates terrain, private belief, personal mastery, and shared infrastructure. Do not reveal true terrain in the UI before debrief. Animal costs are derived from `Oi/Oe`, `Di/De`, and Observer/Decider polarity; no action may be hard-locked because it is a demon.
+Pathways separates terrain, private belief, personal mastery, and shared infrastructure. Each round separates an animal operation from traffic movement. Do not reveal true terrain in the UI before debrief. Animal costs are derived from `Oi/Oe`, `Di/De`, and Observer/Decider polarity; no action may be hard-locked because it is a demon.
 
 ### Spectrum Core Mechanics
 
@@ -87,7 +87,7 @@ Pathways separates terrain, private belief, personal mastery, and shared infrast
 
 - Changes take effect immediately on browser refresh.
 - Run `node pathways/engine.test.js` after Pathways engine changes.
-- Run `node pathways/balance-benchmark.test.js` after benchmark changes and `node pathways/balance-benchmark.js` to inspect the current balance envelope.
+- Run `node pathways/balance-benchmark.test.js` after benchmark changes and `node pathways/balance-benchmark.js` to inspect logistics and horizon behavior. The issue #10 envelope in `pathways/BALANCE_BASELINE.md` is historical only.
 - Run `node simulation.test.js` after Spectrum engine changes.
 - Click agents/voids in the canvas for debug inspector
 - Download telemetry JSON via UI button for analysis

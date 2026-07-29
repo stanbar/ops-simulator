@@ -6,10 +6,10 @@
 
   const tutorialSequence = ["Consume", "Sleep", "Blast", "Play"];
   const tutorialCopy = {
-    Consume: "Gather direct evidence for your private map. Discovery changes belief before it changes the mountain.",
-    Sleep: "Turn a known possibility into personal mastery. The route becomes easier for you, not automatically for everyone.",
-    Blast: "Externalize a known route into markings, instructions, and carrying capacity the expedition can share.",
-    Play: "Explore with another agent and reconcile two incomplete maps in real time."
+    Consume: "Gather private route evidence before the separate traffic phase resolves movement.",
+    Sleep: "Invest in personal mastery when you expect to traverse this known route again later.",
+    Blast: "Establish a credible route for later followers or shared payload, using route materials rather than objective payload.",
+    Play: "Explore with another agent and reconcile incomplete maps before traffic moves."
   };
 
   const state = {
@@ -26,7 +26,8 @@
     tutorialActive: true,
     tutorialStep: 0,
     revealTruth: false,
-    comparisonBaseline: null
+    comparisonBaseline: null,
+    mapZoom: 1
   };
 
   const elements = {};
@@ -44,7 +45,8 @@
       "summitStatus", "deliveryStatus", "scenarioEyebrow", "mapAgentSelect", "edgeLayer", "nodeLayer",
       "agentLayer", "agentList", "actionGrid", "playerState", "timeline", "tutorialBar", "tutorialCount",
       "tutorialTitle", "tutorialCopy", "skipTutorialButton", "restartButton", "aboutButton", "aboutDialog",
-      "debriefDialog", "debriefContent", "mapCallout", "mountainSvg"
+      "debriefDialog", "debriefContent", "mapCallout", "mountainSvg", "payloadLayer",
+      "trafficDemandList", "mapZoomIn", "mapZoomOut"
     ].forEach((id) => { elements[id] = byId(id); });
   }
 
@@ -250,6 +252,7 @@
   function renderGame() {
     renderStatus();
     renderTutorial();
+    renderTraffic();
     renderMap();
     renderAgents();
     renderActions();
@@ -258,13 +261,32 @@
 
   function renderStatus() {
     const snapshot = state.snapshot;
-    const arrived = snapshot.agents.filter((agent) => agent.position === "summit").length;
+    const completed = snapshot.trafficDemands.filter((demand) => demand.completed).length;
     elements.roundStatus.textContent = `${snapshot.round} / ${snapshot.roundLimit}`;
     elements.weatherStatus.textContent = `${snapshot.weather.label} · ${Math.round(snapshot.weather.severity * 100)}%`;
     elements.supplyStatus.textContent = String(snapshot.supplies);
-    elements.summitStatus.textContent = `${arrived} / 5`;
-    elements.deliveryStatus.textContent = `${snapshot.deliveredSupplies} / 3`;
+    elements.summitStatus.textContent = `${completed} / ${snapshot.trafficDemands.length}`;
+    elements.deliveryStatus.textContent = `${snapshot.deliveredPayload} / 2`;
     elements.scenarioEyebrow.textContent = snapshot.scenario.name;
+  }
+
+  function renderTraffic() {
+    const snapshot = state.snapshot;
+    elements.trafficDemandList.innerHTML = snapshot.trafficDemands.map((demand) => {
+      const agent = snapshot.agents.find((candidate) => candidate.id === demand.assignedAgentId);
+      const overdue = !demand.completed && snapshot.round > demand.deadline;
+      return `
+        <article class="traffic-demand ${demand.status} ${overdue ? "overdue" : ""}">
+          <div><strong>${escapeHtml(demand.name)}</strong><span>${escapeHtml(positionName(demand.source))} → ${escapeHtml(positionName(demand.destination))}</span></div>
+          <div class="traffic-meta">
+            <span>${escapeHtml(demand.subject.label)}</span>
+            <span>${escapeHtml(agent ? agent.name : demand.assignedAgentId)}</span>
+            <span>R${demand.deadline}</span>
+            <b>${demand.completed ? "Complete" : demand.status}</b>
+          </div>
+        </article>
+      `;
+    }).join("");
   }
 
   function renderTutorial() {
@@ -294,12 +316,18 @@
     elements.edgeLayer.replaceChildren();
     elements.nodeLayer.replaceChildren();
     elements.agentLayer.replaceChildren();
+    elements.payloadLayer.replaceChildren();
+    elements.mountainSvg.style.width = `${state.mapZoom * 100}%`;
 
     snapshot.mountain.edges.forEach((edge) => {
-      const from = mapPoint(nodeById[edge.from]);
-      const to = mapPoint(nodeById[edge.to]);
       const belief = selectedAgent.beliefs[edge.id];
       const shared = edge.infrastructure > 0;
+      const intended = selectedAgent.movementIntent && selectedAgent.movementIntent.pathEdgeIds.includes(edge.id);
+      const intentIndex = intended ? selectedAgent.movementIntent.pathEdgeIds.indexOf(edge.id) : -1;
+      const displayFromId = intended ? selectedAgent.movementIntent.pathNodeIds[intentIndex] : edge.from;
+      const displayToId = intended ? selectedAgent.movementIntent.pathNodeIds[intentIndex + 1] : edge.to;
+      const from = mapPoint(nodeById[displayFromId]);
+      const to = mapPoint(nodeById[displayToId]);
       let stroke = "#66746f";
       let width = 2;
       let opacity = 0.14;
@@ -321,11 +349,18 @@
         opacity = 0.38 + belief.confidence * 0.55;
         dash = belief.confidence < 0.65 ? "6 6" : "";
       }
+      if (intended) {
+        stroke = selectedAgent.color;
+        width = Math.max(width, 4);
+        opacity = 1;
+        dash = "";
+      }
 
       const line = svgElement("line", {
         x1: from.x, y1: from.y, x2: to.x, y2: to.y,
         stroke, "stroke-width": width, opacity, "stroke-dasharray": dash,
-        "stroke-linecap": "round", class: "map-edge", "data-edge-id": edge.id
+        "stroke-linecap": "round", class: "map-edge", "data-edge-id": edge.id,
+        "marker-end": intended ? "url(#intentArrow)" : ""
       });
       const hit = svgElement("line", { x1: from.x, y1: from.y, x2: to.x, y2: to.y, class: "edge-hit", "data-edge-id": edge.id });
       elements.edgeLayer.append(line, hit);
@@ -369,6 +404,16 @@
         elements.agentLayer.append(group);
       });
     });
+
+    snapshot.trafficDemands.filter((demand) => demand.subject.kind === "payload" && !demand.completed).forEach((demand, index) => {
+      const point = mapPoint(nodeById[demand.currentNode]);
+      const group = svgElement("g", { class: "payload-marker", transform: `translate(${point.x + 18 + index * 5} ${point.y + 15})` });
+      const box = svgElement("rect", { x: -7, y: -7, width: 14, height: 14, rx: 2 });
+      const label = svgElement("text", { y: 1 });
+      label.textContent = "P";
+      group.append(box, label);
+      elements.payloadLayer.append(group);
+    });
   }
 
   function showEdgeCallout(edgeId, clientX, clientY) {
@@ -378,11 +423,11 @@
     const belief = agent.beliefs[edgeId];
     let body;
     if (state.revealTruth) {
-      body = `True risk ${Math.round(edge.trueRisk * 100)}% · cost ${edge.trueCost.toFixed(1)} · ${edge.blocked ? "blocked" : "open"}`;
+      body = `True risk ${Math.round(edge.trueRisk * 100)}% · cost ${edge.trueCost.toFixed(1)} · ${edge.blocked ? "blocked" : "open"} · ${edge.traversals} uses (${edge.repeatTraversals} repeat)`;
     } else if (belief) {
-      body = `Believed risk ${Math.round(belief.estimatedRisk * 100)}% · confidence ${Math.round(belief.confidence * 100)}% · ${belief.source}`;
+      body = `Believed risk ${Math.round(belief.estimatedRisk * 100)}% · confidence ${Math.round(belief.confidence * 100)}% · mastery ${Math.round((agent.mastery[edge.id] || 0) * 100)}% · shared ${Math.round(edge.infrastructure * 100)}% · ${edge.traversals} uses`;
     } else {
-      body = "No current belief. The connection is only a frontier possibility.";
+      body = `No current belief. Frontier possibility with ${edge.traversals} visible traffic uses.`;
     }
     const rect = elements.mountainSvg.getBoundingClientRect();
     elements.mapCallout.innerHTML = `<strong>${escapeHtml(edge.name)}</strong><span>${escapeHtml(body)}</span>`;
@@ -395,6 +440,7 @@
     const snapshot = state.snapshot;
     elements.agentList.innerHTML = snapshot.agents.map((agent) => {
       const costs = Engine.animalCosts(agent);
+      const demand = snapshot.trafficDemands.find((candidate) => candidate.assignedAgentId === agent.id && candidate.status === "active" && !candidate.completed);
       const pressureChips = ["Oi", "Oe", "Di", "De"].map((pole) => `<span class="pressure-chip ${agent.pressure[pole] >= 4 ? "hot" : ""}">${pole} ${agent.pressure[pole].toFixed(1)}</span>`).join("");
       return `
         <article class="agent-card ${agent.id === state.selectedMapAgentId ? "selected" : ""}" style="--agent-color:${agent.color}" data-agent-id="${agent.id}">
@@ -402,9 +448,9 @@
             <div class="agent-name"><i class="agent-swatch"></i>${escapeHtml(agent.name)} · ${escapeHtml(positionName(agent.position))}</div>
             <span class="coin-stack">${agent.profile.observer}/${agent.profile.decider} · ${agent.profile.polarity[0]}</span>
           </div>
-          <p class="agent-goal">Goal: ${escapeHtml(agent.goal.name)} · cheapest ${Object.entries(costs).sort((a, b) => a[1] - b[1])[0][0]}</p>
+          <p class="agent-goal">${demand ? `Traffic: ${escapeHtml(demand.name)}` : "No active traffic"} · cheapest ${Object.entries(costs).sort((a, b) => a[1] - b[1])[0][0]}</p>
           <div class="meters">
-            ${meter("Stamina", agent.stamina, 12, agent.color)}
+            ${meter("Stamina", agent.stamina, 14, agent.color)}
             ${meter("Stress", agent.stress, 10, agent.stress > 7 ? "#f07b86" : agent.color)}
           </div>
           <div class="pressure-row">${pressureChips}</div>
@@ -435,7 +481,8 @@
     elements.playerState.innerHTML = [
       `${player.profile.observer}/${player.profile.decider}`,
       `${player.profile.polarity} polarity`,
-      `${player.goal.name}`
+      `${player.goal.name}`,
+      player.movementIntent ? `Traffic ${positionName(player.movementIntent.from)} → ${positionName(player.movementIntent.destination)}` : "No movement intent"
     ].map((label) => `<span class="state-chip">${escapeHtml(label)}</span>`).join("");
 
     elements.actionGrid.innerHTML = options.map((option) => {
@@ -446,11 +493,12 @@
           <div class="action-name"><strong>${option.animal}</strong><span>${option.observer} + ${option.decider}</span></div>
           <h3>${escapeHtml(option.label)}</h3>
           <div class="action-target">${escapeHtml(option.targetName)}${option.partnerName ? ` · with ${escapeHtml(option.partnerName)}` : ""}</div>
+          <div class="action-target">Then traffic: ${escapeHtml(option.demandName)} · expected route use ${option.expectedFutureUses}</div>
           <p class="action-rationale">${escapeHtml(option.rationale)}</p>
           <div class="action-costs">
             <span class="cost-chip">Subjective ${option.subjectiveCost.toFixed(1)}</span>
             <span class="cost-chip">Stamina ${option.staminaCost.toFixed(1)}</span>
-            ${option.supplyCost ? `<span class="cost-chip">Supplies ${option.supplyCost}</span>` : ""}
+            ${option.materialCost ? `<span class="cost-chip">Materials ${option.materialCost}</span>` : ""}
             <span class="cost-chip">${pressure}</span>
           </div>
         </button>
@@ -471,15 +519,17 @@
   function renderTimeline() {
     const timeline = state.snapshot.timeline.slice().reverse();
     if (!timeline.length) {
-      elements.timeline.innerHTML = `<article class="timeline-entry"><strong>Round zero</strong><p>Five private maps are ready. Ground truth remains hidden.</p></article>`;
+      elements.timeline.innerHTML = `<article class="timeline-entry"><strong>Round zero · demands declared</strong><p>Animal operations will prepare pathways; traffic will resolve afterward.</p></article>`;
       return;
     }
-    elements.timeline.innerHTML = timeline.flatMap((entry) => entry.events.slice(0, 3).map((event, index) => `
-      <article class="timeline-entry">
-        <strong>R${entry.round} · ${index === 0 ? escapeHtml(entry.weather.label) : escapeHtml(entry.actions[index].animal)}</strong>
-        <p>${escapeHtml(event)}</p>
-      </article>
-    `)).join("");
+    elements.timeline.innerHTML = timeline.flatMap((entry) => {
+      const playerOperation = entry.operations.find((operation) => operation.agentId === "player");
+      const traffic = entry.traffic.slice(0, 2);
+      return [
+        `<article class="timeline-entry operation"><strong>R${entry.round} · operation · ${escapeHtml(playerOperation.animal)}</strong><p>${escapeHtml(entry.events[0])}</p></article>`,
+        ...traffic.map((event) => `<article class="timeline-entry traffic"><strong>R${entry.round} · traffic · ${event.success ? "moved" : "held"}</strong><p>${escapeHtml(event.description)}</p></article>`)
+      ];
+    }).join("");
   }
 
   function showDebrief() {
@@ -496,14 +546,16 @@
       </header>
       <div class="debrief-body">
         <div class="metric-grid">
-          ${metric("Members at summit", `${summary.arrived} / 5`)}
-          ${metric("Supply loads", `${summary.deliveredSupplies} / 3`)}
+          ${metric("Demands completed", `${summary.completedDemands} / ${summary.totalDemands}`)}
+          ${metric("Payload delivered", `${summary.payloadThroughput} / 2`)}
           ${metric("Edges explored", summary.exploredEdges)}
-          ${metric("Reliable shared paths", summary.reliableEdges)}
-          ${metric("Remaining supplies", summary.remainingSupplies)}
+          ${metric("Repeat traversals", summary.repeatTraversals)}
+          ${metric("Personal mastery returns", summary.personalMasteryUses)}
+          ${metric("Your shared pathway returns", summary.playerSharedInfrastructureUses)}
+          ${metric("Route materials", summary.remainingMaterials)}
           ${metric("Final stress", summary.playerStress.toFixed(1))}
           ${metric("Final stamina", summary.playerStamina.toFixed(1))}
-          ${metric("Rounds used", `${summary.rounds} / 12`)}
+          ${metric("Rounds used", `${summary.rounds} / ${state.snapshot.roundLimit}`)}
         </div>
         ${comparison}
         <div class="debrief-columns">
@@ -548,10 +600,10 @@
       return `${difference > 0 ? "+" : ""}${difference.toFixed(1)}`;
     };
     return `<section class="debrief-section"><h3>Compared with the previous configuration</h3><div class="pressure-list">
-      <div class="pressure-item"><span>Members at summit</span><strong>${delta(current.arrived, baseline.arrived)}</strong></div>
-      <div class="pressure-item"><span>Loads delivered</span><strong>${delta(current.deliveredSupplies, baseline.deliveredSupplies)}</strong></div>
+      <div class="pressure-item"><span>Demands completed</span><strong>${delta(current.completedDemands, baseline.completedDemands)}</strong></div>
+      <div class="pressure-item"><span>Payload delivered</span><strong>${delta(current.payloadThroughput, baseline.payloadThroughput)}</strong></div>
       <div class="pressure-item"><span>Stress</span><strong>${delta(current.playerStress, baseline.playerStress)}</strong></div>
-      <div class="pressure-item"><span>Reliable paths</span><strong>${delta(current.reliableEdges, baseline.reliableEdges)}</strong></div>
+      <div class="pressure-item"><span>Repeat traversals</span><strong>${delta(current.repeatTraversals, baseline.repeatTraversals)}</strong></div>
     </div></section>`;
   }
 
@@ -593,6 +645,14 @@
       state.selectedMapAgentId = elements.mapAgentSelect.value;
       renderMap();
       renderAgents();
+    });
+    elements.mapZoomIn.addEventListener("click", () => {
+      state.mapZoom = Math.min(2, state.mapZoom + 0.25);
+      renderMap();
+    });
+    elements.mapZoomOut.addEventListener("click", () => {
+      state.mapZoom = Math.max(0.75, state.mapZoom - 0.25);
+      renderMap();
     });
     elements.edgeLayer.addEventListener("pointerdown", (event) => {
       const edge = event.target.closest("[data-edge-id]");

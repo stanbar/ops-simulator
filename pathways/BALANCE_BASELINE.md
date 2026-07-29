@@ -1,6 +1,9 @@
-# Pathways Prototype Balance Baseline
+# Pathways Historical Prototype Balance Baseline
 
-Captured for GitHub issue #10 before gameplay tuning.
+Captured for GitHub issue #10 before gameplay tuning. Issue #17 replaced the
+one-way ascent with recurring mountain logistics, so this envelope is
+**superseded and does not gate current runs**. It remains here to document the
+behavior that motivated the redesign.
 
 ## Cohort
 
@@ -52,4 +55,4 @@ This baseline intentionally fails the target envelope:
 - Adaptive trails Consume by 23.1 percentage points instead of leading the strongest pure policy by at least 15 points.
 - Paired divergence exceeds the 60% minimum, so choices produce observable differences even though the success outcomes remain poorly balanced.
 
-The baseline is evidence for subsequent balancing tickets, not a target to preserve after those mechanics change.
+The baseline is evidence for subsequent balancing tickets, not a target to preserve after those mechanics change. Current reports compare delayed returns and early/middle/final behavior across horizon policies; destination-specific calibration belongs to the follow-up terrain and destination work.

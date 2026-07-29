@@ -28,7 +28,7 @@
       <div class="hero-copy">
         <p class="eyebrow">Five agents. One mountain. Different costs of attention and coordination.</p>
         <h1>Build a pathway that survives reality.</h1>
-        <p class="lede">Explore uncertain routes, stabilize what works, act from private judgment, and coordinate an expedition before the weather window closes.</p>
+        <p class="lede">Scout uncertain routes, consolidate pathways worth reusing, and move people and payload through a living mountain logistics network.</p>
         <div class="model-notice">
           <strong>Simulation, not assessment.</strong>
           This game models selected OPS concepts as explicit design assumptions. It does not validate OPS or assess your real personality.
@@ -101,7 +101,7 @@
 
       <div class="start-actions">
         <button class="primary-button" id="startButton" type="button">Begin expedition</button>
-        <span>12 simultaneous rounds · about 10–15 minutes</span>
+        <span>32 operation + traffic rounds · about 15–20 minutes</span>
       </div>
     </section>
 
@@ -109,9 +109,9 @@
       <div class="game-status" aria-live="polite">
         <div><small>Round</small><strong id="roundStatus">0 / 12</strong></div>
         <div><small>Weather</small><strong id="weatherStatus">Clear</strong></div>
-        <div><small>Shared supplies</small><strong id="supplyStatus">18</strong></div>
-        <div><small>At summit</small><strong id="summitStatus">0 / 5</strong></div>
-        <div><small>Loads delivered</small><strong id="deliveryStatus">0 / 3</strong></div>
+        <div><small>Route materials</small><strong id="supplyStatus">18</strong></div>
+        <div><small>Demands complete</small><strong id="summitStatus">0 / 5</strong></div>
+        <div><small>Payload delivered</small><strong id="deliveryStatus">0 / 2</strong></div>
         <button class="quiet-button" id="restartButton" type="button">Restart setup</button>
       </div>
 
@@ -124,6 +124,14 @@
         <button class="quiet-button" id="skipTutorialButton" type="button">Skip guidance</button>
       </div>
 
+      <section class="traffic-panel">
+        <div class="panel-heading">
+          <div><p class="eyebrow">Purposeful repeated traffic</p><h2>Logistics demands</h2></div>
+          <span class="truth-badge">Source → destination · subject · deadline</span>
+        </div>
+        <div class="traffic-demand-list" id="trafficDemandList"></div>
+      </section>
+
       <div class="game-layout">
         <section class="map-panel">
           <div class="panel-heading map-heading">
@@ -131,7 +139,11 @@
               <p class="eyebrow" id="scenarioEyebrow">Uncharted Range</p>
               <h2>Belief map</h2>
             </div>
-            <label class="agent-selector">Map perspective<select id="mapAgentSelect"></select></label>
+            <div class="map-controls">
+              <button class="quiet-button" id="mapZoomOut" type="button" aria-label="Zoom map out">−</button>
+              <button class="quiet-button" id="mapZoomIn" type="button" aria-label="Zoom map in">+</button>
+              <label class="agent-selector">Map perspective<select id="mapAgentSelect"></select></label>
+            </div>
           </div>
           <div class="map-legend">
             <span><i class="legend-line private"></i>Private belief</span>
@@ -147,6 +159,7 @@
                   <stop offset="1" stop-color="#0d171c"></stop>
                 </linearGradient>
                 <filter id="softGlow"><feGaussianBlur stdDeviation="5" result="blur"></feGaussianBlur><feMerge><feMergeNode in="blur"></feMergeNode><feMergeNode in="SourceGraphic"></feMergeNode></feMerge></filter>
+                <marker id="intentArrow" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="5" markerHeight="5" orient="auto-start-reverse"><path d="M 0 0 L 10 5 L 0 10 z" fill="#f7cb67"></path></marker>
               </defs>
               <rect width="1000" height="720" fill="url(#skyGradient)"></rect>
               <path class="mountain-silhouette back" d="M0 690 L128 520 L235 575 L390 310 L495 415 L640 200 L760 390 L865 285 L1000 680 Z"></path>
@@ -154,6 +167,7 @@
               <g id="edgeLayer"></g>
               <g id="nodeLayer"></g>
               <g id="agentLayer"></g>
+              <g id="payloadLayer"></g>
             </svg>
             <div class="map-callout" id="mapCallout" hidden></div>
           </div>
@@ -195,7 +209,7 @@
     <button class="dialog-close" data-close-dialog type="button" aria-label="Close">Close</button>
     <p class="eyebrow">Model boundary</p>
     <h2>What this simulator claims</h2>
-    <p>Pathways turns selected OPS terms into explicit game mechanics. Oe explores, Oi stabilizes, Di uses private decision authority, and De incorporates external commitments and needs. Observer/Decider controls which axis carries the larger savior–demon cost difference.</p>
+    <p>Pathways turns selected OPS terms into explicit logistics mechanics. Oe explores, Oi stabilizes, Di primarily updates private capability, and De primarily updates reciprocal or shared capability. Animal operations prepare pathway state; movement resolves afterward against declared traffic demands.</p>
     <p>The simulator tests whether those assumptions produce an intelligible strategy game. It is not evidence that the assumptions describe real people.</p>
     <h3>Four pathway layers</h3>
     <ul>
@@ -204,6 +218,7 @@
       <li>Personal mastery: what one agent can traverse reliably.</li>
       <li>Shared pathway: what the expedition can use at scale.</li>
     </ul>
+    <p>Sleep pays when the same agent later reuses a mastered route. Blast pays when later followers or shared payload reuse established infrastructure. Either investment can be mistimed when no relevant future traffic arrives.</p>
   </dialog>
 
   <dialog id="debriefDialog" class="debrief-dialog">
