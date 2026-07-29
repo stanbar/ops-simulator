@@ -88,6 +88,7 @@ Pathways separates destination demands, terrain, origin state, private belief, p
 - Changes take effect immediately on browser refresh.
 - Run `node pathways/engine.test.js` after Pathways tactical engine changes.
 - Run `node pathways/campaignEngine.test.js` after Pathways strategic campaign engine changes.
+- Run `node pathways/campaignApp.test.js` after Pathways campaign UI shell changes.
 - Run `node pathways/balance-benchmark.test.js` after benchmark changes and `node pathways/balance-benchmark.js` to inspect logistics and horizon behavior. The issue #10 envelope in `pathways/BALANCE_BASELINE.md` is historical only.
 - Run `node simulation.test.js` after Spectrum engine changes.
 - Click agents/voids in the canvas for debug inspector
