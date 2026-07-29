@@ -986,6 +986,38 @@
     };
   }
 
+  function runCounterfactualReplay(baseOptions = {}, policies = []) {
+    const turns = baseOptions.turns || 5;
+    const results = [];
+
+    for (const policy of policies) {
+      const campaignOptions = Object.assign({}, baseOptions, policy.campaignOverrides || {});
+      const campaign = createCampaign(campaignOptions);
+      const actionsPerTurn = policy.actionsPerTurn || [];
+
+      for (let t = 0; t < turns; t++) {
+        const turnActions = actionsPerTurn[t] || [];
+        stepTurn(campaign, turnActions);
+      }
+
+      const snapshot = getSnapshot(campaign);
+      const missionPreset = MISSION_PRESETS[baseOptions.mission || "entrepreneurship"];
+      const diagnostics = evaluateCampaignDiagnostics(campaign, missionPreset);
+
+      results.push({
+        name: policy.name || "Unnamed Policy",
+        snapshot: snapshot,
+        history: snapshot.history || [],
+        diagnostics: diagnostics
+      });
+    }
+
+    return {
+      baseOptions: baseOptions,
+      policies: results
+    };
+  }
+
   function getSnapshot(campaignState) {
     const clone = deepClone(campaignState);
     delete clone.worldRng;
@@ -1010,6 +1042,7 @@
     stepTurn,
     evaluateViability,
     evaluateCampaignDiagnostics,
+    runCounterfactualReplay,
     getSnapshot,
     validateInvariants
   };
