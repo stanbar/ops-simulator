@@ -13,6 +13,23 @@
     evidence: "evidence"
   });
 
+  const TIER_THRESHOLDS = Object.freeze([
+    { tier: 1, minLevel: 0.0 },
+    { tier: 2, minLevel: 3.0 },
+    { tier: 3, minLevel: 6.0 },
+    { tier: 4, minLevel: 10.0 }
+  ]);
+
+  function getDomainTier(level) {
+    let currentTier = 1;
+    for (const t of TIER_THRESHOLDS) {
+      if (level >= t.minLevel) {
+        currentTier = t.tier;
+      }
+    }
+    return currentTier;
+  }
+
   const DOMAIN_PRESETS = Object.freeze({
     "body-health": Object.freeze({
       id: "body-health",
@@ -43,7 +60,7 @@
       obligations: Object.freeze({ materials: 3 }),
       outputs: Object.freeze({ materials: 15 }),
       dependencyEdges: Object.freeze([
-        Object.freeze({ target: "body-health", weight: 0.4 })
+        Object.freeze({ target: "body-health", weight: 0.4, substituteTarget: "practical-foundations", maxSubstitution: 0.2 })
       ])
     }),
     "practical-foundations": Object.freeze({
@@ -118,16 +135,85 @@
     })
   });
 
-  // Mulberry32 PRNG for seeded determinism
-  function createPRNG(seed) {
-    let s = seed >>> 0;
-    return function next() {
-      s = (s + 0x6d2b79f5) | 0;
-      let t = Math.imul(s ^ (s >>> 15), 1 | s);
-      t = (t + Math.imul(t ^ (t >>> 7), 61 | t)) ^ t;
-      return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
-    };
-  }
+  const ORIGIN_PRESETS = Object.freeze({
+    "balanced-starter": Object.freeze({
+      id: "balanced-starter",
+      name: "Balanced Starter",
+      description: "A balanced baseline start with moderate initial resources and healthy buffers.",
+      initialResources: Object.freeze({ attention: 20, vitality: 20, materials: 50, trust: 20, evidence: 20 }),
+      domainOverrides: Object.freeze({})
+    }),
+    "struggling-body": Object.freeze({
+      id: "struggling-body",
+      name: "Struggling Body",
+      description: "Low physical health condition and depleted vitality requiring early recovery.",
+      initialResources: Object.freeze({ attention: 20, vitality: 5, materials: 30, trust: 15, evidence: 20 }),
+      domainOverrides: Object.freeze({
+        "body-health": { level: 0.8, conditionBuffer: 25.0 }
+      })
+    }),
+    "asset-rich-isolated": Object.freeze({
+      id: "asset-rich-isolated",
+      name: "Asset Rich & Isolated",
+      description: "Strong financial livelihood but low relational trust and family belonging.",
+      initialResources: Object.freeze({ attention: 20, vitality: 20, materials: 150, trust: 5, evidence: 20 }),
+      domainOverrides: Object.freeze({
+        "livelihood-money": { level: 3.5, conditionBuffer: 100.0 },
+        "family-belonging": { level: 0.5, conditionBuffer: 40.0 }
+      })
+    }),
+    "scholar-monk": Object.freeze({
+      id: "scholar-monk",
+      name: "Scholar Monk",
+      description: "High epistemic understanding and evidence, but minimal material wealth.",
+      initialResources: Object.freeze({ attention: 25, vitality: 20, materials: 10, trust: 15, evidence: 60 }),
+      domainOverrides: Object.freeze({
+        "understanding-judgment": { level: 3.5, conditionBuffer: 100.0 },
+        "livelihood-money": { level: 0.5, conditionBuffer: 50.0 }
+      })
+    })
+  });
+
+  const MISSION_PRESETS = Object.freeze({
+    entrepreneurship: Object.freeze({
+      id: "entrepreneurship",
+      name: "Entrepreneurship Launch",
+      description: "Build a thriving material livelihood and practical system while maintaining health viability.",
+      targetLevels: Object.freeze({ "livelihood-money": 5.0, "practical-foundations": 4.0 }),
+      viabilityFloors: Object.freeze({ "body-health": { conditionBuffer: 20.0, minLevel: 0.8 } })
+    }),
+    scholarship: Object.freeze({
+      id: "scholarship",
+      name: "Scholarship & Inquiry",
+      description: "Achieve deep understanding and knowledge contribution with basic financial stability.",
+      targetLevels: Object.freeze({ "understanding-judgment": 5.0, "meaning-contribution": 4.0 }),
+      viabilityFloors: Object.freeze({ "livelihood-money": { minLevel: 1.0 } })
+    }),
+    "family-stewardship": Object.freeze({
+      id: "family-stewardship",
+      name: "Family Stewardship",
+      description: "Nurture deep relational trust and physical health across generations.",
+      targetLevels: Object.freeze({ "family-belonging": 5.0, "body-health": 4.0 }),
+      viabilityFloors: Object.freeze({ "body-health": { conditionBuffer: 30.0 } })
+    }),
+    "holistic-resilience": Object.freeze({
+      id: "holistic-resilience",
+      name: "Holistic Resilience",
+      description: "Maintain a balanced, resilient life across all six capability domains.",
+      targetLevels: Object.freeze({
+        "body-health": 3.0,
+        "livelihood-money": 3.0,
+        "practical-foundations": 3.0,
+        "family-belonging": 3.0,
+        "understanding-judgment": 3.0,
+        "meaning-contribution": 3.0
+      }),
+      viabilityFloors: Object.freeze({
+        "body-health": { conditionBuffer: 20.0 },
+        "livelihood-money": { conditionBuffer: 20.0 }
+      })
+    })
+  });
 
   function deepClone(obj) {
     return JSON.parse(JSON.stringify(obj));
@@ -203,22 +289,28 @@
 
   function createCampaign(options = {}) {
     const seed = typeof options.seed === "number" ? options.seed : 42;
+    const originKey = options.origin && ORIGIN_PRESETS[options.origin] ? options.origin : "balanced-starter";
+    const originPreset = ORIGIN_PRESETS[originKey];
+
     const initialResources = Object.assign(
-      {
-        attention: 20,
-        vitality: 20,
-        materials: 50,
-        trust: 20,
-        evidence: 20
-      },
+      {},
+      originPreset.initialResources,
       options.initialResources || {}
     );
 
     const domains = {};
     for (const [id, preset] of Object.entries(DOMAIN_PRESETS)) {
       domains[id] = deepClone(preset);
+      domains[id].tier = getDomainTier(domains[id].level);
+
+      if (originPreset.domainOverrides && originPreset.domainOverrides[id]) {
+        Object.assign(domains[id], originPreset.domainOverrides[id]);
+        domains[id].tier = getDomainTier(domains[id].level);
+      }
+
       if (options.domains && options.domains[id]) {
         Object.assign(domains[id], options.domains[id]);
+        domains[id].tier = getDomainTier(domains[id].level);
       }
     }
 
@@ -226,6 +318,7 @@
       seed: seed,
       turn: 1,
       phase: "updateWorld",
+      origin: originKey,
       resources: initialResources,
       domains: domains,
       history: []
@@ -241,36 +334,98 @@
     const currentTurn = campaignState.turn;
     const events = [];
 
-    // Phase 1: updateWorld - Process passive outputs & domain maintenance
+    // Phase 1: updateWorld - Process passive outputs & inter-domain dependencies
     campaignState.phase = "updateWorld";
+
     for (const [id, domain] of Object.entries(campaignState.domains)) {
-      // Process outputs
+      // Calculate dependency bottleneck multiplier
+      let bottleneckMultiplier = 1.0;
+      if (Array.isArray(domain.dependencyEdges)) {
+        for (const edge of domain.dependencyEdges) {
+          const parent = campaignState.domains[edge.target];
+          if (parent) {
+            const parentHealth = parent.conditionBuffer / 100.0;
+            if (parentHealth < 0.5) {
+              let factor = (1 - edge.weight) + edge.weight * (parentHealth / 0.5);
+              // Check partial substitution
+              if (edge.substituteTarget && campaignState.domains[edge.substituteTarget]) {
+                const subParent = campaignState.domains[edge.substituteTarget];
+                const subHealth = subParent.conditionBuffer / 100.0;
+                if (subHealth > 0.5) {
+                  const subBonus = (edge.maxSubstitution || 0.1) * (subHealth - 0.5);
+                  factor = Math.min(1.0, factor + subBonus);
+                }
+              }
+              bottleneckMultiplier *= factor;
+              events.push({
+                type: "dependency_bottleneck",
+                domain: id,
+                parentDomain: edge.target,
+                factor: factor
+              });
+            }
+          }
+        }
+      }
+
+      // Process domain outputs (scaled by level and dependency bottleneck)
       for (const [resKey, amount] of Object.entries(domain.outputs || {})) {
         if (amount > 0 && RESOURCE_TYPES[resKey]) {
-          campaignState.resources[resKey] = (campaignState.resources[resKey] || 0) + amount * domain.level;
+          const actualOutput = amount * domain.level * bottleneckMultiplier;
+          campaignState.resources[resKey] = (campaignState.resources[resKey] || 0) + actualOutput;
           events.push({
             type: "passive_output",
             domain: id,
             resource: resKey,
-            amount: amount * domain.level
+            amount: actualOutput
           });
         }
       }
 
-      // Process baseline obligations (consume condition buffer or resources)
-      for (const [resKey, cost] of Object.entries(domain.obligations || {})) {
-        const totalCost = cost * domain.level;
-        if (campaignState.resources[resKey] && campaignState.resources[resKey] >= totalCost) {
-          campaignState.resources[resKey] -= totalCost;
+      // Calculate dynamic maintenance obligation cost
+      // Pathway quality lowers maintenance demand
+      const pathwayEfficiency = 1.0 + 0.5 * (domain.personalPathwayQuality + domain.sharedPathwayQuality);
+      for (const [resKey, baseCost] of Object.entries(domain.obligations || {})) {
+        const scaledCost = (baseCost * domain.level * (1 + domain.volatility)) / pathwayEfficiency;
+        if (campaignState.resources[resKey] && campaignState.resources[resKey] >= scaledCost) {
+          campaignState.resources[resKey] -= scaledCost;
         } else {
           // Drain condition buffer if resources are lacking
-          domain.conditionBuffer = Math.max(0, domain.conditionBuffer - totalCost * 5);
+          const deficit = scaledCost - (campaignState.resources[resKey] || 0);
+          campaignState.resources[resKey] = 0;
+          domain.conditionBuffer = Math.max(0, domain.conditionBuffer - deficit * 5);
+          
           events.push({
             type: "maintenance_deficit",
             domain: id,
-            unmetCost: totalCost
+            unmetCost: deficit
           });
+
+          // Neglect decay: If condition buffer is completely 0, degrade domain level
+          if (domain.conditionBuffer === 0) {
+            const levelLoss = Math.min(domain.level, 0.05);
+            domain.level = Math.max(0, domain.level - levelLoss);
+            events.push({
+              type: "level_degradation",
+              domain: id,
+              levelLoss: levelLoss,
+              newLevel: domain.level
+            });
+          }
         }
+      }
+
+      // Check tier transition
+      const newTier = getDomainTier(domain.level);
+      if (newTier !== domain.tier) {
+        const oldTier = domain.tier;
+        domain.tier = newTier;
+        events.push({
+          type: "tier_transition",
+          domain: id,
+          oldTier: oldTier,
+          newTier: newTier
+        });
       }
     }
 
@@ -302,16 +457,41 @@
       }
 
       campaignState.phase = "resolve";
+
       // Execute action
-      if (action.type === "invest_domain" && action.targetDomain && campaignState.domains[action.targetDomain]) {
-        const domain = campaignState.domains[action.targetDomain];
-        domain.level += 0.1;
-        domain.conditionBuffer = Math.min(100, domain.conditionBuffer + 5);
+      const targetId = action.targetDomain;
+      const targetDomain = targetId && campaignState.domains[targetId] ? campaignState.domains[targetId] : null;
+
+      if (action.type === "maintain" && targetDomain) {
+        targetDomain.conditionBuffer = Math.min(100.0, targetDomain.conditionBuffer + 25.0);
+        events.push({
+          type: "action_executed",
+          actionType: "maintain",
+          targetDomain: targetId,
+          newConditionBuffer: targetDomain.conditionBuffer
+        });
+      } else if ((action.type === "acquire" || action.type === "invest_domain") && targetDomain) {
+        targetDomain.level += 0.2;
+        targetDomain.conditionBuffer = Math.min(100.0, targetDomain.conditionBuffer + 5.0);
+        
+        // Check tier transition
+        const newTier = getDomainTier(targetDomain.level);
+        if (newTier !== targetDomain.tier) {
+          const oldTier = targetDomain.tier;
+          targetDomain.tier = newTier;
+          events.push({
+            type: "tier_transition",
+            domain: targetId,
+            oldTier: oldTier,
+            newTier: newTier
+          });
+        }
+
         events.push({
           type: "action_executed",
           actionType: action.type,
-          targetDomain: action.targetDomain,
-          newLevel: domain.level
+          targetDomain: targetId,
+          newLevel: targetDomain.level
         });
       } else {
         events.push({
@@ -344,6 +524,34 @@
     };
   }
 
+  function evaluateViability(campaignState, mission) {
+    if (!campaignState || !mission) {
+      return { isViable: false, violations: ["Missing campaignState or mission parameter"] };
+    }
+
+    const violations = [];
+    const floors = mission.viabilityFloors || {};
+
+    for (const [domainId, floor] of Object.entries(floors)) {
+      const domain = campaignState.domains[domainId];
+      if (!domain) {
+        violations.push(`Domain ${domainId} not found in campaign`);
+        continue;
+      }
+      if (typeof floor.minLevel === "number" && domain.level < floor.minLevel) {
+        violations.push(`Domain ${domainId} level ${domain.level.toFixed(2)} is below minimum floor ${floor.minLevel}`);
+      }
+      if (typeof floor.conditionBuffer === "number" && domain.conditionBuffer < floor.conditionBuffer) {
+        violations.push(`Domain ${domainId} condition buffer ${domain.conditionBuffer.toFixed(2)} is below minimum floor ${floor.conditionBuffer}`);
+      }
+    }
+
+    return {
+      isViable: violations.length === 0,
+      violations: violations
+    };
+  }
+
   function getSnapshot(campaignState) {
     const clone = deepClone(campaignState);
     return deepFreeze(clone);
@@ -352,8 +560,12 @@
   return {
     RESOURCE_TYPES,
     DOMAIN_PRESETS,
+    ORIGIN_PRESETS,
+    MISSION_PRESETS,
+    getDomainTier,
     createCampaign,
     stepTurn,
+    evaluateViability,
     getSnapshot,
     validateInvariants
   };
