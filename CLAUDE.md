@@ -4,21 +4,25 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## Project Overview
 
-This is the **BCM (Binary Cognition Mechanics) Spectrum Simulator** - an agent-based simulation built in p5.js that models collective problem-solving behavior. Autonomous agents compete to solve "voids" (problems) using "keys" (solutions) in a circular spectrum space [0-359 degrees].
+This repository contains two exploratory OPS/BCM simulations:
+
+- **Pathways** (`pathways/`): a turn-based five-agent mountain expedition with a pure seeded engine and SVG browser UI.
+- **Spectrum** (`spectrum/` + root `simulation.js`): the original p5.js agent ecology where agents solve voids with keys in a circular spectrum.
 
 The simulation explores how collective intelligence emerges from individual cognitive constraints and specialization, grounded in Jungian psychology concepts.
 
 ## Running the Project
 
-**No build system** - this is a single-file browser application.
+**No build system** - both experiences are static browser applications.
 
-- Open `index.html` directly in a browser
-- All code is inline JavaScript within `index.html`
-- Uses p5.js v1.9.2 loaded from CDN
+- Serve the repository over HTTP, for example with `python3 -m http.server 8080`.
+- Open `/` for the simulator chooser, `/pathways/` for Pathways, or `/spectrum/` for Spectrum.
+- Spectrum uses p5.js v1.9.2 loaded from a CDN.
+- Pathways has no runtime dependencies.
 
 ## Architecture
 
-### Single File Structure (`index.html` ~1300 lines)
+### Spectrum
 
 ```
 Config (CFG object)           - All tunable parameters
@@ -34,7 +38,19 @@ World Management:
 UI & Rendering                - p5.js canvas, control panel, inspector
 ```
 
-### Core Mechanics
+### Pathways
+
+```
+pathways/engine.js            - Seeded simulation, coin costs, maps, actions, scenarios
+pathways/app.js               - DOM/SVG application and debrief
+pathways/styles.css           - Responsive visual system
+pathways/engine.test.js       - Deterministic and behavioral tests
+pathways/README.md            - Model contract and epistemic boundary
+```
+
+Pathways separates terrain, private belief, personal mastery, and shared infrastructure. Do not reveal true terrain in the UI before debrief. Animal costs are derived from `Oi/Oe`, `Di/De`, and Observer/Decider polarity; no action may be hard-locked because it is a demon.
+
+### Spectrum Core Mechanics
 
 **Circular Spectrum Distance**: All matching uses `circDist(a, b)` - the minimum distance on a 360-degree circle. A key matches a void when `circDist(key.val, void.val) <= MATCH_EPS` (default 2).
 
@@ -59,15 +75,21 @@ UI & Rendering                - p5.js canvas, control panel, inspector
 
 ## Key Files
 
-- `index.html` - Complete simulation (all code inline)
+- `index.html` - Simulator chooser
+- `pathways/` - Pathways engine, tests, SVG application, and model contract
+- `spectrum/index.html` - Spectrum browser shell; loads the root `simulation.js`
+- `simulation.js` - Spectrum simulation engine and p5.js rendering
 - `SPECIFICATION.md` - Full technical spec v1.1 (entity definitions, rules, parameters)
 - `NARRATIVE.md` - Design discussions explaining the "why" behind mechanics
 - `ops-ebook.md` - OPS personality system background (512 types, functions, animals)
 
 ## Development Notes
 
-- Changes take effect immediately on browser refresh
+- Changes take effect immediately on browser refresh.
+- Run `node pathways/engine.test.js` after Pathways engine changes.
+- Run `node simulation.test.js` after Spectrum engine changes.
 - Click agents/voids in the canvas for debug inspector
 - Download telemetry JSON via UI button for analysis
 - Agent diversity evolves via genetic mutation - expect non-uniform populations
 - All configuration is in the `CFG` object at the top of the script
+- Keep the two engines independent until a shared causal-state bridge has explicit tests. See `README.md` for likely future fusion points.

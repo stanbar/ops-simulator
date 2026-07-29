@@ -1,0 +1,216 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="theme-color" content="#101a20">
+  <title>Pathways - An exploratory OPS strategy simulator</title>
+  <link rel="icon" href="../favicon.ico">
+  <link rel="stylesheet" href="styles.css?v=1">
+</head>
+<body>
+  <header class="site-header">
+    <a class="brand" href="../" aria-label="Back to simulator collection">
+      <span class="brand-mark">P</span>
+      <span>
+        <strong>Pathways</strong>
+        <small>Exploratory OPS strategy simulator</small>
+      </span>
+    </a>
+    <nav>
+      <a href="../spectrum/">Spectrum simulator</a>
+      <button class="quiet-button" id="aboutButton" type="button">Model notes</button>
+    </nav>
+  </header>
+
+  <main id="app">
+    <section class="start-screen" id="startScreen">
+      <div class="hero-copy">
+        <p class="eyebrow">Five agents. One mountain. Different costs of attention and coordination.</p>
+        <h1>Build a pathway that survives reality.</h1>
+        <p class="lede">Explore uncertain routes, stabilize what works, act from private judgment, and coordinate an expedition before the weather window closes.</p>
+        <div class="model-notice">
+          <strong>Simulation, not assessment.</strong>
+          This game models selected OPS concepts as explicit design assumptions. It does not validate OPS or assess your real personality.
+        </div>
+      </div>
+
+      <div class="setup-grid">
+        <section class="setup-panel scenario-panel">
+          <div class="section-heading">
+            <span class="step-number">01</span>
+            <div>
+              <h2>Choose the mountain</h2>
+              <p>World pressure changes which routes remain viable.</p>
+            </div>
+          </div>
+          <div class="scenario-grid" id="scenarioGrid"></div>
+          <div class="custom-controls" id="customControls" hidden>
+            <label>Environmental uncertainty <output id="uncertaintyOutput">50%</output><input id="uncertaintyInput" type="range" min="0" max="100" value="50"></label>
+            <label>Terrain volatility <output id="volatilityOutput">50%</output><input id="volatilityInput" type="range" min="0" max="100" value="50"></label>
+            <label>Social interdependence <output id="interdependenceOutput">50%</output><input id="interdependenceInput" type="range" min="0" max="100" value="50"></label>
+            <label>Priority disagreement <output id="disagreementOutput">50%</output><input id="disagreementInput" type="range" min="0" max="100" value="50"></label>
+          </div>
+        </section>
+
+        <section class="setup-panel coins-panel">
+          <div class="section-heading">
+            <span class="step-number">02</span>
+            <div>
+              <h2>Configure navigation costs</h2>
+              <p>Coins affect subjective effort, never action availability.</p>
+            </div>
+          </div>
+          <div class="coin-row">
+            <div><strong>Observer savior</strong><small>Explore or stabilize</small></div>
+            <div class="segmented" data-setting="observer">
+              <button type="button" data-value="Oi" class="selected">Oi</button>
+              <button type="button" data-value="Oe">Oe</button>
+            </div>
+          </div>
+          <div class="coin-row">
+            <div><strong>Decider savior</strong><small>Private or external authority</small></div>
+            <div class="segmented" data-setting="decider">
+              <button type="button" data-value="Di" class="selected">Di</button>
+              <button type="button" data-value="De">De</button>
+            </div>
+          </div>
+          <div class="coin-row">
+            <div><strong>Polarized axis</strong><small>Where the larger imbalance lives</small></div>
+            <div class="segmented wide" data-setting="polarity">
+              <button type="button" data-value="Observer" class="selected">Observer</button>
+              <button type="button" data-value="Decider">Decider</button>
+            </div>
+          </div>
+          <div class="animal-order" id="animalOrder"></div>
+        </section>
+
+        <section class="setup-panel goals-panel">
+          <div class="section-heading">
+            <span class="step-number">03</span>
+            <div>
+              <h2>Choose what you want</h2>
+              <p>Your goal is generated independently from your coins.</p>
+            </div>
+          </div>
+          <div class="goal-grid" id="goalGrid"></div>
+          <label class="seed-field">World seed<input id="seedInput" value="pathways-001" spellcheck="false"></label>
+          <label class="tutorial-toggle"><input id="tutorialInput" type="checkbox" checked><span>Guide me through the four animal operations</span></label>
+        </section>
+      </div>
+
+      <div class="start-actions">
+        <button class="primary-button" id="startButton" type="button">Begin expedition</button>
+        <span>12 simultaneous rounds · about 10–15 minutes</span>
+      </div>
+    </section>
+
+    <section class="game-screen" id="gameScreen" hidden>
+      <div class="game-status" aria-live="polite">
+        <div><small>Round</small><strong id="roundStatus">0 / 12</strong></div>
+        <div><small>Weather</small><strong id="weatherStatus">Clear</strong></div>
+        <div><small>Shared supplies</small><strong id="supplyStatus">18</strong></div>
+        <div><small>At summit</small><strong id="summitStatus">0 / 5</strong></div>
+        <div><small>Loads delivered</small><strong id="deliveryStatus">0 / 3</strong></div>
+        <button class="quiet-button" id="restartButton" type="button">Restart setup</button>
+      </div>
+
+      <div class="tutorial-bar" id="tutorialBar" hidden>
+        <div>
+          <small>Guided move <span id="tutorialCount">1 / 4</span></small>
+          <strong id="tutorialTitle">Consume: scout an uncertain route</strong>
+          <p id="tutorialCopy"></p>
+        </div>
+        <button class="quiet-button" id="skipTutorialButton" type="button">Skip guidance</button>
+      </div>
+
+      <div class="game-layout">
+        <section class="map-panel">
+          <div class="panel-heading map-heading">
+            <div>
+              <p class="eyebrow" id="scenarioEyebrow">Uncharted Range</p>
+              <h2>Belief map</h2>
+            </div>
+            <label class="agent-selector">Map perspective<select id="mapAgentSelect"></select></label>
+          </div>
+          <div class="map-legend">
+            <span><i class="legend-line private"></i>Private belief</span>
+            <span><i class="legend-line shared"></i>Shared infrastructure</span>
+            <span><i class="legend-line unknown"></i>Unknown possibility</span>
+            <span><i class="legend-dot"></i>Expedition member</span>
+          </div>
+          <div class="mountain-wrap">
+            <svg id="mountainSvg" viewBox="0 0 1000 720" role="img" aria-label="Interactive mountain pathway map">
+              <defs>
+                <linearGradient id="skyGradient" x1="0" x2="0" y1="0" y2="1">
+                  <stop offset="0" stop-color="#152a32"></stop>
+                  <stop offset="1" stop-color="#0d171c"></stop>
+                </linearGradient>
+                <filter id="softGlow"><feGaussianBlur stdDeviation="5" result="blur"></feGaussianBlur><feMerge><feMergeNode in="blur"></feMergeNode><feMergeNode in="SourceGraphic"></feMergeNode></feMerge></filter>
+              </defs>
+              <rect width="1000" height="720" fill="url(#skyGradient)"></rect>
+              <path class="mountain-silhouette back" d="M0 690 L128 520 L235 575 L390 310 L495 415 L640 200 L760 390 L865 285 L1000 680 Z"></path>
+              <path class="mountain-silhouette front" d="M0 720 L170 565 L300 610 L520 205 L695 540 L810 430 L1000 720 Z"></path>
+              <g id="edgeLayer"></g>
+              <g id="nodeLayer"></g>
+              <g id="agentLayer"></g>
+            </svg>
+            <div class="map-callout" id="mapCallout" hidden></div>
+          </div>
+        </section>
+
+        <aside class="xray-panel">
+          <div class="panel-heading">
+            <div>
+              <p class="eyebrow">X-ray mode</p>
+              <h2>Five private models</h2>
+            </div>
+            <span class="truth-badge">Ground truth hidden</span>
+          </div>
+          <div class="agent-list" id="agentList"></div>
+        </aside>
+      </div>
+
+      <section class="actions-panel">
+        <div class="panel-heading">
+          <div>
+            <p class="eyebrow">Choose one concrete operation</p>
+            <h2>Your next move</h2>
+          </div>
+          <div class="player-state" id="playerState"></div>
+        </div>
+        <div class="action-grid" id="actionGrid"></div>
+      </section>
+
+      <section class="timeline-panel">
+        <div class="panel-heading">
+          <div><p class="eyebrow">Causal trace</p><h2>What just happened</h2></div>
+        </div>
+        <div class="timeline" id="timeline"></div>
+      </section>
+    </section>
+  </main>
+
+  <dialog id="aboutDialog" class="info-dialog">
+    <button class="dialog-close" data-close-dialog type="button" aria-label="Close">Close</button>
+    <p class="eyebrow">Model boundary</p>
+    <h2>What this simulator claims</h2>
+    <p>Pathways turns selected OPS terms into explicit game mechanics. Oe explores, Oi stabilizes, Di uses private decision authority, and De incorporates external commitments and needs. Observer/Decider controls which axis carries the larger savior–demon cost difference.</p>
+    <p>The simulator tests whether those assumptions produce an intelligible strategy game. It is not evidence that the assumptions describe real people.</p>
+    <h3>Four pathway layers</h3>
+    <ul>
+      <li>Terrain: what objectively exists.</li>
+      <li>Belief: what each agent currently thinks exists.</li>
+      <li>Personal mastery: what one agent can traverse reliably.</li>
+      <li>Shared pathway: what the expedition can use at scale.</li>
+    </ul>
+  </dialog>
+
+  <dialog id="debriefDialog" class="debrief-dialog">
+    <div id="debriefContent"></div>
+  </dialog>
+
+  <script src="engine.js?v=1"></script>
+  <script src="app.js?v=1"></script>
+</body>
+</html>
