@@ -38,10 +38,13 @@ The Spectrum page loads p5.js from a CDN. Pathways has no runtime dependencies.
 
 ```bash
 node pathways/engine.test.js
+node pathways/balance-benchmark.test.js
 node simulation.test.js
 ```
 
 The Pathways suite covers deterministic replay, coin-derived cost ordering, action availability, counterfactual coin flips, separate pathway layers, false consensus, and benchmark scenario execution.
+
+Run `node pathways/balance-benchmark.js` for the fixed-cohort policy report. The current prototype's intentionally failing measurements and the future acceptance envelope are recorded in `pathways/BALANCE_BASELINE.md`.
 
 ## Future fusion boundary
 

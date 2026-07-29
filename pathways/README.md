@@ -62,6 +62,20 @@ Coordination emerges from visible route commitments. There is no separate voting
 - Supply Convoy: high interdependence and carrying-capacity pressure.
 - Confidently Wrong: four sincere maps agree on a blocked route while one map contradicts them.
 
+## Balance benchmark
+
+`balance-benchmark.js` runs a committed 160-case cohort against Sleep-only, Consume-only, Blast-only, Play-only, and a state-responsive Adaptive policy. It reports success, arrivals, payload, reliable shared routes, stranding, player stress and stamina, rounds, and dominant failure reasons.
+
+The Adaptive policy uses only visible pressure, stamina, stress, scenario uncertainty, and interdependence. It does not inspect hidden terrain truth. Paired comparisons preserve seed, scenario, profile, goal, terrain, and other-agent initialization while changing only the player policy.
+
+```bash
+node pathways/balance-benchmark.js
+node pathways/balance-benchmark.js --json
+node pathways/balance-benchmark.test.js
+```
+
+See `BALANCE_BASELINE.md` for the prototype measurements, the material-divergence definition, and the intentionally failing balance verdict captured before tuning.
+
 ## Technical boundary
 
-`engine.js` is a pure seeded simulation module usable from the browser or CommonJS tests. `app.js` owns DOM and SVG rendering. UI code must not alter simulation outcomes or reveal terrain ground truth before debrief.
+`engine.js` is a pure seeded simulation module usable from the browser or CommonJS tests. `balance-benchmark.js` exercises that public engine without browser state. `app.js` owns DOM and SVG rendering. UI code must not alter simulation outcomes or reveal terrain ground truth before debrief.

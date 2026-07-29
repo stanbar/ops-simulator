@@ -87,6 +87,7 @@ Pathways separates terrain, private belief, personal mastery, and shared infrast
 
 - Changes take effect immediately on browser refresh.
 - Run `node pathways/engine.test.js` after Pathways engine changes.
+- Run `node pathways/balance-benchmark.test.js` after benchmark changes and `node pathways/balance-benchmark.js` to inspect the current balance envelope.
 - Run `node simulation.test.js` after Spectrum engine changes.
 - Click agents/voids in the canvas for debug inspector
 - Download telemetry JSON via UI button for analysis
