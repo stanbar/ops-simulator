@@ -228,6 +228,10 @@
     <h2 style="font-size: 18px; margin-bottom: 12px;">Active Polarity Pressures</h2>
     <div class="pressure-panel" id="pressureBar"></div>
 
+    <!-- Autonomous Collaborator Section -->
+    <h2 style="font-size: 20px; margin-bottom: 14px;">Autonomous Collaborator Network</h2>
+    <div class="debrief-panel" id="collaboratorPanel" style="margin-bottom: 28px;"></div>
+
     <!-- 6 Capability Domains -->
     <h2 style="font-size: 20px; margin-bottom: 14px;">Capability Domains</h2>
     <div class="domain-grid-6" id="domainGrid"></div>
@@ -315,6 +319,56 @@
               </div>
             </div>
           `).join("");
+
+        // Render Collaborator Panel
+        const collab = renderData.collaborator;
+        const collabEl = document.getElementById("collaboratorPanel");
+        if (collabEl) {
+          if (collab && collab.isRecruited) {
+            collabEl.innerHTML = `
+              <div style="display:flex; justify-space-between; align-items:center; flex-wrap:wrap; gap:12px;">
+                <div>
+                  <h3 style="margin:0; font-size:16px;">${collab.name} <small style="color:var(--accent); font-weight:normal;">(${collab.profileLabel})</small></h3>
+                  <p style="margin:4px 0 0; font-size:12px; color:var(--muted);">Alignment: ${collab.alignmentPercent}% | Overhead: ${collab.compensationRate} materials & 1 trust / turn</p>
+                  <p style="margin:4px 0 0; font-size:12px; color:var(--teal);">Last action: ${collab.lastAutonomousAction}</p>
+                </div>
+                <div style="display:flex; align-items:center; gap:8px;">
+                  <label style="font-size:12px; color:var(--muted);">Role Focus:</label>
+                  <select id="collabRoleSelect" style="padding:6px 10px; border-radius:8px; background:var(--surface-3); color:var(--text); border:1px solid var(--line);">
+                    <option value="production" ${collab.assignedRole === 'production' ? 'selected' : ''}>Production</option>
+                    <option value="maintenance" ${collab.assignedRole === 'maintenance' ? 'selected' : ''}>Maintenance</option>
+                    <option value="exploration" ${collab.assignedRole === 'exploration' ? 'selected' : ''}>Exploration</option>
+                  </select>
+                </div>
+              </div>
+            `;
+            const roleSel = document.getElementById("collabRoleSelect");
+            if (roleSel) {
+              roleSel.addEventListener("change", function () {
+                app.dispatchTurn([{ type: "assign_collaborator_role", role: this.value }]);
+                updateUI();
+              });
+            }
+          } else {
+            const canRecruit = collab && collab.eligible;
+            collabEl.innerHTML = `
+              <div style="display:flex; justify-space-between; align-items:center; flex-wrap:wrap; gap:12px;">
+                <div>
+                  <h3 style="margin:0; font-size:15px; color:var(--muted);">Network Collaborator Slot (Unrecruited)</h3>
+                  <p style="margin:4px 0 0; font-size:12px; color:var(--muted);">${canRecruit ? 'Eligible for recruitment! Costs 25 materials & 15 trust.' : 'Prerequisites: 40 materials, 30 trust, Tier 2 domain.'}</p>
+                </div>
+                <button type="button" id="recruitBtn" style="padding:8px 16px; border-radius:8px; border:none; font-weight:bold; font-size:13px; cursor:${canRecruit ? 'pointer' : 'not-allowed'}; background:${canRecruit ? 'var(--teal)' : 'var(--surface-3)'}; color:${canRecruit ? 'var(--bg)' : 'var(--muted)'};" ${canRecruit ? '' : 'disabled'}>Recruit Alex</button>
+              </div>
+            `;
+            const recBtn = document.getElementById("recruitBtn");
+            if (recBtn && canRecruit) {
+              recBtn.addEventListener("click", function () {
+                app.dispatchTurn([{ type: "recruit_collaborator" }]);
+                updateUI();
+              });
+            }
+          }
+        }
 
         // Render Domain Grid
         document.getElementById("domainGrid").innerHTML = Object.values(renderData.domains)

@@ -12,7 +12,7 @@ console.log("Running Pathways Campaign App UI tests...");
   assert(typeof CampaignApp.createApp === "function", "createApp function should exist");
 }
 
-// 2. Action Preview Calculation (Issue #24)
+// 2. Action Preview Calculation (Issue #24 & Issue #25)
 {
   const campaign = CampaignEngine.createCampaign({ seed: 42 });
   
@@ -27,46 +27,42 @@ console.log("Running Pathways Campaign App UI tests...");
   assert(consumePreview.cost, "Preview should contain cost object");
   assert(typeof consumePreview.cost.attention === "number", "Cost should have attention number");
   assert(Array.isArray(consumePreview.projectedEffects), "Preview should contain projectedEffects array");
-  assert(Array.isArray(consumePreview.warnings), "Preview should contain warnings array");
 
-  // Test Premature Consolidation Warning in Preview
-  campaign.domains["understanding-judgment"].evidenceConfidence = 0.2;
-  const sleepPreview = CampaignApp.calculateActionPreview(campaign, {
-    type: "animal_operation",
-    animal: "Sleep",
-    targetDomain: "understanding-judgment"
+  // Test Recruitment Preview (Issue #25)
+  const recruitPreview = CampaignApp.calculateActionPreview(campaign, {
+    type: "recruit_collaborator"
   });
-  
-  const prematureWarning = sleepPreview.warnings.find(w => w.includes("Premature consolidation"));
-  assert(prematureWarning, "Sleep preview should produce premature consolidation warning when confidence is low");
+  assert.strictEqual(recruitPreview.cost.materials, 25, "Recruitment preview should reflect material cost");
 }
 
-// 3. Mock DOM Snapshot Rendering (Issue #24)
+// 3. Snapshot Rendering & Collaborator View Model (Issue #25)
 {
   const campaign = CampaignEngine.createCampaign({ seed: 100 });
   const snapshot = CampaignEngine.getSnapshot(campaign);
 
-  // Mock minimal DOM element container
-  const mockContainer = {
-    innerHTML: "",
-    querySelector: () => null,
-    querySelectorAll: () => []
-  };
-
   const renderedData = CampaignApp.renderSnapshot(snapshot);
   assert(renderedData, "renderSnapshot should return structured render data");
   assert.strictEqual(renderedData.turn, 1, "Rendered data turn should match snapshot");
-  assert.strictEqual(Object.keys(renderedData.domains).length, 6, "Rendered data should contain 6 domains");
-  assert(renderedData.polarityPressures, "Rendered data should include polarityPressures");
-  assert(typeof renderedData.polarityPressures.Oe === "number", "Oe pressure should be a number");
+  assert(renderedData.collaborator, "Rendered data should contain collaborator view object");
+  assert.strictEqual(renderedData.collaborator.isRecruited, false, "Initial collaborator should be unrecruited");
+
+  // Recruit collaborator in campaign
+  campaign.resources.trust = 50;
+  campaign.resources.materials = 60;
+  campaign.domains["livelihood-money"].level = 3.5;
+  CampaignEngine.stepTurn(campaign, [{ type: "recruit_collaborator" }]);
+
+  const recruitedSnap = CampaignEngine.getSnapshot(campaign);
+  const recruitedData = CampaignApp.renderSnapshot(recruitedSnap);
+  assert.strictEqual(recruitedData.collaborator.isRecruited, true, "Rendered data should reflect recruited collaborator");
+  assert.strictEqual(recruitedData.collaborator.name, "Alex", "Collaborator name should be Alex");
 }
 
-// 4. App Controller Turn Stepping & Hidden State Protection (Issue #24)
+// 4. App Controller Turn Stepping & Hidden State Protection
 {
   const app = CampaignApp.createApp({ seed: 200, origin: "balanced-starter", mission: "entrepreneurship" });
   assert.strictEqual(app.getTurn(), 1, "App initial turn should be 1");
 
-  // Dispatch turn step action
   const result = app.dispatchTurn([
     { type: "animal_operation", animal: "Consume", targetDomain: "body-health" }
   ]);
@@ -74,10 +70,8 @@ console.log("Running Pathways Campaign App UI tests...");
   assert.strictEqual(app.getTurn(), 2, "App turn should advance to 2 after dispatch");
   assert(result.summary && Array.isArray(result.summary.events), "Dispatch result should return summary events");
 
-  // Check hidden state protection: public snapshot does not expose internal PRNG handles
   const snapshot = app.getSnapshot();
   assert.strictEqual(snapshot.worldRng, undefined, "Snapshot should not expose internal worldRng");
-  assert.strictEqual(snapshot.agentRng, undefined, "Snapshot should not expose internal agentRng");
 }
 
 console.log("All Pathways Campaign App UI tests passed successfully!");

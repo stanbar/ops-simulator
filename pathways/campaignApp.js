@@ -23,7 +23,15 @@
     const warnings = [];
     let cost = action.cost || {};
 
-    if (action.type === "animal_operation" && action.animal) {
+    if (action.type === "recruit_collaborator") {
+      cost = { materials: 25, trust: 15 };
+      projectedEffects.push("Recruits Alex (autonomous collaborator)");
+      projectedEffects.push("+35% autonomous output or maintenance capacity");
+      projectedEffects.push("Ongoing overhead: 2 materials & 1 trust / turn");
+    } else if (action.type === "assign_collaborator_role") {
+      cost = { attention: 0 };
+      projectedEffects.push(`Sets collaborator focus to ${action.role || 'production'}`);
+    } else if (action.type === "animal_operation" && action.animal) {
       cost = CampaignEngine.calculateAnimalCost(action.animal, profile, action.cost);
       const animalName = action.animal;
 
@@ -101,6 +109,27 @@
       };
     }
 
+    let collaboratorView = null;
+    if (snapshot.collaborator) {
+      const c = snapshot.collaborator;
+      collaboratorView = {
+        isRecruited: true,
+        name: c.name,
+        profileLabel: `${c.profile.observerCoin || "Oi"}/${c.profile.deciderCoin || "De"}`,
+        assignedRole: c.assignedRole,
+        alignmentPercent: Math.round((c.alignment || 0) * 100),
+        compensationRate: c.compensationRate,
+        lastAutonomousAction: c.lastAutonomousAction || "Joined campaign"
+      };
+    } else {
+      const eligibility = CampaignEngine.checkRecruitmentEligibility(snapshot);
+      collaboratorView = {
+        isRecruited: false,
+        eligible: eligibility.eligible,
+        reasons: eligibility.reasons
+      };
+    }
+
     return {
       turn: snapshot.turn,
       phase: snapshot.phase,
@@ -108,7 +137,8 @@
       shockSchedule: snapshot.shockSchedule,
       resources: snapshot.resources,
       polarityPressures: snapshot.polarityPressures || CampaignEngine.calculatePolarityPressures(snapshot),
-      domains: domainViews
+      domains: domainViews,
+      collaborator: collaboratorView
     };
   }
 
@@ -138,48 +168,12 @@
       return CampaignEngine.evaluateCampaignDiagnostics(campaign, missionPreset);
     }
 
-    function mountUI(containerElement) {
-      if (!containerElement || typeof containerElement.querySelector !== "function") {
-        return;
-      }
-
-      function updateDOM() {
-        const snap = getSnapshot();
-        const renderData = renderSnapshot(snap);
-        if (!renderData) return;
-
-        // Render resources
-        const resBar = containerElement.querySelector("#resourceBar");
-        if (resBar) {
-          resBar.innerHTML = Object.entries(renderData.resources)
-            .map(([k, v]) => `<div class="res-item"><span class="res-label">${k}</span><span class="res-value">${Math.round(v)}</span></div>`)
-            .join("");
-        }
-
-        // Render pressures
-        const pressBar = containerElement.querySelector("#pressureBar");
-        if (pressBar) {
-          pressBar.innerHTML = Object.entries(renderData.polarityPressures)
-            .map(([k, v]) => `<div class="pressure-item"><span class="press-label">${k}</span><div class="press-meter"><div class="press-fill" style="width:${v}%"></div></div><span class="press-val">${v}%</span></div>`)
-            .join("");
-        }
-
-        // Render turn counter
-        const turnEl = containerElement.querySelector("#turnCounter");
-        if (turnEl) turnEl.textContent = `Turn ${renderData.turn}`;
-      }
-
-      updateDOM();
-      return { updateDOM: updateDOM };
-    }
-
     return {
       getTurn: getTurn,
       getSnapshot: getSnapshot,
       dispatchTurn: dispatchTurn,
       calculatePreview: calculatePreview,
-      getDiagnostics: getDiagnostics,
-      mountUI: mountUI
+      getDiagnostics: getDiagnostics
     };
   }
 

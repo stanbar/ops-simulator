@@ -112,7 +112,7 @@
     } else if (isObserverSavior || isDeciderSavior) {
       multiplier = 1.4;
     } else {
-      multiplier = 1.8; // Double-demon
+      multiplier = 1.8;
     }
 
     const baseCost = customBaseCost || animal.baseCost;
@@ -121,6 +121,42 @@
       calculatedCost[resKey] = Math.ceil(amount * multiplier);
     }
     return calculatedCost;
+  }
+
+  function checkRecruitmentEligibility(campaignState) {
+    const reasons = [];
+
+    if (campaignState.collaborator) {
+      reasons.push("Collaborator already recruited");
+      return { eligible: false, reasons: reasons };
+    }
+
+    const materials = campaignState.resources ? (campaignState.resources.materials || 0) : 0;
+    const trust = campaignState.resources ? (campaignState.resources.trust || 0) : 0;
+
+    if (materials < 40) {
+      reasons.push(`Insufficient materials: ${materials}/40 required`);
+    }
+    if (trust < 30) {
+      reasons.push(`Insufficient trust: ${trust}/30 required`);
+    }
+
+    let hasTier2 = false;
+    for (const domain of Object.values(campaignState.domains || {})) {
+      if (domain.level >= 3.0 || domain.tier >= 2) {
+        hasTier2 = true;
+        break;
+      }
+    }
+
+    if (!hasTier2) {
+      reasons.push("Requires at least one domain at Tier 2 (level ≥ 3.0)");
+    }
+
+    return {
+      eligible: reasons.length === 0,
+      reasons: reasons
+    };
   }
 
   const DOMAIN_PRESETS = Object.freeze({
@@ -409,7 +445,6 @@
     const seed = typeof options.seed === "number" ? options.seed : 42;
     const originKey = options.origin && ORIGIN_PRESETS[options.origin] ? options.origin : "balanced-starter";
     const originPreset = ORIGIN_PRESETS[originKey];
-
     const shockKey = options.shockSchedule && SHOCK_SCHEDULES[options.shockSchedule] ? options.shockSchedule : "stable-horizon";
 
     const initialResources = Object.assign(
@@ -448,9 +483,9 @@
       focalProfile: focalProfile,
       resources: initialResources,
       domains: domains,
+      collaborator: null,
       automatedPolicies: {},
       history: [],
-      // Independent PRNG streams
       worldRng: createPRNG(seed + 101),
       agentRng: createPRNG(seed + 202),
       feedbackRng: createPRNG(seed + 303)
@@ -467,7 +502,7 @@
     const events = [];
     const causalTrace = [];
 
-    // Phase 1: updateWorld - Process passive outputs, shocks & inter-domain dependencies
+    // Phase 1: updateWorld - Process passive outputs, shocks, collaborator overhead & inter-domain dependencies
     campaignState.phase = "updateWorld";
 
     // Process World Shocks using worldRng stream
@@ -485,7 +520,7 @@
             targetDomain: fixed.domain,
             message: `Evidentiary shock invalidated evidence on ${fixed.domain}`
           });
-          causalTrace.push(`World shock (${fixed.type}) invalidated evidence on ${fixed.domain} (new coverage: ${targetDomain.evidenceCoverage.toFixed(2)}).`);
+          causalTrace.push(`World shock (${fixed.type}) invalidated evidence on ${fixed.domain}.`);
         } else if (fixed.type === "condition_shock") {
           targetDomain.conditionBuffer = Math.max(0, targetDomain.conditionBuffer - 35.0);
           events.push({
@@ -506,20 +541,78 @@
           causalTrace.push(`World shock (${fixed.type}) created urgent material obligation.`);
         }
       }
-    } else if (schedule.shockProbability && campaignState.worldRng) {
-      if (campaignState.worldRng() < schedule.shockProbability) {
-        const domainKeys = Object.keys(campaignState.domains);
-        const targetKey = domainKeys[Math.floor(campaignState.worldRng() * domainKeys.length)];
-        const targetDomain = campaignState.domains[targetKey];
-        if (targetDomain) {
-          targetDomain.evidenceCoverage = Math.max(0, targetDomain.evidenceCoverage - 0.3);
-          events.push({
-            type: "world_shock",
-            shockType: "evidentiary_shock",
-            targetDomain: targetKey,
-            message: `Environmental shift invalidated evidence on ${targetKey}`
-          });
-          causalTrace.push(`Environmental shift (evidentiary_shock) invalidated evidence on ${targetKey}.`);
+    }
+
+    // Process Collaborator Overhead & Resignation
+    if (campaignState.collaborator) {
+      const collab = campaignState.collaborator;
+      const compRate = collab.compensationRate || 2;
+      const trustCost = collab.trustOverhead || 1;
+
+      // Compensation
+      if ((campaignState.resources.materials || 0) >= compRate) {
+        campaignState.resources.materials -= compRate;
+      } else {
+        collab.alignment = Math.max(0, collab.alignment - 0.15);
+        events.push({
+          type: "collaborator_unpaid",
+          message: "Unpaid compensation reduced collaborator alignment"
+        });
+        causalTrace.push("Unpaid collaborator compensation reduced alignment.");
+      }
+
+      // Trust overhead
+      if ((campaignState.resources.trust || 0) >= trustCost) {
+        campaignState.resources.trust -= trustCost;
+      } else {
+        collab.alignment = Math.max(0, collab.alignment - 0.10);
+      }
+
+      // Check Resignation
+      if (collab.alignment < 0.2) {
+        events.push({
+          type: "collaborator_resigned",
+          name: collab.name,
+          message: `${collab.name} resigned due to low alignment and unpaid overhead.`
+        });
+        causalTrace.push(`Collaborator ${collab.name} resigned due to low alignment.`);
+        campaignState.collaborator = null;
+      } else {
+        // Autonomous Collaborator Decision
+        const role = collab.assignedRole || "production";
+        if (role === "production") {
+          const matDomain = campaignState.domains["livelihood-money"];
+          if (matDomain) {
+            campaignState.resources.materials += 10;
+            collab.lastAutonomousAction = "Boosted material production (+10 materials)";
+            events.push({
+              type: "collaborator_action",
+              role: role,
+              action: collab.lastAutonomousAction
+            });
+          }
+        } else if (role === "maintenance") {
+          const healthDomain = campaignState.domains["body-health"];
+          if (healthDomain) {
+            healthDomain.conditionBuffer = Math.min(100.0, healthDomain.conditionBuffer + 15.0);
+            collab.lastAutonomousAction = "Maintained body-health condition buffer (+15 buffer)";
+            events.push({
+              type: "collaborator_action",
+              role: role,
+              action: collab.lastAutonomousAction
+            });
+          }
+        } else if (role === "exploration") {
+          const expDomain = campaignState.domains["understanding-judgment"];
+          if (expDomain) {
+            expDomain.evidenceCoverage = Math.min(1.0, expDomain.evidenceCoverage + 0.15);
+            collab.lastAutonomousAction = "Explored understanding-judgment (+15% coverage)";
+            events.push({
+              type: "collaborator_action",
+              role: role,
+              action: collab.lastAutonomousAction
+            });
+          }
         }
       }
     }
@@ -549,7 +642,7 @@
                 parentDomain: edge.target,
                 factor: factor
               });
-              causalTrace.push(`Dependency bottleneck: ${id} output throttled by impaired parent ${edge.target}.`);
+              causalTrace.push(`Dependency bottleneck: ${id} output throttled by parent ${edge.target}.`);
             }
           }
         }
@@ -614,27 +707,6 @@
       }
     }
 
-    // Process Maintenance Automation
-    if (campaignState.automatedPolicies) {
-      for (const [domainId, autoRule] of Object.entries(campaignState.automatedPolicies)) {
-        if (autoRule && autoRule.autoMaintain && campaignState.domains[domainId]) {
-          const domain = campaignState.domains[domainId];
-          autoRule.staleness = (autoRule.staleness || 0) + 1;
-
-          // Execute automated maintenance if resources permit (reduced attention cost)
-          if ((campaignState.resources.attention || 0) >= 1) {
-            campaignState.resources.attention -= 1;
-            domain.conditionBuffer = Math.min(100.0, domain.conditionBuffer + 20.0);
-            events.push({
-              type: "automated_maintenance",
-              domain: domainId,
-              staleness: autoRule.staleness
-            });
-          }
-        }
-      }
-    }
-
     // Phase 2: observe
     campaignState.phase = "observe";
 
@@ -643,6 +715,45 @@
 
     for (const action of actions) {
       if (!action || typeof action !== "object") continue;
+
+      if (action.type === "recruit_collaborator") {
+        const eligibility = checkRecruitmentEligibility(campaignState);
+        if (!eligibility.eligible) {
+          throw new Error(`Ineligible for recruitment: ${eligibility.reasons.join(", ")}`);
+        }
+        campaignState.resources.materials -= 25;
+        campaignState.resources.trust -= 15;
+        campaignState.collaborator = {
+          id: "collab-1",
+          name: "Alex",
+          profile: { observerCoin: "Oi", deciderCoin: "De", primaryAxis: "decider" },
+          assignedRole: "production",
+          alignment: 0.85,
+          compensationRate: 2,
+          trustOverhead: 1,
+          lastAutonomousAction: "Joined campaign"
+        };
+        events.push({
+          type: "collaborator_recrypted",
+          name: "Alex",
+          message: "Recruited Alex as autonomous collaborator"
+        });
+        validateInvariants(campaignState);
+        continue;
+      }
+
+      if (action.type === "assign_collaborator_role") {
+        if (!campaignState.collaborator) {
+          throw new Error("No active collaborator to assign role");
+        }
+        campaignState.collaborator.assignedRole = action.role || "production";
+        events.push({
+          type: "collaborator_role_assigned",
+          role: campaignState.collaborator.assignedRole
+        });
+        validateInvariants(campaignState);
+        continue;
+      }
 
       let cost = action.cost || {};
       if (action.type === "animal_operation" && action.animal) {
@@ -670,11 +781,6 @@
 
       const targetId = action.targetDomain;
       const targetDomain = targetId && campaignState.domains[targetId] ? campaignState.domains[targetId] : null;
-
-      // Audit automated policy if action touches domain
-      if (targetId && campaignState.automatedPolicies && campaignState.automatedPolicies[targetId]) {
-        campaignState.automatedPolicies[targetId].staleness = 0;
-      }
 
       if (action.type === "animal_operation" && action.animal && targetDomain) {
         const animalName = action.animal;
@@ -859,7 +965,6 @@
     const viability = evaluateViability(campaignState, mission);
     const domainList = Object.values(campaignState.domains || {});
     
-    // Policy Quality Score: Average level & health condition
     let totalLevel = 0;
     let totalBuffer = 0;
     for (const d of domainList) {
@@ -900,6 +1005,7 @@
     getDomainTier,
     calculateAnimalCost,
     calculatePolarityPressures,
+    checkRecruitmentEligibility,
     createCampaign,
     stepTurn,
     evaluateViability,
