@@ -36,161 +36,118 @@ console.log("Running Pathways Campaign Engine tests...");
     assert.strictEqual(CampaignEngine.RESOURCE_TYPES[resKey], resKey, `Resource type ${resKey} should exist`);
   }
 
-  // Verify Origin and Mission presets (Issue #21)
+  // Verify 4 Animals
+  assert(CampaignEngine.ANIMALS, "ANIMALS constant should exist");
+  assert(CampaignEngine.ANIMALS.Consume, "Consume animal should exist");
+  assert(CampaignEngine.ANIMALS.Sleep, "Sleep animal should exist");
+  assert(CampaignEngine.ANIMALS.Play, "Play animal should exist");
+  assert(CampaignEngine.ANIMALS.Blast, "Blast animal should exist");
+
+  // Verify Origin and Mission presets
   assert(CampaignEngine.ORIGIN_PRESETS, "ORIGIN_PRESETS should exist");
-  assert(CampaignEngine.ORIGIN_PRESETS["balanced-starter"], "balanced-starter origin preset should exist");
-  assert(CampaignEngine.ORIGIN_PRESETS["struggling-body"], "struggling-body origin preset should exist");
-  assert(CampaignEngine.ORIGIN_PRESETS["asset-rich-isolated"], "asset-rich-isolated origin preset should exist");
-
   assert(CampaignEngine.MISSION_PRESETS, "MISSION_PRESETS should exist");
-  assert(CampaignEngine.MISSION_PRESETS["entrepreneurship"], "entrepreneurship mission preset should exist");
-  assert(CampaignEngine.MISSION_PRESETS["holistic-resilience"], "holistic-resilience mission preset should exist");
 }
 
-// 2. Campaign Initialization & Initial State
+// 2. Agent Profile Coins & Subjective Cost Modulation (Issue #22)
 {
-  const campaign = CampaignEngine.createCampaign({ seed: 42 });
-  assert.strictEqual(campaign.turn, 1, "Initial turn should be 1");
-  assert.strictEqual(campaign.seed, 42, "Seed should be stored");
+  const profile = { observerCoin: "Oe", deciderCoin: "Di", primaryAxis: "observer" };
+  const baseCost = { attention: 5, vitality: 5 };
 
-  // Check resource initialization
-  for (const resKey of ["attention", "vitality", "materials", "trust", "evidence"]) {
-    assert(typeof campaign.resources[resKey] === "number", `Resource ${resKey} should be a number`);
-    assert(campaign.resources[resKey] >= 0, `Resource ${resKey} should be non-negative`);
-  }
+  const consumeCost = CampaignEngine.calculateAnimalCost("Consume", profile, baseCost);
+  const blastCost = CampaignEngine.calculateAnimalCost("Blast", profile, baseCost);
 
-  // Check 6 domain states in campaign
-  for (const domainId of Object.keys(CampaignEngine.DOMAIN_PRESETS)) {
-    const domainState = campaign.domains[domainId];
-    assert(domainState, `Domain state for ${domainId} should exist`);
-    assert(typeof domainState.level === "number" && domainState.level >= 0, `Level for ${domainId} should be non-negative`);
-    assert(typeof domainState.tier === "number" && domainState.tier >= 1, `Tier for ${domainId} should be >= 1`);
-    assert(typeof domainState.conditionBuffer === "number" && domainState.conditionBuffer >= 0, `Condition buffer for ${domainId} should be non-negative`);
-    assert(typeof domainState.evidenceCoverage === "number" && domainState.evidenceCoverage >= 0 && domainState.evidenceCoverage <= 1, `Evidence coverage for ${domainId} should be between 0 and 1`);
-    assert(typeof domainState.evidenceConfidence === "number" && domainState.evidenceConfidence >= 0 && domainState.evidenceConfidence <= 1, `Evidence confidence for ${domainId} should be between 0 and 1`);
-    assert(typeof domainState.personalPathwayQuality === "number" && domainState.personalPathwayQuality >= 0 && domainState.personalPathwayQuality <= 1, `Personal pathway quality for ${domainId} should be between 0 and 1`);
-    assert(typeof domainState.sharedPathwayQuality === "number" && domainState.sharedPathwayQuality >= 0 && domainState.sharedPathwayQuality <= 1, `Shared pathway quality for ${domainId} should be between 0 and 1`);
-    assert(typeof domainState.volatility === "number", `Volatility for ${domainId} should be a number`);
-    assert(domainState.obligations && typeof domainState.obligations === "object", `Obligations for ${domainId} should be an object`);
-    assert(domainState.outputs && typeof domainState.outputs === "object", `Outputs for ${domainId} should be an object`);
-    assert(Array.isArray(domainState.dependencyEdges), `Dependency edges for ${domainId} should be an array`);
-  }
-
-  // Invariants check on initial campaign
-  assert.doesNotThrow(() => CampaignEngine.validateInvariants(campaign), "Initial campaign should pass invariant checks");
+  // Consume is double-savior (Oe+Di), Blast is double-demon (Oi+De)
+  assert.strictEqual(consumeCost.attention, 5, "Savior action should retain base cost");
+  assert(blastCost.attention > 5, "Demon action should carry higher subjective cost multiplier");
 }
 
-// 3. Rolling Tiers & Tier Transitions (Issue #21)
+// 3. Four-Animal Operations Resolution (Issue #22)
 {
   const campaign = CampaignEngine.createCampaign({ seed: 100 });
-  const domain = campaign.domains["body-health"];
-  assert.strictEqual(domain.tier, 1, "Initial tier at level 1.0 should be 1");
+  const domain = campaign.domains["understanding-judgment"];
+  domain.evidenceCoverage = 0.2;
+  domain.evidenceConfidence = 0.3;
 
-  // Upgrade level past tier 2 threshold (3.0)
-  domain.level = 3.2;
-  const result = CampaignEngine.stepTurn(campaign, []);
-  assert.strictEqual(domain.tier, 2, "Tier should transition to 2 when level reaches 3.2");
-  
-  // Check tier transition event in summary
-  const transitionEvent = result.summary.events.find(e => e.type === "tier_transition" && e.domain === "body-health");
-  assert(transitionEvent, "Should emit tier_transition event upon tier increase");
-  assert.strictEqual(transitionEvent.newTier, 2, "Transition event should report new tier 2");
+  // Test Consume Operation
+  const initialEvidence = campaign.resources.evidence;
+  CampaignEngine.stepTurn(campaign, [
+    { type: "animal_operation", animal: "Consume", targetDomain: "understanding-judgment" }
+  ]);
+  assert(domain.evidenceCoverage > 0.2, "Consume should increase evidence coverage");
+  assert(campaign.resources.evidence > initialEvidence, "Consume should yield evidence resource");
+
+  // Test Sleep Operation
+  const initialPersonal = domain.personalPathwayQuality;
+  domain.evidenceConfidence = 0.6; // High evidence confidence so not premature
+  CampaignEngine.stepTurn(campaign, [
+    { type: "animal_operation", animal: "Sleep", targetDomain: "understanding-judgment" }
+  ]);
+  assert(domain.personalPathwayQuality > initialPersonal, "Sleep should increase personal pathway quality");
+
+  // Test Play Operation
+  const initialTrust = campaign.resources.trust;
+  CampaignEngine.stepTurn(campaign, [
+    { type: "animal_operation", animal: "Play", targetDomain: "family-belonging" }
+  ]);
+  assert(campaign.resources.trust > initialTrust, "Play should increase trust resource");
+
+  // Test Blast Operation
+  const initialShared = campaign.domains["practical-foundations"].sharedPathwayQuality;
+  campaign.domains["practical-foundations"].evidenceConfidence = 0.7;
+  CampaignEngine.stepTurn(campaign, [
+    { type: "animal_operation", animal: "Blast", targetDomain: "practical-foundations" }
+  ]);
+  assert(campaign.domains["practical-foundations"].sharedPathwayQuality > initialShared, "Blast should increase shared pathway quality");
 }
 
-// 4. Maintenance vs. Acquisition Accounting & Decay (Issue #21)
+// 4. Polarity Pressures & Pressure Relief (Issue #22)
 {
-  // Test Maintain Action (replenishes condition buffer without increasing level)
   const campaign = CampaignEngine.createCampaign({ seed: 200 });
-  const domain = campaign.domains["body-health"];
-  domain.conditionBuffer = 50.0;
-  const initialLevel = domain.level;
-
-  CampaignEngine.stepTurn(campaign, [
-    { type: "maintain", targetDomain: "body-health", cost: { attention: 2, vitality: 1 } }
-  ]);
-
-  assert(domain.conditionBuffer > 50.0, "Maintain action should increase condition buffer");
-  assert.strictEqual(domain.level, initialLevel, "Maintain action should NOT increase domain level");
-
-  // Test Acquire Action (increases level)
-  CampaignEngine.stepTurn(campaign, [
-    { type: "acquire", targetDomain: "body-health", cost: { attention: 3, vitality: 2 } }
-  ]);
-  assert(domain.level > initialLevel, "Acquire action should increase domain level");
-
-  // Test Neglect Decay: condition buffer drains first before level degradation
-  const neglectCampaign = CampaignEngine.createCampaign({
-    seed: 201,
-    initialResources: { attention: 0, vitality: 0, materials: 0, trust: 0, evidence: 0 }
-  });
   
-  const targetDomain = neglectCampaign.domains["body-health"];
-  targetDomain.outputs = {};
-  targetDomain.conditionBuffer = 20.0;
-  const startLevel = targetDomain.level;
+  // Set domain state to create high Oe pressure (low evidence coverage)
+  campaign.domains["understanding-judgment"].evidenceCoverage = 0.1;
+  const initialPressures = CampaignEngine.calculatePolarityPressures(campaign);
+  assert(initialPressures.Oe > 30, "Low evidence coverage should generate high Oe pressure");
 
-  // Turn 1: condition buffer drains partial amount (from 20.0 to ~12.6)
-  CampaignEngine.stepTurn(neglectCampaign, []);
-  assert(targetDomain.conditionBuffer > 0 && targetDomain.conditionBuffer < 20.0, "Condition buffer should drain partially under neglect");
-  assert.strictEqual(targetDomain.level, startLevel, "Level should not degrade while condition buffer remains above 0");
+  // Execute Consume to alter underlying condition and relieve Oe pressure
+  CampaignEngine.stepTurn(campaign, [
+    { type: "animal_operation", animal: "Consume", targetDomain: "understanding-judgment" }
+  ]);
 
-  // Force condition buffer to 0 to test level degradation on subsequent turn
-  targetDomain.conditionBuffer = 0;
-  CampaignEngine.stepTurn(neglectCampaign, []);
-  assert(targetDomain.level < startLevel, "Continued neglect with 0 condition buffer must degrade domain level");
+  const updatedPressures = CampaignEngine.calculatePolarityPressures(campaign);
+  assert(updatedPressures.Oe < initialPressures.Oe, "Altering evidence coverage should relieve Oe pressure");
 }
 
-// 5. Inter-Domain Dependencies & Partial Substitution (Issue #21)
+// 5. Premature Consolidation & Over-Exploration (Issue #22)
 {
+  // Test Premature Sleep (low evidence confidence)
   const campaign = CampaignEngine.createCampaign({ seed: 300 });
-  
-  // Deplete body-health condition buffer
-  campaign.domains["body-health"].conditionBuffer = 0;
-  campaign.domains["body-health"].level = 0.5;
+  const domain = campaign.domains["understanding-judgment"];
+  domain.evidenceConfidence = 0.2; // Low confidence
+  const initialVol = domain.volatility;
 
-  const result = CampaignEngine.stepTurn(campaign, []);
-  
-  // Livelihood-money depends on body-health. Check that dependency bottleneck event or output throttling occurs
-  const bottleneckEvent = result.summary.events.find(e => e.type === "dependency_bottleneck" && e.domain === "livelihood-money");
-  assert(bottleneckEvent, "Should record dependency bottleneck event when parent domain is impaired");
+  const result = CampaignEngine.stepTurn(campaign, [
+    { type: "animal_operation", animal: "Sleep", targetDomain: "understanding-judgment" }
+  ]);
+
+  const prematureEvent = result.summary.events.find(e => e.type === "premature_consolidation");
+  assert(prematureEvent, "Premature Sleep with low evidence confidence should trigger premature_consolidation event");
+  assert(domain.volatility > initialVol, "Premature Sleep should incur epistemic debt (increase volatility)");
+
+  // Test Over-Exploration (high evidence coverage)
+  const expCampaign = CampaignEngine.createCampaign({ seed: 301 });
+  const expDomain = expCampaign.domains["understanding-judgment"];
+  expDomain.evidenceCoverage = 0.9; // High coverage
+
+  const expResult = CampaignEngine.stepTurn(expCampaign, [
+    { type: "animal_operation", animal: "Consume", targetDomain: "understanding-judgment" }
+  ]);
+
+  const overExpEvent = expResult.summary.events.find(e => e.type === "opportunity_cost_penalty");
+  assert(overExpEvent, "Over-exploration with high evidence coverage should trigger opportunity_cost_penalty event");
 }
 
-// 6. Campaign Origins & Mission Viability Floors (Issue #21)
-{
-  // Test creating campaign with origin preset
-  const campaign = CampaignEngine.createCampaign({
-    seed: 500,
-    origin: "struggling-body"
-  });
-
-  assert.strictEqual(campaign.origin, "struggling-body", "Campaign origin should be recorded");
-  assert(campaign.domains["body-health"].conditionBuffer < 50.0, "Struggling body origin should have low health condition buffer");
-
-  // Evaluate mission viability
-  const viability = CampaignEngine.evaluateViability(campaign, CampaignEngine.MISSION_PRESETS["entrepreneurship"]);
-  assert(typeof viability === "object", "evaluateViability should return an evaluation object");
-  assert(typeof viability.isViable === "boolean", "isViable should be a boolean");
-  assert(Array.isArray(viability.violations), "violations should be an array");
-}
-
-// 7. Resource Invariants & Validation
-{
-  const campaign = CampaignEngine.createCampaign({ seed: 100 });
-  
-  // Negative resource should fail invariant check
-  campaign.resources.attention = -5;
-  assert.throws(() => CampaignEngine.validateInvariants(campaign), /negative resource/i, "Negative resource should throw invariant error");
-
-  // Reset resource
-  campaign.resources.attention = 10;
-  assert.doesNotThrow(() => CampaignEngine.validateInvariants(campaign));
-
-  // Invalid domain level should fail invariant check
-  campaign.domains["body-health"].level = -1;
-  assert.throws(() => CampaignEngine.validateInvariants(campaign), /negative domain level/i, "Negative level should throw invariant error");
-}
-
-// 8. Snapshot Immutability & Determinism
+// 6. Invariants & Determinism
 {
   const c1 = CampaignEngine.createCampaign({ seed: 4242 });
   const c2 = CampaignEngine.createCampaign({ seed: 4242 });

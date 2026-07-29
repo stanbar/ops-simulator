@@ -13,6 +13,37 @@
     evidence: "evidence"
   });
 
+  const ANIMALS = Object.freeze({
+    Consume: Object.freeze({
+      name: "Consume",
+      observer: "Oe",
+      decider: "Di",
+      description: "Private discovery and investigation of unknown or changed conditions.",
+      baseCost: Object.freeze({ attention: 4, vitality: 3 })
+    }),
+    Sleep: Object.freeze({
+      name: "Sleep",
+      observer: "Oi",
+      decider: "Di",
+      description: "Integration, practice, personal pathway consolidation, and recovery.",
+      baseCost: Object.freeze({ attention: 3, vitality: 4 })
+    }),
+    Play: Object.freeze({
+      name: "Play",
+      observer: "Oe",
+      decider: "De",
+      description: "Social discovery, joint exploration, and reciprocal negotiation.",
+      baseCost: Object.freeze({ attention: 4, trust: 2 })
+    }),
+    Blast: Object.freeze({
+      name: "Blast",
+      observer: "Oi",
+      decider: "De",
+      description: "Publication, standardization, shared infrastructure, and teaching.",
+      baseCost: Object.freeze({ attention: 5, materials: 3 })
+    })
+  });
+
   const TIER_THRESHOLDS = Object.freeze([
     { tier: 1, minLevel: 0.0 },
     { tier: 2, minLevel: 3.0 },
@@ -28,6 +59,33 @@
       }
     }
     return currentTier;
+  }
+
+  function calculateAnimalCost(animalName, agentProfile, customBaseCost) {
+    const animal = ANIMALS[animalName];
+    if (!animal) {
+      throw new Error(`Unknown animal operation: ${animalName}`);
+    }
+
+    const profile = agentProfile || { observerCoin: "Oe", deciderCoin: "Di", primaryAxis: "observer" };
+    const isObserverSavior = animal.observer === profile.observerCoin;
+    const isDeciderSavior = animal.decider === profile.deciderCoin;
+
+    let multiplier = 1.0;
+    if (isObserverSavior && isDeciderSavior) {
+      multiplier = 1.0;
+    } else if (isObserverSavior || isDeciderSavior) {
+      multiplier = 1.4;
+    } else {
+      multiplier = 1.8; // Double-demon
+    }
+
+    const baseCost = customBaseCost || animal.baseCost;
+    const calculatedCost = {};
+    for (const [resKey, amount] of Object.entries(baseCost)) {
+      calculatedCost[resKey] = Math.ceil(amount * multiplier);
+    }
+    return calculatedCost;
   }
 
   const DOMAIN_PRESETS = Object.freeze({
@@ -215,6 +273,49 @@
     })
   });
 
+  function calculatePolarityPressures(campaignState) {
+    const domains = campaignState.domains || {};
+    const domainList = Object.values(domains);
+
+    if (domainList.length === 0) {
+      return { Oe: 0, Oi: 0, Di: 0, De: 0 };
+    }
+
+    // Oe Pressure: Unknown/changed/stale conditions (low evidence coverage or high volatility)
+    let totalOeUncertainty = 0;
+    for (const d of domainList) {
+      totalOeUncertainty += (1.0 - (d.evidenceCoverage || 0)) * 50 + (d.volatility || 0) * 50;
+    }
+    const OePressure = Math.min(100, Math.round(totalOeUncertainty / domainList.length));
+
+    // Oi Pressure: Fragile or unmaintained personal pathways
+    let totalOiFragility = 0;
+    for (const d of domainList) {
+      totalOiFragility += (1.0 - (d.personalPathwayQuality || 0)) * 100;
+    }
+    const OiPressure = Math.min(100, Math.round(totalOiFragility / domainList.length));
+
+    // Di Pressure: Suppressed personal constraints or body health deficit
+    const bodyDomain = domains["body-health"];
+    const healthDeficit = bodyDomain ? (100.0 - bodyDomain.conditionBuffer) : 50;
+    const DiPressure = Math.min(100, Math.round(healthDeficit * 0.7 + (1.0 - (bodyDomain ? bodyDomain.personalPathwayQuality : 0.5)) * 30));
+
+    // De Pressure: Uncoordinated obligations, low shared pathway quality, depleted trust
+    let totalDeFragility = 0;
+    for (const d of domainList) {
+      totalDeFragility += (1.0 - (d.sharedPathwayQuality || 0)) * 100;
+    }
+    const trustDeficit = Math.max(0, 50 - (campaignState.resources.trust || 0));
+    const DePressure = Math.min(100, Math.round((totalDeFragility / domainList.length) * 0.7 + trustDeficit * 0.6));
+
+    return {
+      Oe: OePressure,
+      Oi: OiPressure,
+      Di: DiPressure,
+      De: DePressure
+    };
+  }
+
   function deepClone(obj) {
     return JSON.parse(JSON.stringify(obj));
   }
@@ -298,6 +399,11 @@
       options.initialResources || {}
     );
 
+    const focalProfile = Object.assign(
+      { observerCoin: "Oe", deciderCoin: "Di", primaryAxis: "observer" },
+      options.focalProfile || {}
+    );
+
     const domains = {};
     for (const [id, preset] of Object.entries(DOMAIN_PRESETS)) {
       domains[id] = deepClone(preset);
@@ -319,6 +425,7 @@
       turn: 1,
       phase: "updateWorld",
       origin: originKey,
+      focalProfile: focalProfile,
       resources: initialResources,
       domains: domains,
       history: []
@@ -383,7 +490,6 @@
       }
 
       // Calculate dynamic maintenance obligation cost
-      // Pathway quality lowers maintenance demand
       const pathwayEfficiency = 1.0 + 0.5 * (domain.personalPathwayQuality + domain.sharedPathwayQuality);
       for (const [resKey, baseCost] of Object.entries(domain.obligations || {})) {
         const scaledCost = (baseCost * domain.level * (1 + domain.volatility)) / pathwayEfficiency;
@@ -438,7 +544,11 @@
     for (const action of actions) {
       if (!action || typeof action !== "object") continue;
 
-      const cost = action.cost || {};
+      let cost = action.cost || {};
+      if (action.type === "animal_operation" && action.animal) {
+        cost = calculateAnimalCost(action.animal, campaignState.focalProfile, action.cost);
+      }
+
       // Validate resources
       for (const [resKey, amount] of Object.entries(cost)) {
         if (amount > 0) {
@@ -458,11 +568,98 @@
 
       campaignState.phase = "resolve";
 
-      // Execute action
       const targetId = action.targetDomain;
       const targetDomain = targetId && campaignState.domains[targetId] ? campaignState.domains[targetId] : null;
 
-      if (action.type === "maintain" && targetDomain) {
+      if (action.type === "animal_operation" && action.animal && targetDomain) {
+        const animalName = action.animal;
+
+        if (animalName === "Consume") {
+          let gainFactor = 1.0;
+          if (targetDomain.evidenceCoverage >= 0.8) {
+            gainFactor = 0.25;
+            events.push({
+              type: "opportunity_cost_penalty",
+              animal: animalName,
+              domain: targetId,
+              message: "Endless exploration yields diminishing evidence returns"
+            });
+          }
+
+          targetDomain.evidenceCoverage = Math.min(1.0, targetDomain.evidenceCoverage + 0.2 * gainFactor);
+          targetDomain.evidenceConfidence = Math.min(1.0, targetDomain.evidenceConfidence + 0.15 * gainFactor);
+          campaignState.resources.evidence = (campaignState.resources.evidence || 0) + Math.round(15 * gainFactor);
+
+          events.push({
+            type: "animal_operation_executed",
+            animal: animalName,
+            targetDomain: targetId,
+            newCoverage: targetDomain.evidenceCoverage,
+            newConfidence: targetDomain.evidenceConfidence
+          });
+        } else if (animalName === "Sleep") {
+          if (targetDomain.evidenceConfidence < 0.4) {
+            targetDomain.volatility = Math.min(1.0, targetDomain.volatility + 0.1);
+            events.push({
+              type: "premature_consolidation",
+              animal: animalName,
+              domain: targetId,
+              message: "Consolidating weak evidence creates epistemic debt and volatility"
+            });
+          }
+
+          targetDomain.personalPathwayQuality = Math.min(1.0, targetDomain.personalPathwayQuality + 0.15);
+          targetDomain.conditionBuffer = Math.min(100.0, targetDomain.conditionBuffer + 15.0);
+
+          events.push({
+            type: "animal_operation_executed",
+            animal: animalName,
+            targetDomain: targetId,
+            newPathwayQuality: targetDomain.personalPathwayQuality
+          });
+        } else if (animalName === "Play") {
+          let gainFactor = 1.0;
+          if (targetDomain.evidenceCoverage >= 0.8) {
+            gainFactor = 0.5;
+            events.push({
+              type: "opportunity_cost_penalty",
+              animal: animalName,
+              domain: targetId,
+              message: "Prolonged play after high coverage carries opportunity cost"
+            });
+          }
+
+          targetDomain.evidenceConfidence = Math.min(1.0, targetDomain.evidenceConfidence + 0.1 * gainFactor);
+          targetDomain.sharedPathwayQuality = Math.min(1.0, targetDomain.sharedPathwayQuality + 0.1 * gainFactor);
+          campaignState.resources.trust = (campaignState.resources.trust || 0) + Math.round(15 * gainFactor);
+
+          events.push({
+            type: "animal_operation_executed",
+            animal: animalName,
+            targetDomain: targetId,
+            newSharedQuality: targetDomain.sharedPathwayQuality
+          });
+        } else if (animalName === "Blast") {
+          if (targetDomain.evidenceConfidence < 0.4) {
+            targetDomain.volatility = Math.min(1.0, targetDomain.volatility + 0.1);
+            events.push({
+              type: "premature_consolidation",
+              animal: animalName,
+              domain: targetId,
+              message: "Publishing/teaching weak evidence amplifies error and volatility"
+            });
+          }
+
+          targetDomain.sharedPathwayQuality = Math.min(1.0, targetDomain.sharedPathwayQuality + 0.2);
+
+          events.push({
+            type: "animal_operation_executed",
+            animal: animalName,
+            targetDomain: targetId,
+            newSharedQuality: targetDomain.sharedPathwayQuality
+          });
+        }
+      } else if (action.type === "maintain" && targetDomain) {
         targetDomain.conditionBuffer = Math.min(100.0, targetDomain.conditionBuffer + 25.0);
         events.push({
           type: "action_executed",
@@ -508,7 +705,8 @@
     const turnSummary = {
       turn: currentTurn,
       events: events,
-      resourcesSnapshot: deepClone(campaignState.resources)
+      resourcesSnapshot: deepClone(campaignState.resources),
+      polarityPressures: calculatePolarityPressures(campaignState)
     };
 
     campaignState.history.push(turnSummary);
@@ -554,15 +752,19 @@
 
   function getSnapshot(campaignState) {
     const clone = deepClone(campaignState);
+    clone.polarityPressures = calculatePolarityPressures(campaignState);
     return deepFreeze(clone);
   }
 
   return {
     RESOURCE_TYPES,
+    ANIMALS,
     DOMAIN_PRESETS,
     ORIGIN_PRESETS,
     MISSION_PRESETS,
     getDomainTier,
+    calculateAnimalCost,
+    calculatePolarityPressures,
     createCampaign,
     stepTurn,
     evaluateViability,
