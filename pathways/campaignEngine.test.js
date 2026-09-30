@@ -30,7 +30,7 @@ console.log("Running Pathways Campaign Engine tests...");
 // 2. Recruitment Eligibility & State Transition (Issue #25)
 {
   const campaign = CampaignEngine.createCampaign({ seed: 500 });
-  
+
   // Ineligible initially (low materials/trust or no Tier 2 domain)
   const initialEligibility = CampaignEngine.checkRecruitmentEligibility(campaign);
   assert.strictEqual(initialEligibility.eligible, false, "Initial campaign should not be eligible for recruitment");

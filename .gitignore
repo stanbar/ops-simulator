@@ -1,0 +1,4 @@
+# Local copies of shared agent skills
+.agents/
+.claude/skills/
+skills-lock.json

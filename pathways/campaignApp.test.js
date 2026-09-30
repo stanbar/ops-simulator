@@ -15,7 +15,7 @@ console.log("Running Pathways Campaign App UI tests...");
 // 2. Action Preview Calculation (Issue #24 & Issue #25)
 {
   const campaign = CampaignEngine.createCampaign({ seed: 42 });
-  
+
   // Test Consume Preview
   const consumePreview = CampaignApp.calculateActionPreview(campaign, {
     type: "animal_operation",

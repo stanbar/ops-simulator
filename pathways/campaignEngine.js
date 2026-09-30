@@ -974,7 +974,7 @@
           domain.maintenanceMissed += deficit;
           campaignState.unmetObligations.push({ domain: id, resource: resKey, deficit, coordinated: false });
           domain.conditionBuffer = Math.max(0, domain.conditionBuffer - deficit * (4 + domain.decayRate * 10));
-          
+
           events.push({
             type: "maintenance_deficit",
             domain: id,
@@ -1298,7 +1298,7 @@
           evidenceQuality,
           signal: campaignState.feedbackRng()
         });
-        
+
         const newTier = getDomainTier(targetDomain.level);
         if (newTier !== targetDomain.tier) {
           const oldTier = targetDomain.tier;
